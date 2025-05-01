@@ -37,11 +37,16 @@ exports.handler = async function (event, context) {
     const data = JSON.parse(event.body);
     let { whatsapp, password, type } = data;
 
+    console.log("Reçu:", data);
+
     // Normalisation
     whatsapp = whatsapp.trim().replace(/\s+/g, '');
     type = type.trim().toLowerCase();
 
+    console.log("Données normalisées:", { whatsapp, type });
+
     if (!whatsapp || !password || !type) {
+      console.log("Champs manquants !");
       return {
         statusCode: 400,
         headers,
@@ -50,10 +55,14 @@ exports.handler = async function (event, context) {
     }
 
     await client.connect();
+    console.log("Connecté à MongoDB");
+
     const db = client.db("FarmsConnect");
     const collection = db.collection("utilisateurs");
 
     const user = await collection.findOne({ whatsapp, type });
+
+    console.log("Résultat de la recherche MongoDB :", user);
 
     if (!user) {
       return {
@@ -64,6 +73,8 @@ exports.handler = async function (event, context) {
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
+    console.log("Mot de passe correspond ?", passwordMatch);
+
     if (!passwordMatch) {
       return {
         statusCode: 401,
@@ -86,5 +97,6 @@ exports.handler = async function (event, context) {
     };
   } finally {
     await client.close();
+    console.log("Connexion MongoDB fermée");
   }
 };
