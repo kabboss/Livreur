@@ -1,4 +1,5 @@
 const { MongoClient } = require("mongodb");
+const bcrypt = require("bcryptjs");
 
 const mongoURI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
 const client = new MongoClient(mongoURI, {
@@ -7,7 +8,6 @@ const client = new MongoClient(mongoURI, {
 });
 
 exports.handler = async function (event, context) {
-  // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -35,43 +35,50 @@ exports.handler = async function (event, context) {
 
   try {
     const data = JSON.parse(event.body);
-    console.log("Données reçues :", data);
+    const { whatsapp, secondNumber, type, password, confirmPassword, username } = data;
 
-    // Vérification du mot de passe
-    if (!data.password || data.password !== data.confirmPassword) {
+    // Vérification des champs obligatoires
+    if (!whatsapp || !type || !password || !confirmPassword || !username) {
       return {
         statusCode: 400,
         headers,
-        body: "Mot de passe et confirmation invalides.",
+        body: "Tous les champs sont requis.",
       };
     }
 
-    // Connexion à MongoDB
+    if (password !== confirmPassword) {
+      return {
+        statusCode: 400,
+        headers,
+        body: "Le mot de passe et sa confirmation ne correspondent pas.",
+      };
+    }
+
     await client.connect();
     const db = client.db("FarmsConnect");
     const collection = db.collection("utilisateurs");
 
-    // Vérifier si l'utilisateur existe déjà (whatsapp + type + password)
-    const existingUser = await collection.findOne({
-      whatsapp: data.whatsapp,
-      type: data.type,
-      password: data.password,
-    });
-
+    // Vérifier si l'utilisateur existe déjà (whatsapp + type)
+    const existingUser = await collection.findOne({ whatsapp, type });
     if (existingUser) {
       return {
         statusCode: 409,
         headers,
-        body: "Un utilisateur est déjà inscrit avec ces identifiants.",
+        body: "Un utilisateur avec ce numéro WhatsApp et ce type existe déjà.",
       };
     }
 
-    // Insertion si l'utilisateur n'existe pas encore
+    // Hachage du mot de passe
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insertion du nouvel utilisateur
     await collection.insertOne({
-      whatsapp: data.whatsapp,
-      secondNumber: data.secondNumber,
-      type: data.type,
-      password: data.password,
+      whatsapp,
+      secondNumber: secondNumber || null,
+      type,
+      username,
+      password: hashedPassword,
+      createdAt: new Date(),
     });
 
     return {

@@ -1,4 +1,5 @@
 const { MongoClient } = require("mongodb");
+const bcrypt = require("bcryptjs");
 
 exports.handler = async function (event, context) {
   if (event.httpMethod === "OPTIONS") {
@@ -45,27 +46,33 @@ exports.handler = async function (event, context) {
     });
 
     await client.connect();
-
-    // Correction ici : base = "FarmsConnect" ET collection = "utilisateur"
     const db = client.db("FarmsConnect");
     const collection = db.collection("utilisateurs");
 
-    const user = await collection.findOne({ whatsapp, password, type });
-
+    const user = await collection.findOne({ whatsapp, type });
     await client.close();
 
     if (!user) {
       return {
         statusCode: 401,
         headers,
-        body: JSON.stringify({ message: "Identifiants incorrects." }),
+        body: JSON.stringify({ message: "Compte introuvable." }),
+      };
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      return {
+        statusCode: 401,
+        headers,
+        body: JSON.stringify({ message: "Mot de passe incorrect." }),
       };
     }
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ message: `Bienvenue ${type} !` }),
+      body: JSON.stringify({ message: `Bienvenue cher ${user.type} ${user.username} !` }),
     };
   } catch (err) {
     console.error("Erreur serveur :", err);
