@@ -27,9 +27,19 @@ exports.handler = async function (event, context) {
     };
   }
 
+  const uri = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
+  const client = new MongoClient(uri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
+
   try {
     const data = JSON.parse(event.body);
-    const { whatsapp, password, type } = data;
+    let { whatsapp, password, type } = data;
+
+    // Normalisation
+    whatsapp = whatsapp.trim().replace(/\s+/g, '');
+    type = type.trim().toLowerCase();
 
     if (!whatsapp || !password || !type) {
       return {
@@ -39,18 +49,11 @@ exports.handler = async function (event, context) {
       };
     }
 
-    const uri = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
-    const client = new MongoClient(uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-
     await client.connect();
     const db = client.db("FarmsConnect");
     const collection = db.collection("utilisateurs");
 
     const user = await collection.findOne({ whatsapp, type });
-    await client.close();
 
     if (!user) {
       return {
@@ -81,5 +84,7 @@ exports.handler = async function (event, context) {
       headers,
       body: JSON.stringify({ message: "Erreur serveur : " + err.message }),
     };
+  } finally {
+    await client.close();
   }
 };

@@ -35,10 +35,16 @@ exports.handler = async function (event, context) {
 
   try {
     const data = JSON.parse(event.body);
-    const { whatsapp, secondNumber, type, password, confirmPassword, username } = data;
+    let { whatsapp, secondNumber, type, password, confirmPassword, username } = data;
 
-    // Vérification des champs obligatoires
-    if (!whatsapp || !secondNumber || !type || !password || !confirmPassword || !username) {
+    // Normalisation des champs
+    whatsapp = whatsapp.trim().replace(/\s+/g, '');
+    secondNumber = secondNumber ? secondNumber.trim().replace(/\s+/g, '') : null;
+    type = type.trim().toLowerCase();
+    username = username.trim();
+
+    // Vérification des champs
+    if (!whatsapp || !type || !password || !confirmPassword || !username) {
       return {
         statusCode: 400,
         headers,
@@ -58,7 +64,6 @@ exports.handler = async function (event, context) {
     const db = client.db("FarmsConnect");
     const collection = db.collection("utilisateurs");
 
-    // Vérifier si l'utilisateur existe déjà (whatsapp + type)
     const existingUser = await collection.findOne({ whatsapp, type });
     if (existingUser) {
       return {
@@ -68,13 +73,11 @@ exports.handler = async function (event, context) {
       };
     }
 
-    // Hachage du mot de passe
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insertion du nouvel utilisateur
     await collection.insertOne({
       whatsapp,
-      secondNumber: secondNumber || null,
+      secondNumber,
       type,
       username,
       password: hashedPassword,
