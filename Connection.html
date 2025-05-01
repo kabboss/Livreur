@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connexion - Livreur 2.0</title>
+  <link rel="stylesheet" href="Connection.css" />
+
+</head>
+<body>
+  <div class="container">
+    <form class="form">
+      <label for="whatsapp">Numéro WhatsApp :</label>
+      <input type="tel" id="whatsapp" name="whatsapp" required />
+
+      <label for="type">Type de compte :</label>
+      <select id="type" name="type" required>
+        <option value="">-- Choisir un type --</option>
+        <option value="expediteur">Expéditeur</option>
+        <option value="client">Client</option>
+        <option value="livreur">Livreur</option>
+        <option value="admin">Admin</option>
+      </select>
+
+      <label for="password">Mot de passe :</label>
+      <input type="password" id="password" name="password" required />
+
+      <button type="submit" class="btn">Se connecter</button>
+    </form>
+
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const form = document.querySelector(".form");
+    const message = document.getElementById("message");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const data = {
+        whatsapp: form.whatsapp.value,
+        type: form.type.value,
+        password: form.password.value,
+      };
+
+      try {
+        const res = await fetch("/.netlify/functions/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        const result = await res.json();
+
+        if (res.ok && result.success) {
+          message.innerText = `✅ Bienvenue ${data.type.charAt(0).toUpperCase() + data.type.slice(1)} !`;
+          message.style.color = "green";
+        } else {
+          message.innerText = "❌ Informations incorrectes ou compte introuvable.";
+          message.style.color = "red";
+        }
+      } catch (err) {
+        message.innerText = "Erreur de connexion. Réessayez.";
+        message.style.color = "red";
+        console.error(err);
+      }
+    });
+  </script>
+</body>
+</html>
