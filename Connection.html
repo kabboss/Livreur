@@ -5,11 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Connexion - Livreur 2.0</title>
   <link rel="stylesheet" href="Connection.css" />
-
 </head>
 <body>
   <div class="container">
-    <form class="form">
+    <form class="form" id="login-form">
       <label for="whatsapp">Numéro WhatsApp :</label>
       <input type="tel" id="whatsapp" name="whatsapp" required />
 
@@ -27,106 +26,59 @@
 
       <button type="submit" class="btn">Se connecter</button>
 
+      <div id="loading-message" style="display:none;">
+        <p>Connexion en cours...</p>
+        <div class="spinner"></div>
+      </div>
 
-
-       <!-- Zone d'animation de chargement -->
-  <div id="loading-message" style="display:none;">
-    <p>Connexion en cours...</p>
-    <div class="spinner"></div>
-  </div>
-
-  <div id="error-message" style="display:none;"></div>
-
+      <div id="error-message" style="display:none;"></div>
     </form>
 
     <div id="message"></div>
   </div>
 
-
-<script>
-    document.getElementById('login-form').addEventListener('submit', async function (event) {
-  event.preventDefault(); // Empêcher l'envoi du formulaire par défaut
-
-  // Récupérer les valeurs du formulaire
-  const whatsapp = document.getElementById('whatsapp').value;
-  const password = document.getElementById('password').value;
-  const type = document.getElementById('type').value;
-
-  // Afficher le message de chargement
-  document.getElementById('loading-message').style.display = 'block';
-  document.getElementById('error-message').style.display = 'none'; // Cacher le message d'erreur précédent
-
-  try {
-    const response = await fetch('YOUR_API_URL', { // Remplace par l'URL de ton API
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ whatsapp, password, type }),
-    });
-
-    const result = await response.json();
-
-    // Cacher le message de chargement une fois la réponse reçue
-    document.getElementById('loading-message').style.display = 'none';
-
-    if (response.status === 200) {
-      // Connexion réussie
-      alert(result.message); // Ou redirection si nécessaire
-    } else {
-      // Erreur dans la connexion
-      document.getElementById('error-message').style.display = 'block';
-      document.getElementById('error-message').textContent = result.message || 'Une erreur est survenue';
-    }
-  } catch (error) {
-    // Cacher le message de chargement en cas d'erreur
-    document.getElementById('loading-message').style.display = 'none';
-    document.getElementById('error-message').style.display = 'block';
-    document.getElementById('error-message').textContent = 'Erreur serveur : ' + error.message;
-  }
-});
-
-</script>
-
-
-
-
-
-
-
   <script>
-    const form = document.querySelector(".form");
-    const message = document.getElementById("message");
+    document.getElementById('login-form').addEventListener('submit', async function (event) {
+      event.preventDefault();
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+      const whatsapp = document.getElementById('whatsapp').value;
+      const password = document.getElementById('password').value;
+      const type = document.getElementById('type').value;
 
-      const data = {
-        whatsapp: form.whatsapp.value,
-        type: form.type.value,
-        password: form.password.value,
-      };
+      const btn = document.querySelector(".btn");
+      btn.disabled = true;
+      document.getElementById('loading-message').style.display = 'block';
+      document.getElementById('error-message').style.display = 'none';
 
       try {
-        const res = await fetch("/.netlify/functions/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+        const response = await fetch('/.netlify/functions/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ whatsapp, password, type })
         });
 
-        const result = await res.json();
+        const result = await response.json();
+        document.getElementById('loading-message').style.display = 'none';
+        btn.disabled = false;
 
-        if (res.ok && result.success) {
-          message.innerText = `✅ Bienvenue ${data.type.charAt(0).toUpperCase() + data.type.slice(1)} !`;
-          message.style.color = "green";
+        if (response.ok) {
+          document.getElementById('message').innerText = `✅ ${result.message}`;
+          document.getElementById('message').style.color = 'green';
+
+          // Redirection après 1,5 seconde
+          setTimeout(() => {
+            window.location.href = 'index.html'; // 👉 change cette URL selon tes besoins
+          }, 1500);
         } else {
-          message.innerText = "❌ Informations incorrectes ou compte introuvable.";
-          message.style.color = "red";
+          document.getElementById('error-message').style.display = 'block';
+          document.getElementById('error-message').textContent = result.message || '❌ Informations incorrectes.';
         }
-      } catch (err) {
-        message.innerText = "Erreur de connexion. Réessayez.";
-        message.style.color = "red";
-        console.error(err);
+      } catch (error) {
+        document.getElementById('loading-message').style.display = 'none';
+        btn.disabled = false;
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-message').textContent = 'Erreur de connexion. Veuillez réessayer.';
+        console.error(error);
       }
     });
   </script>
