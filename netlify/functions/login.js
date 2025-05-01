@@ -1,13 +1,7 @@
-const { MongoClient } = require  ("mongodb");
-
-const mongoURI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
-const client = new MongoClient(mongoURI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+const { MongoClient } = require("mongodb");
 
 exports.handler = async function (event, context) {
-  // CORS preflight
+  // ✅ Autoriser les requêtes OPTIONS (pré-vol CORS)
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -35,34 +29,44 @@ exports.handler = async function (event, context) {
 
   try {
     const data = JSON.parse(event.body);
-    console.log("Données reçues :", data);
+    const { whatsapp, password, type } = data;
 
-    // Vérification du mot de passe
-    if (!data.password || data.password !== data.confirmPassword) {
+    // Vérification de base
+    if (!whatsapp || !password || !type) {
       return {
         statusCode: 400,
         headers,
-        body: "Mot de passe et confirmation invalides.",
+        body: "Tous les champs sont requis.",
       };
     }
 
-    // Connexion à MongoDB
+    // Connexion MongoDB
+    const uri = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority";
+    const client = new MongoClient(uri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
     await client.connect();
-    const db = client.db("FarmsConnect");
+    const db = client.db("livreur2_0");
     const collection = db.collection("utilisateurs");
 
-    // Insertion des données
-    await collection.insertOne({
-      whatsapp: data.whatsapp,
-      secondNumber: data.secondNumber,
-      type: data.type,
-      password: data.password,
-    });
+    const user = await collection.findOne({ whatsapp, password, type });
+
+    await client.close();
+
+    if (!user) {
+      return {
+        statusCode: 401,
+        headers,
+        body: "Identifiants incorrects.",
+      };
+    }
 
     return {
       statusCode: 200,
       headers,
-      body: "Inscription réussie !",
+      body: `Bienvenue ${type} !`,
     };
   } catch (err) {
     console.error("Erreur serveur :", err);
@@ -71,7 +75,5 @@ exports.handler = async function (event, context) {
       headers,
       body: "Erreur serveur : " + err.message,
     };
-  } finally {
-    await client.close();
   }
 };
