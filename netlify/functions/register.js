@@ -1,4 +1,4 @@
-const { MongoClient } = require  ("mongodb");
+const { MongoClient } = require("mongodb");
 
 const mongoURI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
 const client = new MongoClient(mongoURI, {
@@ -49,9 +49,24 @@ exports.handler = async function (event, context) {
     // Connexion à MongoDB
     await client.connect();
     const db = client.db("FarmsConnect");
-    const collection = db.collection("utilisateurslivreur2.0");
+    const collection = db.collection("utilisateurs");
 
-    // Insertion des données
+    // Vérifier si l'utilisateur existe déjà (whatsapp + type + password)
+    const existingUser = await collection.findOne({
+      whatsapp: data.whatsapp,
+      type: data.type,
+      password: data.password,
+    });
+
+    if (existingUser) {
+      return {
+        statusCode: 409,
+        headers,
+        body: "Un utilisateur est déjà inscrit avec ces identifiants.",
+      };
+    }
+
+    // Insertion si l'utilisateur n'existe pas encore
     await collection.insertOne({
       whatsapp: data.whatsapp,
       secondNumber: data.secondNumber,

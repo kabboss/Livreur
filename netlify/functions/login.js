@@ -46,9 +46,9 @@ exports.handler = async function (event, context) {
 
     await client.connect();
 
-    // Correction ici : base = "livreur2.0" ET collection = "utilisateur"
+    // Correction ici : base = "FarmsConnect" ET collection = "utilisateur"
     const db = client.db("FarmsConnect");
-    const collection = db.collection("utilisateurslivreur2.0");
+    const collection = db.collection("utilisateurs");
 
     const user = await collection.findOne({ whatsapp, password, type });
 
