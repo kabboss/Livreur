@@ -29,7 +29,7 @@ exports.handler = async function (event, context) {
     return {
       statusCode: 405,
       headers,
-      body: "Méthode non autorisée",
+      body: JSON.stringify({ message: "Méthode non autorisée" }),
     };
   }
 
@@ -38,11 +38,11 @@ exports.handler = async function (event, context) {
     const { whatsapp, secondNumber, type, password, confirmPassword, username } = data;
 
     // Vérification des champs obligatoires
-    if (!whatsapp || !type || !password || !confirmPassword || !username) {
+    if (!whatsapp || !secondNumber || !type || !password || !confirmPassword || !username) {
       return {
         statusCode: 400,
         headers,
-        body: "Tous les champs sont requis.",
+        body: JSON.stringify({ message: "Tous les champs sont requis." }),
       };
     }
 
@@ -50,7 +50,7 @@ exports.handler = async function (event, context) {
       return {
         statusCode: 400,
         headers,
-        body: "Le mot de passe et sa confirmation ne correspondent pas.",
+        body: JSON.stringify({ message: "Le mot de passe et sa confirmation ne correspondent pas." }),
       };
     }
 
@@ -64,7 +64,7 @@ exports.handler = async function (event, context) {
       return {
         statusCode: 409,
         headers,
-        body: "Un utilisateur avec ce numéro WhatsApp et ce type existe déjà.",
+        body: JSON.stringify({ message: "Un utilisateur avec ce numéro WhatsApp et ce type existe déjà." }),
       };
     }
 
@@ -84,14 +84,14 @@ exports.handler = async function (event, context) {
     return {
       statusCode: 200,
       headers,
-      body: "Inscription réussie !",
+      body: JSON.stringify({ message: "Inscription réussie !" }),
     };
   } catch (err) {
     console.error("Erreur serveur :", err);
     return {
       statusCode: 500,
       headers,
-      body: "Erreur serveur : " + err.message,
+      body: JSON.stringify({ message: "Erreur serveur : " + err.message }),
     };
   } finally {
     await client.close();

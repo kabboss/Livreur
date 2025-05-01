@@ -26,10 +26,73 @@
       <input type="password" id="password" name="password" required />
 
       <button type="submit" class="btn">Se connecter</button>
+
+
+
+       <!-- Zone d'animation de chargement -->
+  <div id="loading-message" style="display:none;">
+    <p>Connexion en cours...</p>
+    <div class="spinner"></div>
+  </div>
+
+  <div id="error-message" style="display:none;"></div>
+
     </form>
 
     <div id="message"></div>
   </div>
+
+
+<script>
+    document.getElementById('login-form').addEventListener('submit', async function (event) {
+  event.preventDefault(); // Empêcher l'envoi du formulaire par défaut
+
+  // Récupérer les valeurs du formulaire
+  const whatsapp = document.getElementById('whatsapp').value;
+  const password = document.getElementById('password').value;
+  const type = document.getElementById('type').value;
+
+  // Afficher le message de chargement
+  document.getElementById('loading-message').style.display = 'block';
+  document.getElementById('error-message').style.display = 'none'; // Cacher le message d'erreur précédent
+
+  try {
+    const response = await fetch('YOUR_API_URL', { // Remplace par l'URL de ton API
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ whatsapp, password, type }),
+    });
+
+    const result = await response.json();
+
+    // Cacher le message de chargement une fois la réponse reçue
+    document.getElementById('loading-message').style.display = 'none';
+
+    if (response.status === 200) {
+      // Connexion réussie
+      alert(result.message); // Ou redirection si nécessaire
+    } else {
+      // Erreur dans la connexion
+      document.getElementById('error-message').style.display = 'block';
+      document.getElementById('error-message').textContent = result.message || 'Une erreur est survenue';
+    }
+  } catch (error) {
+    // Cacher le message de chargement en cas d'erreur
+    document.getElementById('loading-message').style.display = 'none';
+    document.getElementById('error-message').style.display = 'block';
+    document.getElementById('error-message').textContent = 'Erreur serveur : ' + error.message;
+  }
+});
+
+</script>
+
+
+
+
+
+
 
   <script>
     const form = document.querySelector(".form");

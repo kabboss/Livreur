@@ -5,19 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Inscription - Livreur2.0</title>
   <link rel="stylesheet" href="inscrip.css" />
-
 </head>
 <body>
   <div class="container">
     <form class="form">
+      <label for="username"> Votre Nom d'utilisateur:</label>
+      <input type="text" id="login-username" name="username" placeholder="Nom d'utilisateur" required>
+
       <label for="whatsapp">Numéro WhatsApp :</label>
       <input type="tel" id="whatsapp" name="whatsapp" required />
 
       <label for="secondNumber">Deuxième numéro :</label>
       <input type="tel" id="secondNumber" name="secondNumber" required />
-
-      <input type="text" id="login-username" name="username" placeholder="Nom d'utilisateur" required>
-
 
       <label for="type">Type de compte :</label>
       <select id="type" name="type" required>
@@ -47,12 +46,35 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
+      // Validation des champs
+      const whatsapp = form.whatsapp.value;
+      const secondNumber = form.secondNumber.value;
+      const type = form.type.value;
+      const username = form.username.value;
+      const password = form.password.value;
+      const confirmPassword = form.confirmPassword.value;
+
+      // Vérification des champs vides
+      if (!whatsapp || !secondNumber || !type || !username || !password || !confirmPassword) {
+        message.innerText = "Tous les champs sont requis.";
+        message.style.color = "red";
+        return;
+      }
+
+      // Vérification si les mots de passe correspondent
+      if (password !== confirmPassword) {
+        message.innerText = "Le mot de passe et sa confirmation ne correspondent pas.";
+        message.style.color = "red";
+        return;
+      }
+
       const data = {
-        whatsapp: form.whatsapp.value,
-        secondNumber: form.secondNumber.value,
-        type: form.type.value,
-        password: form.password.value,
-        confirmPassword: form.confirmPassword.value,
+        whatsapp,
+        secondNumber,
+        type,
+        username,
+        password,
+        confirmPassword,
       };
 
       try {
@@ -62,8 +84,8 @@
           body: JSON.stringify(data),
         });
 
-        const text = await res.text();
-        message.innerText = text;
+        const result = await res.json();
+        message.innerText = result.message || "Inscription réussie !";
         message.style.color = res.ok ? "green" : "red";
       } catch (err) {
         message.innerText = "Erreur lors de l'inscription.";
