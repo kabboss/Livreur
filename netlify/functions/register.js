@@ -49,7 +49,7 @@ exports.handler = async function (event, context) {
     // Connexion à MongoDB
     await client.connect();
     const db = client.db("FarmsConnect");
-    const collection = db.collection("utilisateurs");
+    const collection = db.collection("utilisateurslivreur2.0");
 
     // Insertion des données
     await collection.insertOne({

@@ -1,7 +1,6 @@
 const { MongoClient } = require("mongodb");
 
 exports.handler = async function (event, context) {
-  // ✅ Autoriser les requêtes OPTIONS (pré-vol CORS)
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -23,7 +22,7 @@ exports.handler = async function (event, context) {
     return {
       statusCode: 405,
       headers,
-      body: "Méthode non autorisée",
+      body: JSON.stringify({ message: "Méthode non autorisée" }),
     };
   }
 
@@ -31,25 +30,25 @@ exports.handler = async function (event, context) {
     const data = JSON.parse(event.body);
     const { whatsapp, password, type } = data;
 
-    // Vérification de base
     if (!whatsapp || !password || !type) {
       return {
         statusCode: 400,
         headers,
-        body: "Tous les champs sont requis.",
+        body: JSON.stringify({ message: "Tous les champs sont requis." }),
       };
     }
 
-    // Connexion MongoDB
-    const uri = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority";
+    const uri = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
     const client = new MongoClient(uri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
 
     await client.connect();
-    const db = client.db("livreur2_0");
-    const collection = db.collection("utilisateurs");
+
+    // Correction ici : base = "livreur2.0" ET collection = "utilisateur"
+    const db = client.db("FarmsConnect");
+    const collection = db.collection("utilisateurslivreur2.0");
 
     const user = await collection.findOne({ whatsapp, password, type });
 
@@ -59,21 +58,21 @@ exports.handler = async function (event, context) {
       return {
         statusCode: 401,
         headers,
-        body: "Identifiants incorrects.",
+        body: JSON.stringify({ message: "Identifiants incorrects." }),
       };
     }
 
     return {
       statusCode: 200,
       headers,
-      body: `Bienvenue ${type} !`,
+      body: JSON.stringify({ message: `Bienvenue ${type} !` }),
     };
   } catch (err) {
     console.error("Erreur serveur :", err);
     return {
       statusCode: 500,
       headers,
-      body: "Erreur serveur : " + err.message,
+      body: JSON.stringify({ message: "Erreur serveur : " + err.message }),
     };
   }
 };
