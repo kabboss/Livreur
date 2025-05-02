@@ -5,48 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Suivi de colis en temps réel">
   <title>Suivi Colis | Plateforme de livraison</title>
-  <style>
-    :root {
-      --primary: #4361ee;
-      --secondary: #3a0ca3;
-      --success: #4cc9f0;
-      --error: #f72585;
-      --warning: #f8961e;
-      --dark: #212529;
-      --light: #f8f9fa;
-      --radius: 8px;
-      --shadow: 0 4px 20px rgba(0,0,0,0.08);
-    }
-    
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
-      line-height: 1.6;
-      margin: 0;
-      padding: 2rem;
-      color: var(--dark);
-      background: #f5f7ff;
-    }
-    
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-    
-    .status-badge {
-      display: inline-block;
-      padding: 0.25rem 0.5rem;
-      border-radius: var(--radius);
-      font-weight: 600;
-      font-size: 0.85rem;
-      margin-left: 0.5rem;
-    }
-    
-    .status-enregistré { background: var(--primary); color: white; }
-    .status-transit { background: var(--warning); color: white; }
-    .status-livré { background: var(--success); color: white; }
-    .status-problème { background: var(--error); color: white; }
-  </style>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+ 
+  <link rel="stylesheet" href="client.css">
 </head>
 <body>
   <div class="container">
@@ -216,72 +176,78 @@
         const statusClass = `status-${colis.status || 'enregistré'}`.toLowerCase();
         
         elements.colisContent.innerHTML = `
-          <div class="colis-header">
-            <h2>
-              Colis #${colis.colisID}
-              <span class="status-badge ${statusClass}">
-                ${(colis.status || 'enregistré').toUpperCase()}
-              </span>
-            </h2>
-            <p class="colis-meta">
-              <strong>Créé le:</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
-            </p>
+  <div class="colis-header">
+    <h2>
+      Colis #${colis.colisID}
+      <span class="status-badge ${statusClass}">
+        ${(colis.status || 'enregistré').toUpperCase()}
+      </span>
+    </h2>
+    <p class="colis-meta">
+      <strong>Créé le:</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+    </p>
+  </div>
+  
+  <div class="colis-grid">
+    <div class="colis-section">
+      <h3>Expéditeur</h3>
+      <p>${escapeHTML(colis.sender)}</p>
+      <p>${escapeHTML(colis.phone1)}</p>
+    </div>
+    
+    <div class="colis-section">
+      <h3>Destinataire</h3>
+      <p>${escapeHTML(colis.recipient)}</p>
+      <p>${escapeHTML(colis.phone)}</p>
+      <p>${escapeHTML(colis.address)}</p>
+    </div>
+    
+    <div class="colis-section">
+      <h3>Détails</h3>
+      <p><strong>Type:</strong> ${escapeHTML(colis.type)}</p>
+      <p><strong>Description:</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
+    </div>
+  </div>
+  
+  ${colis.photos && colis.photos.length > 0 ? `
+    <div class="colis-photos">
+      <h3>Photos</h3>
+      <div class="photos-grid">
+        ${colis.photos.slice(0, 2).map(photo => `
+          <img src="${photo.data}" alt="Photo du colis" class="photo-preview" />
+        `).join('')}
+      </div>
+    </div>
+  ` : ''}
+
+  ${colis.history && colis.history.length > 0 ? `
+    <div class="colis-timeline">
+      <h3>Historique</h3>
+      <div class="timeline">
+        ${colis.history.map(item => `
+          <div class="timeline-item">
+            <div class="timeline-date">
+              ${new Date(item.date).toLocaleString('fr-FR')}
+            </div>
+            <div class="timeline-content">
+              <strong>${item.status.toUpperCase()}</strong>
+              ${item.location ? `<p>📍 ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
+              ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
+            </div>
           </div>
-          
-          <div class="colis-grid">
-            <div class="colis-section">
-              <h3>Expéditeur</h3>
-              <p>${escapeHTML(colis.sender)}</p>
-              <p>${escapeHTML(colis.phone1)}</p>
-            </div>
-            
-            <div class="colis-section">
-              <h3>Destinataire</h3>
-              <p>${escapeHTML(colis.recipient)}</p>
-              <p>${escapeHTML(colis.phone)}</p>
-              <p>${escapeHTML(colis.address)}</p>
-            </div>
-            
-            <div class="colis-section">
-              <h3>Détails</h3>
-              <p><strong>Type:</strong> ${escapeHTML(colis.type)}</p>
-              <p><strong>Description:</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
-            </div>
-          </div>
-          
-          ${colis.photos && colis.photos.length > 0 ? `
-            <div class="colis-photos">
-              <h3>Photos</h3>
-              <div class="photos-grid">
-                ${colis.photos.slice(0, 2).map(photo => `
-                  <img src="${photo.data}" alt="Photo du colis" class="photo-preview">
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
-          
-          ${colis.history && colis.history.length > 0 ? `
-            <div class="colis-timeline">
-              <h3>Historique</h3>
-              <div class="timeline">
-                ${colis.history.map(item => `
-                  <div class="timeline-item">
-                    <div class="timeline-date">
-                      ${new Date(item.date).toLocaleString('fr-FR')}
-                    </div>
-                    <div class="timeline-content">
-                      <strong>${item.status.toUpperCase()}</strong>
-                      ${item.location ? `<p>${item.location.latitude}, ${item.location.longitude}</p>` : ''}
-                      ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
-        `;
-        
-        elements.colisInfo.hidden = false;
+        `).join('')}
+      </div>
+    </div>
+  ` : ''}
+
+  <div class="action-buttons">
+    <button class="btn receive-btn">✅ Recevoir</button>
+    <button class="btn decline-btn">❌ Décliner</button>
+  </div>
+`;
+
+elements.colisInfo.hidden = false;
+
       }
       
       // Fonctions utilitaires
