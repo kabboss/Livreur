@@ -59,7 +59,8 @@
 </head>
 <body>
 
-    <h1>Bienvenue, Expéditeur 👋</h1>
+    <h1>Bienvenue, Expéditeur  👋</h1>
+
     <p id="location-status">🔄 Récupération de votre position en cours...</p>
     
     <button id="show-form">📦 Expédier un colis</button>
@@ -203,7 +204,7 @@
         };
     
         try {
-          const res = await fetch('/.netlify/functions/expedierColis', {
+          const res = await fetch('/.netlify/functions/Colis', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
