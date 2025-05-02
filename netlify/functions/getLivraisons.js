@@ -40,10 +40,31 @@ exports.handler = async function (event, context) {
     const collection = client.db(dbName).collection('Livraison');
     const livraisons = await collection.find({}).toArray();
 
+    // Transformation des données pour correspondre au format attendu par le frontend
+    const formattedLivraisons = livraisons.map((livraison) => ({
+      codeID: livraison.colisID,
+      colis: {
+        type: livraison.type,
+        photos: livraison.photos || [],
+      },
+      expediteur: {
+        nom: livraison.sender || 'Inconnu',
+        telephone: livraison.phone1 || 'Non fourni',
+        localisation: livraison.senderLocation || null,
+      },
+      destinataire: {
+        nom: livraison.recipient || 'Inconnu',
+        prenom: livraison.recipientPrenom || '',
+        telephone: livraison.phone || 'Non fourni',
+        adresse: livraison.address || 'Adresse non fournie',
+        localisation: livraison.recipientLocation || null,
+      },
+    }));
+
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(livraisons),
+      body: JSON.stringify(formattedLivraisons),
     };
   } catch (error) {
     console.error('Erreur lors de la récupération des livraisons :', error);
