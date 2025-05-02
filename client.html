@@ -241,15 +241,74 @@
   ` : ''}
 
   <div class="action-buttons">
-    <button class="btn receive-btn">✅ Recevoir</button>
-    <button class="btn decline-btn">❌ Décliner</button>
+  <button id="btn-recevoir" class="btn receive-btn">✅ Recevoir</button>
+  <button id="btn-decliner" class="btn decline-btn">❌ Décliner</button>
   </div>
 `;
 
 elements.colisInfo.hidden = false;
 
       }
-      
+
+
+
+    document.getElementById('btn-recevoir').addEventListener('click', async () => {
+  const codeID = currentColisID; // récupéré depuis l'affichage actuel du colis
+
+  try {
+    const response = await fetch('/.netlify/functions/recevoir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codeID }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(data.message); // ou afficher dans un div stylé
+    } else {
+      alert(data.error || 'Erreur lors de l’enregistrement.');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Erreur de connexion au serveur.');
+  }
+});
+
+
+
+
+
+
+document.getElementById('btn-decliner').addEventListener('click', async () => {
+  const codeID = currentColisID; // récupère depuis l'affichage actif
+
+  if (!confirm("Êtes-vous sûr de vouloir refuser ce colis ?")) return;
+
+  try {
+    const response = await fetch('/.netlify/functions/decliner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codeID }),
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      alert(result.message);
+      // Tu peux aussi cacher la fiche du colis ici
+    } else {
+      alert(result.error || 'Erreur lors du traitement.');
+    }
+  } catch (error) {
+    console.error(error);
+    alert('Erreur de connexion au serveur.');
+  }
+});
+
+
+
+
       // Fonctions utilitaires
       function showError(message) {
         elements.errorMsg.textContent = message;
