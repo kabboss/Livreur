@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interface Livreur</title>
+  <link rel="stylesheet" href="livreur.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>📦 Interface Livreur</h1>
+    <p id="location-status">📍 Localisation en cours...</p>
+    <div id="colis-list"></div>
+  </div>
+  <script src="livreur.js"></script>
+
+
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+  const locationStatus = document.getElementById('location-status');
+  const colisList = document.getElementById('colis-list');
+  let livreurLocation = null;
+
+  // Obtenir la localisation du livreur
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        livreurLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+        locationStatus.textContent = `📍 Localisation détectée: ${livreurLocation.latitude.toFixed(5)}, ${livreurLocation.longitude.toFixed(5)}`;
+        fetchColis();
+      },
+      (error) => {
+        locationStatus.textContent = '⚠️ Impossible de détecter la localisation.';
+        console.error(error);
+        fetchColis();
+      }
+    );
+  } else {
+    locationStatus.textContent = '⚠️ Géolocalisation non supportée par ce navigateur.';
+    fetchColis();
+  }
+
+  // Récupérer les colis à livrer
+  async function fetchColis() {
+    try {
+      const response = await fetch('/.netlify/functions/getLivraisons');
+      const data = await response.json();
+
+      if (response.ok) {
+        displayColis(data);
+      } else {
+        colisList.innerHTML = `<p>Erreur: ${data.error}</p>`;
+      }
+    } catch (err) {
+      console.error(err);
+      colisList.innerHTML = '<p>Erreur de connexion au serveur.</p>';
+    }
+  }
+
+  // Afficher les colis
+  function displayColis(colisArray) {
+    if (colisArray.length === 0) {
+      colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
+      return;
+    }
+
+    colisList.innerHTML = '';
+    colisArray.forEach((colis) => {
+      const card = document.createElement('div');
+      card.className = 'colis-card';
+
+      card.innerHTML = `
+  <h2>Colis #${colis.codeID}</h2>
+
+  ${colis.colis.photos && colis.colis.photos.length > 0 ? `
+    <img src="${colis.colis.photos[0].data}" alt="Photo du colis" style="max-width: 100%; height: auto; margin-bottom: 10px;" />
+  ` : ''}
+
+  <div class="colis-details">
+    <p><strong>Type:</strong> ${colis.colis.type}</p>
+
+    <p><strong>Expéditeur:</strong> ${colis.expediteur.nom} (${colis.expediteur.telephone})</p>
+    ${colis.expediteur.localisation ? `
+      <p class="coordonnees">📍 
+        <a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" 
+           target="_blank" rel="noopener noreferrer">
+          Localiser l'expéditeur
+        </a>
+      </p>` : ''}
+
+    <p><strong>Destinataire:</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom} (${colis.destinataire.telephone})</p>
+    <p><strong>Adresse:</strong> ${colis.destinataire.adresse}</p>
+    ${colis.destinataire.localisation ? `
+      <p class="coordonnees">📍 
+        <a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" 
+           target="_blank" rel="noopener noreferrer">
+          Localiser le destinataire
+        </a>
+      </p>` : ''}
+
+    ${livreurLocation ? `
+      <p class="coordonnees">🛵 
+        <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" 
+           target="_blank" rel="noopener noreferrer">
+          Ma position (Livreur)
+        </a>
+      </p>` : ''}
+  </div>
+
+  <div class="button-group">
+    <button class="expedier-btn" data-id="${colis.codeID}">Expédier</button>
+    <button class="terminer-btn" data-id="${colis.codeID}">Terminer</button>
+  </div>
+`;
+
+      colisList.appendChild(card);
+    });
+
+    // Ajouter les écouteurs d'événements
+    document.querySelectorAll('.expedier-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (btn.classList.contains('disabled')) return;
+
+        const codeID = btn.getAttribute('data-id');
+        try {
+          const response = await fetch('/.netlify/functions/expedierColis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codeID }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            btn.textContent = 'En cours d\'expédition';
+            btn.classList.add('disabled');
+          } else {
+            alert(result.error || 'Erreur lors de la mise à jour.');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Erreur de connexion au serveur.');
+        }
+      });
+    });
+
+    document.querySelectorAll('.terminer-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const codeID = btn.getAttribute('data-id');
+        if (!confirm('Confirmez-vous la livraison de ce colis ?')) return;
+
+        try {
+          const response = await fetch('/.netlify/functions/terminerColis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codeID }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            btn.closest('.colis-card').remove();
+          } else {
+            alert(result.error || 'Erreur lors de la suppression.');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Erreur de connexion au serveur.');
+        }
+      });
+    });
+  }
+});
+
+</script>
+
+
+
+
+
+</body>
+</html>
