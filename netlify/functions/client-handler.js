@@ -10,7 +10,7 @@ const mongoConfig = {
   }
 };
 
-// Connexion pool
+// Connexion MongoDB (pool)
 const client = new MongoClient(mongoConfig.uri, {
   connectTimeoutMS: 5000,
   socketTimeoutMS: 30000,
@@ -23,7 +23,7 @@ const client = new MongoClient(mongoConfig.uri, {
 // Middleware CORS
 const setCorsHeaders = (response) => {
   response.headers = {
-    ...response.headers,
+    ...(response.headers || {}),
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
@@ -35,24 +35,25 @@ const setCorsHeaders = (response) => {
 const validateRequest = (data) => {
   const requiredFields = ['nom', 'prenom', 'numero', 'code'];
   const missingFields = requiredFields.filter(field => !data[field]);
-  
+
   if (missingFields.length > 0) {
     return {
       valid: false,
-      message: `Champs manquants: ${missingFields.join(', ')}`
+      message: `Champs manquants : ${missingFields.join(', ')}`
     };
   }
-  
+
   if (!data.code.match(/^[A-Z0-9]{8,12}$/)) {
     return {
       valid: false,
-      message: 'Code colis invalide'
+      message: 'Code colis invalide. Le code doit contenir uniquement des lettres majuscules et des chiffres (8 à 12 caractères).'
     };
   }
-  
+
   return { valid: true };
 };
 
+// Fonction principale Netlify
 exports.handler = async function(event, context) {
   // Pré-vérification CORS
   if (event.httpMethod === 'OPTIONS') {
@@ -62,7 +63,7 @@ exports.handler = async function(event, context) {
     });
   }
 
-  // Vérification méthode HTTP
+  // Méthode non autorisée
   if (event.httpMethod !== 'POST') {
     return setCorsHeaders({
       statusCode: 405,
@@ -71,17 +72,17 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    // Validation des données
+    // Vérification du corps
     if (!event.body) {
       return setCorsHeaders({
         statusCode: 400,
-        body: JSON.stringify({ message: 'Données manquantes' })
+        body: JSON.stringify({ message: 'Données manquantes dans la requête' })
       });
     }
 
     const data = JSON.parse(event.body);
     const validation = validateRequest(data);
-    
+
     if (!validation.valid) {
       return setCorsHeaders({
         statusCode: 400,
@@ -89,30 +90,29 @@ exports.handler = async function(event, context) {
       });
     }
 
-    // Connexion à MongoDB
+    // Connexion MongoDB
     await client.connect();
     const db = client.db(mongoConfig.dbName);
-    
-    // Enregistrement des informations client
+
+    // Enregistrement de la soumission client
     await db.collection(mongoConfig.collections.clients).insertOne({
       nom: data.nom,
       prenom: data.prenom,
       numero: data.numero,
       code: data.code,
-      localisation: data.location,
+      localisation: data.location || null,
       date: new Date()
     });
 
     // Recherche du colis
     const colis = await db.collection(mongoConfig.collections.colis)
       .findOne({ colisID: data.code });
-    
+
     if (!colis) {
       return setCorsHeaders({
         statusCode: 404,
-        body: JSON.stringify({ 
-          message: 'Colis non trouvé',
-          suggestion: 'Vérifiez le code ou contactez l\'expéditeur'
+        body: JSON.stringify({
+          message: 'Colis non trouvé. Vérifiez le code ou contactez l’expéditeur.'
         })
       });
     }
@@ -122,8 +122,8 @@ exports.handler = async function(event, context) {
       message: 'Colis trouvé',
       colis: {
         colisID: colis.colisID,
-        sender: colis.sender,
-        phone1: colis.phone1,
+        sender: colis.sender || "Inconnu",
+        phone1: colis.phone1 || null,
         recipient: colis.recipient,
         phone: colis.phone,
         address: colis.address,
@@ -142,11 +142,11 @@ exports.handler = async function(event, context) {
     });
 
   } catch (error) {
-    console.error('Erreur:', error);
+    console.error('Erreur serveur:', error);
     return setCorsHeaders({
       statusCode: 500,
-      body: JSON.stringify({ 
-        message: 'Erreur serveur',
+      body: JSON.stringify({
+        message: 'Erreur interne du serveur',
         error: error.message
       })
     });
