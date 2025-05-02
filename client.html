@@ -3,54 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <meta name="description" content="Suivi en temps réel de votre colis">
-  <title>Client - Suivi de colis | NomEntreprise</title>
+  <title>Client - Suivi de colis</title>
   <link rel="stylesheet" href="client.css" />
 
-  <!-- Préchargement des ressources critiques -->
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" as="style">
-  <style>
-    /* CSS critique - chargement initial */
-    :root {
-      --primary: #6c5ce7;
-      --secondary: #a29bfe;
-      --accent: #fd79a8;
-      --dark: #2d3436;
-      --light: #f5f6fa;
-      --error: #d63031;
-      --radius: 8px;
-      --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      line-height: 1.6;
-      margin: 0;
-      padding: 1rem;
-      min-height: 100vh;
-      color: var(--dark);
-    }
-    
-    /* Amélioration du CLS (Cumulative Layout Shift) */
-    h1, #location-status, #client-form {
-      will-change: transform, opacity;
-    }
-    
-    /* Style de base pour les messages d'erreur */
-    .error {
-      color: var(--error);
-      padding: 0.75rem;
-      background: rgba(214, 48, 49, 0.1);
-      border-radius: var(--radius);
-      margin: 1rem 0;
-    }
-  </style>
-  
-  <!-- Chargement asynchrone de la police -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" media="print" onload="this.media='all'">
-  <noscript>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
-  </noscript>
 </head>
 <body>
 
@@ -58,195 +13,86 @@
   <p id="location-status">📍 Récupération de la localisation...</p>
 
   <form id="client-form">
-    <label for="nom">Nom</label>
-    <input type="text" id="nom" required autocomplete="family-name">
+    <label>Nom</label>
+    <input type="text" id="nom" required>
     
-    <label for="prenom">Prénom</label>
-    <input type="text" id="prenom" required autocomplete="given-name">
+    <label>Prénom</label>
+    <input type="text" id="prenom" required>
 
-    <label for="numero">Numéro de téléphone</label>
-    <input type="tel" id="numero" required autocomplete="tel">
+    <label>Numéro de téléphone</label>
+    <input type="tel" id="numero" required>
 
-    <label for="code">Code d'expédition</label>
-    <input type="text" id="code" required autocomplete="off" inputmode="numeric" pattern="[A-Za-z0-9]{8,12}">
+    <label>Code d'expédition</label>
+    <input type="text" id="code" required>
 
     <button type="submit">📦 Voir mon colis</button>
   </form>
 
-  <div id="colis-info" hidden></div>
-  <p id="msg" class="error" hidden></p>
+  <div id="colis-info"></div>
+  <p id="msg" class="error"></p>
 
-  <!-- Script optimisé avec lazy loading -->
   <script>
-    (function() {
-      // Configuration initiale
-      const config = {
-        apiEndpoint: '/.netlify/functions/client-handler',
-        maxWaitTime: 5000 // 5 secondes max pour la géolocalisation
-      };
-      
-      let userLocation = null;
-      let geoLocationTimeout = null;
+    let userLocation = null;
 
-      // Éléments DOM
-      const domElements = {
-        locationStatus: document.getElementById("location-status"),
-        clientForm: document.getElementById("client-form"),
-        nom: document.getElementById("nom"),
-        prenom: document.getElementById("prenom"),
-        numero: document.getElementById("numero"),
-        code: document.getElementById("code"),
-        colisInfo: document.getElementById("colis-info"),
-        msg: document.getElementById("msg")
-      };
-
-      // Récupération de la position avec timeout
-      function getLocation() {
-        if (!navigator.geolocation) {
-          domElements.locationStatus.textContent = "❌ Géolocalisation non supportée";
-          return;
-        }
-
-        geoLocationTimeout = setTimeout(() => {
-          domElements.locationStatus.textContent = "⚠️ Localisation lente...";
-        }, config.maxWaitTime);
-
+    // Récupération de la position
+    window.onload = () => {
+      if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            clearTimeout(geoLocationTimeout);
             userLocation = {
-              latitude: pos.coords.latitude.toFixed(6),
-              longitude: pos.coords.longitude.toFixed(6)
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude
             };
-            domElements.locationStatus.textContent = "📍 Position récupérée";
+            document.getElementById("location-status").textContent = "📍 Position récupérée.";
           },
-          (err) => {
-            clearTimeout(geoLocationTimeout);
-            const messages = {
-              1: "❌ Permission refusée",
-              2: "❌ Position indisponible",
-              3: "⚠️ Temps de réponse dépassé"
-            };
-            domElements.locationStatus.textContent = messages[err.code] || "❌ Erreur de localisation";
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 30000,
-            timeout: config.maxWaitTime
+          () => {
+            document.getElementById("location-status").textContent = "❌ Position non autorisée.";
           }
         );
       }
+    };
 
-      // Gestionnaire de formulaire optimisé
-      async function handleSubmit(e) {
-        e.preventDefault();
-        
-        // Réinitialisation UI
-        domElements.msg.hidden = true;
-        domElements.colisInfo.hidden = true;
-        
-        const submitBtn = e.target.querySelector('button[type="submit"]');
-        const originalBtnText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '⏳ Recherche en cours...';
-        
-        try {
-          const startTime = performance.now();
-          
-          const response = await fetch(config.apiEndpoint, {
-            method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
-              "X-Requested-With": "XMLHttpRequest"
-            },
-            body: JSON.stringify({
-              nom: domElements.nom.value.trim(),
-              prenom: domElements.prenom.value.trim(),
-              numero: domElements.numero.value.trim(),
-              code: domElements.code.value.trim(),
-              location: userLocation
-            })
-          });
-          
-          const responseTime = ((performance.now() - startTime)/1000).toFixed(2);
-          console.log(`Temps de réponse: ${responseTime}s`);
-          
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || `Erreur HTTP: ${response.status}`);
-          }
-          
-          const data = await response.json();
-          
-          if (!data.colis) {
-            throw new Error("Aucune donnée de colis reçue");
-          }
-          
-          renderColisInfo(data.colis);
-        } catch (err) {
-          console.error("Erreur:", err);
-          showError(err.message);
-        } finally {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = originalBtnText;
-        }
-      }
+    // Soumission du formulaire
+    document.getElementById("client-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
 
-      // Affichage des informations du colis
-      function renderColisInfo(colis) {
-        domElements.colisInfo.innerHTML = `
+      const nom = document.getElementById("nom").value;
+      const prenom = document.getElementById("prenom").value;
+      const numero = document.getElementById("numero").value;
+      const code = document.getElementById("code").value;
+
+      // Envoi vers le backend
+      try {
+        const res = await fetch("/.netlify/functions/client-handler", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nom, prenom, numero, code,
+            location: userLocation
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.message || "Erreur de recherche");
+
+        const colis = data.colis;
+
+        document.getElementById("msg").textContent = "";
+        document.getElementById("colis-info").style.display = "block";
+        document.getElementById("colis-info").innerHTML = `
           <h3>📦 Détails du colis</h3>
-          <p><strong>Expéditeur :</strong> ${escapeHTML(colis.sender)}</p>
-          <p><strong>Destinataire :</strong> ${escapeHTML(colis.recipient)}</p>
-          <p><strong>Adresse :</strong> ${escapeHTML(colis.address)}</p>
-          <p><strong>Type :</strong> ${escapeHTML(colis.type)}</p>
-          ${colis.details ? `<p><strong>Détails :</strong> ${escapeHTML(colis.details)}</p>` : ''}
-          ${colis.status ? `<div class="status">Statut: ${escapeHTML(colis.status)}</div>` : ''}
+          <p><strong>Expéditeur :</strong> ${colis.sender}</p>
+          <p><strong>Destinataire :</strong> ${colis.recipient}</p>
+          <p><strong>Adresse de livraison :</strong> ${colis.address}</p>
+          <p><strong>Type :</strong> ${colis.type}</p>
+          <p><strong>Détails :</strong> ${colis.details}</p>
         `;
-        domElements.colisInfo.hidden = false;
+      } catch (err) {
+        document.getElementById("msg").textContent = "❌ " + err.message;
+        document.getElementById("colis-info").style.display = "none";
       }
-
-      // Affichage des erreurs
-      function showError(message) {
-        domElements.msg.textContent = `❌ ${message}`;
-        domElements.msg.hidden = false;
-        domElements.colisInfo.hidden = true;
-      }
-
-      // Protection XSS basique
-      function escapeHTML(str) {
-        if (!str) return '';
-        return str.toString()
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-      }
-
-      // Initialisation
-      document.addEventListener('DOMContentLoaded', () => {
-        // Début de la géolocalisation après un léger délai
-        setTimeout(getLocation, 300);
-        
-        // Gestionnaire d'événement avec debounce
-        domElements.clientForm.addEventListener('submit', (e) => {
-          e.preventDefault();
-          handleSubmit(e);
-        });
-        
-        // Amélioration de l'accessibilité
-        domElements.clientForm.querySelectorAll('input').forEach(input => {
-          input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
-              e.preventDefault();
-              const form = e.target.closest('form');
-              if (form) form.dispatchEvent(new Event('submit'));
-            }
-          });
-        });
-      });
-    })();
+    });
   </script>
 </body>
 </html>
