@@ -1,0 +1,221 @@
+/* Utilise les mêmes variables que le premier CSS */
+#client-form {
+    max-width: 500px;
+    margin: 2rem auto;
+    background: white;
+    border-radius: var(--radius);
+    padding: 2.5rem;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(20px);
+    animation: formAppear 0.6s 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+  
+  @keyframes formAppear {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  #client-form h1 {
+    font-size: 2rem;
+    margin-bottom: 1.5rem;
+    color: var(--primary);
+    text-align: center;
+    position: relative;
+    display: inline-block;
+    width: 100%;
+  }
+  
+  #client-form h1::before {
+    content: "🔍";
+    display: inline-block;
+    animation: bounce 2s infinite, rotate 4s infinite;
+    margin-right: 10px;
+  }
+  
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  
+  @keyframes rotate {
+    0% { transform: rotate(0deg); }
+    25% { transform: rotate(10deg); }
+    75% { transform: rotate(-10deg); }
+    100% { transform: rotate(0deg); }
+  }
+  
+  #client-form label {
+    display: block;
+    margin: 1.2rem 0 0.5rem;
+    font-weight: 600;
+    color: var(--dark);
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: labelAppear 0.5s forwards;
+  }
+  
+  @keyframes labelAppear {
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  
+  #client-form input {
+    width: 100%;
+    padding: 1rem;
+    border: 2px solid #dfe6e9;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    transition: var(--transition);
+    background: rgba(245, 246, 250, 0.5);
+    opacity: 0;
+    transform: translateY(10px);
+    animation: inputAppear 0.5s 0.2s forwards;
+  }
+  
+  @keyframes inputAppear {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  #client-form input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2);
+    transform: translateY(-2px);
+  }
+  
+  #client-form button[type="submit"] {
+    width: 100%;
+    padding: 1.2rem;
+    margin-top: 2rem;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    opacity: 0;
+    transform: scale(0.95);
+    animation: buttonAppear 0.5s 0.4s forwards;
+  }
+  
+  @keyframes buttonAppear {
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  #client-form button[type="submit"]:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 8px 25px rgba(253, 121, 168, 0.5);
+  }
+  
+  #colis-info {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(20px);
+    transition: var(--transition);
+  }
+  
+  #colis-info.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  #colis-info h2 {
+    color: var(--primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  #colis-info .status {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    margin: 0.5rem 0;
+    background: var(--secondary);
+    color: white;
+    animation: pulse 2s infinite;
+  }
+  
+  #colis-info .timeline {
+    margin: 1.5rem 0;
+    position: relative;
+    padding-left: 1.5rem;
+    border-left: 3px solid var(--secondary);
+  }
+  
+  #colis-info .timeline-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    animation: timelineAppear 0.5s forwards;
+  }
+  
+  @keyframes timelineAppear {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  
+  #colis-info .timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -1.8rem;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary);
+    border: 2px solid white;
+    box-shadow: 0 0 0 3px var(--secondary);
+  }
+  
+  #colis-info .timeline-date {
+    font-weight: 600;
+    color: var(--dark);
+  }
+  
+  #colis-info .timeline-text {
+    margin-top: 0.3rem;
+    color: #636e72;
+  }
+  
+  #msg {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--radius);
+    font-weight: 500;
+    animation: slideIn 0.5s ease-out;
+  }
+  
+  /* Animation pour les éléments du formulaire avec délais */
+  #client-form label:nth-child(1) { animation-delay: 0.3s; }
+  #client-form input:nth-child(2) { animation-delay: 0.4s; }
+  #client-form label:nth-child(3) { animation-delay: 0.5s; }
+  #client-form input:nth-child(4) { animation-delay: 0.6s; }
+  #client-form label:nth-child(5) { animation-delay: 0.7s; }
+  #client-form input:nth-child(6) { animation-delay: 0.8s; }
+  #client-form label:nth-child(7) { animation-delay: 0.9s; }
+  #client-form input:nth-child(8) { animation-delay: 1s; }

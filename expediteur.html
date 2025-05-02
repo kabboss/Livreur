@@ -4,68 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Expéditeur - Expédier un colis</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      background: #f9f9f9;
-    }
+  <link rel="stylesheet" href="expedi.css" />
 
-    h1 {
-      color: #007bff;
-    }
-
-    .form-container {
-      display: none;
-      background: #fff;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      max-width: 600px;
-      margin-top: 20px;
-    }
-
-    label {
-      display: block;
-      margin: 10px 0 5px;
-    }
-
-    input, textarea, select {
-      width: 100%;
-      padding: 8px;
-      margin-bottom: 15px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    button {
-      padding: 10px 20px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    .success {
-      color: green;
-      margin-top: 20px;
-    }
-
-    .error {
-      color: red;
-    }
-  </style>
 </head>
 <body>
 
-    <h1>Bienvenue, Expéditeur  👋</h1>
+    <h1>Bienvenue, Expéditeur </h1>
 
     <p id="location-status">🔄 Récupération de votre position en cours...</p>
     
     <button id="show-form">📦 Expédier un colis</button>
     
-    <div class="form-container" id="expedition-form" style="display: none;">
+    <div class="form-container" id="expedition-form">
       <h2>Formulaire d'expédition</h2>
     
       <form id="form">
@@ -121,9 +71,55 @@
       <p class="error" id="error-msg"></p>
     </div>
     
+
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const showFormBtn = document.getElementById('show-form');
+    const formContainer = document.getElementById('expedition-form');
+    
+    // Afficher le formulaire avec animation
+    showFormBtn.addEventListener('click', function() {
+      formContainer.classList.add('show');
+      
+      // Ajouter la classe form-group à tous les éléments du formulaire pour les animations
+      const formElements = formContainer.querySelectorAll('label, input, select, textarea, button');
+      formElements.forEach((el, index) => {
+        el.classList.add('form-group');
+        el.style.animationDelay = `${index * 0.1}s`;
+      });
+    });
+    
+    // Animation de la localisation
+    navigator.geolocation.getCurrentPosition(
+      function(position) {
+        const locationStatus = document.getElementById('location-status');
+        const locationInput = document.getElementById('location');
+        
+        locationStatus.textContent = '📍 Position récupérée avec succès';
+        locationStatus.style.animation = 'none';
+        
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        locationInput.value = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+      },
+      function(error) {
+        document.getElementById('location-status').textContent = '❌ Impossible de récupérer la position';
+      }
+    );
+  });
+  </script>
+
+
+
+
+
+
+
     <script>
       let userLocation = null;
-    
+
       // Obtenir la géolocalisation
       window.onload = () => {
         if (navigator.geolocation) {
@@ -142,17 +138,17 @@
           );
         }
       };
-    
+
       // Afficher le formulaire
       document.getElementById("show-form").addEventListener("click", () => {
         document.getElementById("expedition-form").style.display = "block";
       });
-    
+
       // Générer un ID colis unique
       function generateID() {
         return Math.random().toString(36).substring(2, 10).toUpperCase();
       }
-    
+
       // Convertir une image en base64
       function toBase64(file) {
         return new Promise((resolve, reject) => {
@@ -162,11 +158,11 @@
           reader.onerror = (error) => reject(error);
         });
       }
-    
+
       // Soumission du formulaire
       document.getElementById("form").addEventListener("submit", async (e) => {
         e.preventDefault();
-    
+
         const sender = document.getElementById("sender").value;
         const phone1 = document.getElementById("phone1").value;
         const recipient = document.getElementById("recipient").value;
@@ -175,21 +171,21 @@
         const type = document.getElementById("type").value;
         const details = document.getElementById("details").value;
         const files = document.getElementById("photos").files;
-    
+
         if (files.length > 2) {
           document.getElementById("error-msg").textContent = "❌ Vous ne pouvez joindre que 2 photos.";
           return;
         }
-    
+
         // Convertir les fichiers en base64
         const photosBase64 = [];
         for (const file of files) {
           const base64 = await toBase64(file);
           photosBase64.push(base64);
         }
-    
+
         const colisID = generateID();
-    
+
         const data = {
           colisID,
           sender,
@@ -202,18 +198,18 @@
           location: userLocation,
           photos: photosBase64
         };
-    
+
         try {
           const res = await fetch('/.netlify/functions/expedi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
           });
-    
+
           const result = await res.json();
-    
+
           if (res.ok) {
-            document.getElementById("success-msg").textContent = `✅ Colis expédié avec succès ! ID : ${colisID}`;
+            document.getElementById("success-msg").textContent = `✅ Colis expédié avec succès! ID : ${colisID}`;
             document.getElementById("error-msg").textContent = '';
             document.getElementById("form").reset();
           } else {
@@ -224,7 +220,6 @@
         }
       });
     </script>
-    
 
 </body>
 </html>
