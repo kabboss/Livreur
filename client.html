@@ -170,151 +170,140 @@
           elements.submitBtn.disabled = false;
         }
       });
-      
-      // Affichage des informations du colis
-      function displayColisInfo(colis) {
-        const statusClass = `status-${colis.status || 'enregistré'}`.toLowerCase();
-        
-        elements.colisContent.innerHTML = `
-  <div class="colis-header">
-    <h2>
-      Colis #${colis.colisID}
-      <span class="status-badge ${statusClass}">
-        ${(colis.status || 'enregistré').toUpperCase()}
-      </span>
-    </h2>
-    <p class="colis-meta">
-      <strong>Créé le:</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
-    </p>
-  </div>
-  
-  <div class="colis-grid">
-    <div class="colis-section">
-      <h3>Expéditeur</h3>
-      <p>${escapeHTML(colis.sender)}</p>
-      <p>${escapeHTML(colis.phone1)}</p>
+// Affichage des informations du colis
+function displayColisInfo(colis) {
+  const statusClass = `status-${(colis.status || 'enregistré')}`.toLowerCase();
+
+  elements.colisContent.innerHTML = `
+    <div class="colis-header">
+      <h2>
+        Colis #${colis.colisID}
+        <span class="status-badge ${statusClass}">
+          ${(colis.status || 'enregistré').toUpperCase()}
+        </span>
+      </h2>
+      <p class="colis-meta">
+        <strong>Créé le:</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+      </p>
     </div>
-    
-    <div class="colis-section">
-      <h3>Destinataire</h3>
-      <p>${escapeHTML(colis.recipient)}</p>
-      <p>${escapeHTML(colis.phone)}</p>
-      <p>${escapeHTML(colis.address)}</p>
-    </div>
-    
-    <div class="colis-section">
-      <h3>Détails</h3>
-      <p><strong>Type:</strong> ${escapeHTML(colis.type)}</p>
-      <p><strong>Description:</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
-    </div>
-  </div>
-  
-  ${colis.photos && colis.photos.length > 0 ? `
-    <div class="colis-photos">
-      <h3>Photos</h3>
-      <div class="photos-grid">
-        ${colis.photos.slice(0, 2).map(photo => `
-          <img src="${photo.data}" alt="Photo du colis" class="photo-preview" />
-        `).join('')}
+
+    <div class="colis-grid">
+      <div class="colis-section">
+        <h3>Expéditeur</h3>
+        <p>${escapeHTML(colis.sender)}</p>
+        <p>${escapeHTML(colis.phone1)}</p>
+      </div>
+
+      <div class="colis-section">
+        <h3>Destinataire</h3>
+        <p>${escapeHTML(colis.recipient)}</p>
+        <p>${escapeHTML(colis.phone)}</p>
+        <p>${escapeHTML(colis.address)}</p>
+      </div>
+
+      <div class="colis-section">
+        <h3>Détails</h3>
+        <p><strong>Type:</strong> ${escapeHTML(colis.type)}</p>
+        <p><strong>Description:</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
       </div>
     </div>
-  ` : ''}
 
-  ${colis.history && colis.history.length > 0 ? `
-    <div class="colis-timeline">
-      <h3>Historique</h3>
-      <div class="timeline">
-        ${colis.history.map(item => `
-          <div class="timeline-item">
-            <div class="timeline-date">
-              ${new Date(item.date).toLocaleString('fr-FR')}
-            </div>
-            <div class="timeline-content">
-              <strong>${item.status.toUpperCase()}</strong>
-              ${item.location ? `<p>📍 ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
-              ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
-            </div>
-          </div>
-        `).join('')}
+    ${colis.photos && colis.photos.length > 0 ? `
+      <div class="colis-photos">
+        <h3>Photos</h3>
+        <div class="photos-grid">
+          ${colis.photos.slice(0, 2).map(photo => `
+            <img src="${photo.data}" alt="Photo du colis" class="photo-preview" />
+          `).join('')}
+        </div>
       </div>
+    ` : ''}
+
+    ${colis.history && colis.history.length > 0 ? `
+      <div class="colis-timeline">
+        <h3>Historique</h3>
+        <div class="timeline">
+          ${colis.history.map(item => `
+            <div class="timeline-item">
+              <div class="timeline-date">
+                ${new Date(item.date).toLocaleString('fr-FR')}
+              </div>
+              <div class="timeline-content">
+                <strong>${item.status.toUpperCase()}</strong>
+                ${item.location ? `<p>📍 ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
+                ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="action-buttons">
+      <button id="btn-recevoir" class="btn receive-btn">✅ Recevoir</button>
+      <button id="btn-decliner" class="btn decline-btn">❌ Décliner</button>
     </div>
-  ` : ''}
+  `;
 
-  <div class="action-buttons">
-  <button id="btn-recevoir" class="btn receive-btn">✅ Recevoir</button>
-  <button id="btn-decliner" class="btn decline-btn">❌ Décliner</button>
-  </div>
-`;
+  elements.colisInfo.hidden = false;
 
-elements.colisInfo.hidden = false;
+  // ⚠️ Ces écouteurs DOIVENT être ajoutés ici après l'injection du HTML
+  document.getElementById('btn-recevoir').addEventListener('click', async () => {
+    const codeID = colis.colisID;
 
+    try {
+      const response = await fetch('/.netlify/functions/recevoir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codeID }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(data.message);
+      } else {
+        alert(data.error || 'Erreur lors de l’enregistrement.');
       }
-
-
-
-    document.getElementById('btn-recevoir').addEventListener('click', async () => {
-  const codeID = currentColisID; // récupéré depuis l'affichage actuel du colis
-
-  try {
-    const response = await fetch('/.netlify/functions/recevoir', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codeID }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok) {
-      alert(data.message); // ou afficher dans un div stylé
-    } else {
-      alert(data.error || 'Erreur lors de l’enregistrement.');
+    } catch (err) {
+      console.error(err);
+      alert('Erreur de connexion au serveur.');
     }
-  } catch (err) {
-    console.error(err);
-    alert('Erreur de connexion au serveur.');
-  }
-});
+  });
 
+  document.getElementById('btn-decliner').addEventListener('click', async () => {
+    const codeID = colis.colisID;
 
+    if (!confirm("Êtes-vous sûr de vouloir refuser ce colis ?")) return;
 
+    try {
+      const response = await fetch('/.netlify/functions/decliner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codeID }),
+      });
 
+      const result = await response.json();
 
-
-document.getElementById('btn-decliner').addEventListener('click', async () => {
-  const codeID = currentColisID; // récupère depuis l'affichage actif
-
-  if (!confirm("Êtes-vous sûr de vouloir refuser ce colis ?")) return;
-
-  try {
-    const response = await fetch('/.netlify/functions/decliner', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codeID }),
-    });
-
-    const result = await response.json();
-
-    if (response.ok) {
-      alert(result.message);
-      // Tu peux aussi cacher la fiche du colis ici
-    } else {
-      alert(result.error || 'Erreur lors du traitement.');
-    }
-  } catch (error) {
-    console.error(error);
-    alert('Erreur de connexion au serveur.');
-  }
-});
-
-
-
-
-      // Fonctions utilitaires
-      function showError(message) {
-        elements.errorMsg.textContent = message;
-        elements.errorMsg.hidden = false;
+      if (response.ok) {
+        alert(result.message);
         elements.colisInfo.hidden = true;
+      } else {
+        alert(result.error || 'Erreur lors du traitement.');
       }
+    } catch (error) {
+      console.error(error);
+      alert('Erreur de connexion au serveur.');
+    }
+  });
+}
+
+// Fonctions utilitaires
+function showError(message) {
+  elements.errorMsg.textContent = message;
+  elements.errorMsg.hidden = false;
+  elements.colisInfo.hidden = true;
+}
       
       function escapeHTML(str) {
         if (!str) return '';
