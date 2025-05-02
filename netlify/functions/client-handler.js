@@ -43,7 +43,7 @@ const validateRequest = (data) => {
     };
   }
 
-  if (!data.code.match(/^[A-Z0-9]{8,12}$/)) {
+  if (!data.code.match(/^[A-Z0-9]{8,20}$/)) {
     return {
       valid: false,
       message: 'Code colis invalide. Le code doit contenir uniquement des lettres majuscules et des chiffres (8 à 12 caractères).'

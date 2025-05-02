@@ -173,7 +173,7 @@
         
         try {
           // Validation
-          if (!elements.code.value.match(/^[A-Z0-9]{8,12}$/)) {
+          if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
             throw new Error('Code colis invalide');
           }
           
