@@ -81,13 +81,26 @@
         document.getElementById("msg").textContent = "";
         document.getElementById("colis-info").style.display = "block";
         document.getElementById("colis-info").innerHTML = `
-          <h3>📦 Détails du colis</h3>
-          <p><strong>Expéditeur :</strong> ${colis.sender}</p>
-          <p><strong>Destinataire :</strong> ${colis.recipient}</p>
-          <p><strong>Adresse de livraison :</strong> ${colis.address}</p>
-          <p><strong>Type :</strong> ${colis.type}</p>
-          <p><strong>Détails :</strong> ${colis.details}</p>
-        `;
+  <h3>📦 Détails du colis</h3>
+  <p><strong>Destinataire :</strong> ${colis.recipient}</p>
+  <p><strong>Téléphone :</strong> ${colis.phone}</p>
+  <p><strong>Adresse de livraison :</strong> ${colis.address}</p>
+  <p><strong>Type :</strong> ${colis.type}</p>
+  <p><strong>Détails :</strong> ${colis.details}</p>
+  <p><strong>Date d'enregistrement :</strong> ${new Date(colis.createdAt).toLocaleString("fr-FR")}</p>
+  ${
+    colis.location && colis.location.latitude && colis.location.longitude
+      ? `<p><strong>Localisation :</strong> ${colis.location.latitude}, ${colis.location.longitude}</p>`
+      : "<p><em>Localisation non disponible</em></p>"
+  }
+  ${
+    colis.photos && colis.photos.length > 0
+      ? `<img src="${colis.photos[0]}" alt="Photo du colis" width="200"/>`
+      : "<p><em>Aucune photo disponible</em></p>"
+  }
+`;
+
+
       } catch (err) {
         document.getElementById("msg").textContent = "❌ " + err.message;
         document.getElementById("colis-info").style.display = "none";
