@@ -39,7 +39,7 @@ exports.handler = async function(event, context) {
     }
 
     // 🔍 Récupération des infos client
-    const clientInfo = await clientCollection.findOne({ codeID: codeID });
+    const clientInfo = await clientCollection.findOne({ code: codeID });
     if (!clientInfo) {
       return {
         statusCode: 404,

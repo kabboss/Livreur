@@ -170,10 +170,11 @@
           elements.submitBtn.disabled = false;
         }
       });
-// Affichage des informations du colis
+// 🔍 Affiche les détails d’un colis sélectionné
 function displayColisInfo(colis) {
   const statusClass = `status-${(colis.status || 'enregistré')}`.toLowerCase();
 
+  // 🧱 Injection dynamique du contenu HTML du colis
   elements.colisContent.innerHTML = `
     <div class="colis-header">
       <h2>
@@ -183,7 +184,7 @@ function displayColisInfo(colis) {
         </span>
       </h2>
       <p class="colis-meta">
-        <strong>Créé le:</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+        <strong>Créé le :</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
       </p>
     </div>
 
@@ -203,12 +204,12 @@ function displayColisInfo(colis) {
 
       <div class="colis-section">
         <h3>Détails</h3>
-        <p><strong>Type:</strong> ${escapeHTML(colis.type)}</p>
-        <p><strong>Description:</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
+        <p><strong>Type :</strong> ${escapeHTML(colis.type)}</p>
+        <p><strong>Description :</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
       </div>
     </div>
 
-    ${colis.photos && colis.photos.length > 0 ? `
+    ${colis.photos?.length > 0 ? `
       <div class="colis-photos">
         <h3>Photos</h3>
         <div class="photos-grid">
@@ -219,7 +220,7 @@ function displayColisInfo(colis) {
       </div>
     ` : ''}
 
-    ${colis.history && colis.history.length > 0 ? `
+    ${colis.history?.length > 0 ? `
       <div class="colis-timeline">
         <h3>Historique</h3>
         <div class="timeline">
@@ -245,13 +246,16 @@ function displayColisInfo(colis) {
     </div>
   `;
 
+  // 📦 Affiche la section d'informations colis
   elements.colisInfo.hidden = false;
 
-  // ⚠️ Ces écouteurs DOIVENT être ajoutés ici après l'injection du HTML
+  // ✅ Écouteur : clic sur "Recevoir"
   document.getElementById('btn-recevoir').addEventListener('click', async () => {
     const codeID = colis.colisID;
 
     try {
+      showSpinner();
+
       const response = await fetch('/.netlify/functions/recevoir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,24 +263,31 @@ function displayColisInfo(colis) {
       });
 
       const data = await response.json();
+      hideSpinner();
 
       if (response.ok) {
-        alert(data.message);
+        showCheckmark();
+        showToast(data.message, 'success');
       } else {
-        alert(data.error || 'Erreur lors de l’enregistrement.');
+        showAlert(data.error || 'Erreur lors de l’enregistrement.', 'error');
       }
     } catch (err) {
       console.error(err);
-      alert('Erreur de connexion au serveur.');
+      hideSpinner();
+      showAlert('Erreur de connexion au serveur.', 'error');
     }
   });
 
+  // ❌ Écouteur : clic sur "Décliner"
   document.getElementById('btn-decliner').addEventListener('click', async () => {
     const codeID = colis.colisID;
 
-    if (!confirm("Êtes-vous sûr de vouloir refuser ce colis ?")) return;
+    const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
+    if (!confirmed) return;
 
     try {
+      showSpinner();
+
       const response = await fetch('/.netlify/functions/decliner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -284,16 +295,18 @@ function displayColisInfo(colis) {
       });
 
       const result = await response.json();
+      hideSpinner();
 
       if (response.ok) {
-        alert(result.message);
+        showToast(result.message, 'success');
         elements.colisInfo.hidden = true;
       } else {
-        alert(result.error || 'Erreur lors du traitement.');
+        showAlert(result.error || 'Erreur lors du traitement.', 'error');
       }
     } catch (error) {
       console.error(error);
-      alert('Erreur de connexion au serveur.');
+      hideSpinner();
+      showAlert('Erreur de connexion au serveur.', 'error');
     }
   });
 }
@@ -304,6 +317,16 @@ function showError(message) {
   elements.errorMsg.hidden = false;
   elements.colisInfo.hidden = true;
 }
+
+if (response.ok) {
+  showCheckmark();
+  showToast(data.message, 'success');
+  // ou showAlert(...) si besoin
+}
+
+
+
+
       
       function escapeHTML(str) {
         if (!str) return '';
@@ -321,5 +344,146 @@ function showError(message) {
       });
     });
   </script>
+
+
+<div id="custom-alert" class="custom-alert hidden">
+    <div class="alert-content">
+      <img id="alert-icon" src="" alt="icon" class="alert-icon">
+      <p id="alert-message">Message</p>
+      <button id="alert-close">OK</button>
+    </div>
+  </div>
+  
+  <div id="spinner-overlay" class="spinner-overlay hidden">
+    <div class="spinner"></div>
+  </div>
+
+
+
+  <div id="custom-confirm" class="custom-alert hidden">
+    <div class="alert-content">
+      <img src="https://cdn-icons-png.flaticon.com/512/190/190406.png" alt="question" class="alert-icon" />
+      <p id="confirm-message">Êtes-vous sûr de vouloir refuser ce colis ?</p>
+      <button id="confirm-yes">Oui</button>
+      <button id="confirm-no">Non</button>
+    </div>
+  </div>
+  
+
+
+  <div id="toast" class="toast hidden">
+    <img id="toast-icon" src="" alt="icon" class="toast-icon" />
+    <span id="toast-message">Message</span>
+  </div>
+
+
+
+
+  <div id="check-animation" class="checkmark-wrapper hidden">
+    <svg class="checkmark" viewBox="0 0 52 52">
+      <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
+      <path class="checkmark-check" fill="none" d="M14 27l7 7 16-16" />
+    </svg>
+  </div>
+  
+
+
+  <script>
+    function showCheckmark(duration = 1500) {
+  const wrapper = document.getElementById('check-animation');
+  wrapper.classList.remove('hidden');
+
+  setTimeout(() => {
+    wrapper.classList.add('hidden');
+  }, duration);
+}
+
+  </script>
+  
+
+  <script>
+    function showToast(message, type = 'info', duration = 3000) {
+  const toast = document.getElementById('toast');
+  const toastMessage = document.getElementById('toast-message');
+  const toastIcon = document.getElementById('toast-icon');
+
+  const icons = {
+    info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
+    success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
+    error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
+  };
+
+  toastMessage.textContent = message;
+  toastIcon.src = icons[type] || icons.info;
+
+  toast.classList.add('show');
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, duration);
+}
+
+  </script>
+
+
+  <script>
+    function showConfirm(message) {
+  return new Promise((resolve) => {
+    const confirmBox = document.getElementById('custom-confirm');
+    const confirmMessage = document.getElementById('confirm-message');
+
+    confirmMessage.textContent = message;
+    confirmBox.classList.remove('hidden');
+
+    document.getElementById('confirm-yes').onclick = () => {
+      confirmBox.classList.add('hidden');
+      resolve(true);
+    };
+
+    document.getElementById('confirm-no').onclick = () => {
+      confirmBox.classList.add('hidden');
+      resolve(false);
+    };
+  });
+}
+
+  </script>
+  
+
+
+  <script>
+    function showAlert(message, type = 'info') {
+  const alertBox = document.getElementById('custom-alert');
+  const alertMessage = document.getElementById('alert-message');
+  const alertIcon = document.getElementById('alert-icon');
+
+  alertMessage.textContent = message;
+
+  const icons = {
+    info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
+    success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
+    error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
+  };
+
+  alertIcon.src = icons[type] || icons.info;
+
+  alertBox.classList.remove('hidden');
+
+  document.getElementById('alert-close').onclick = () => {
+    alertBox.classList.add('hidden');
+  };
+}
+
+function showSpinner() {
+  document.getElementById('spinner-overlay').classList.remove('hidden');
+}
+
+function hideSpinner() {
+  document.getElementById('spinner-overlay').classList.add('hidden');
+}
+
+  </script>
+
+
 </body>
 </html>
