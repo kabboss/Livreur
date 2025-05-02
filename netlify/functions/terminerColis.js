@@ -1,4 +1,9 @@
+// netlify/functions/deleteLivraison.js
+
 const { MongoClient } = require('mongodb');
+
+const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const dbName = 'FarmsConnect';
 
 exports.handler = async function(event, context) {
   const headers = {
@@ -16,6 +21,7 @@ exports.handler = async function(event, context) {
     };
   }
 
+  // Vérifier si la méthode HTTP est bien POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -24,15 +30,16 @@ exports.handler = async function(event, context) {
     };
   }
 
-  const uri = process.env.MONGODB_URI;
   const client = new MongoClient(uri, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   });
 
   try {
+    // Récupérer le codeID à partir du corps de la requête
     const { codeID } = JSON.parse(event.body);
 
+    // Vérifier si le codeID est fourni
     if (!codeID) {
       return {
         statusCode: 400,
@@ -41,11 +48,14 @@ exports.handler = async function(event, context) {
       };
     }
 
+    // Connexion à la base de données MongoDB
     await client.connect();
-    const collection = client.db('FarmsConnect').collection('Livraison');
+    const collection = client.db(dbName).collection('Livraison');
 
+    // Suppression du colis correspondant au codeID
     const result = await collection.deleteOne({ codeID });
 
+    // Vérifier si aucun colis n'a été supprimé
     if (result.deletedCount === 0) {
       return {
         statusCode: 404,
@@ -54,6 +64,7 @@ exports.handler = async function(event, context) {
       };
     }
 
+    // Réponse de succès après suppression
     return {
       statusCode: 200,
       headers,
@@ -68,6 +79,7 @@ exports.handler = async function(event, context) {
       body: JSON.stringify({ error: 'Erreur interne du serveur' }),
     };
   } finally {
+    // Fermeture de la connexion à MongoDB
     await client.close();
   }
 };
