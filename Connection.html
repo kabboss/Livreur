@@ -62,14 +62,26 @@
         btn.disabled = false;
 
         if (response.ok) {
-          document.getElementById('message').innerText = `✅ ${result.message}`;
-          document.getElementById('message').style.color = 'green';
+  document.getElementById('message').innerText = `✅ ${result.message}`;
+  document.getElementById('message').style.color = 'green';
 
-          // Redirection après 1,5 seconde
-          setTimeout(() => {
-            window.location.href = 'index.html'; // 👉 change cette URL selon tes besoins
-          }, 1500);
-        } else {
+  // Redirection conditionnelle selon le type de compte
+  setTimeout(() => {
+    if (type === 'expediteur') {
+      window.location.href = '/expediteur.html'; // ✅ page des expéditeurs
+    } else if (type === 'client') {
+      window.location.href = '/client.html'; // ✅ page des clients
+    } else if (type === 'livreur') {
+      window.location.href = '/livreur.html'; // ✅ page des livreurs
+    } else if (type === 'admin') {
+      window.location.href = '/admin.html'; // ✅ page admin
+    } else {
+      // Au cas où quelque chose échoue (précaution)
+      window.location.href = '/';
+    }
+  }, 1500);
+}
+ else {
           document.getElementById('error-message').style.display = 'block';
           document.getElementById('error-message').textContent = result.message || '❌ Informations incorrectes.';
         }
