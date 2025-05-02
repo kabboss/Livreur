@@ -278,37 +278,39 @@ function displayColisInfo(colis) {
     }
   });
 
-  // ❌ Écouteur : clic sur "Décliner"
-  document.getElementById('btn-decliner').addEventListener('click', async () => {
-    const codeID = colis.colisID;
+// ❌ Écouteur : clic sur "Décliner"
+document.getElementById('btn-decliner').addEventListener('click', async () => {
+  const codeID = colis.colisID;
 
-    const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
-    if (!confirmed) return;
+  const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
+  if (!confirmed) return;
 
-    try {
-      showSpinner();
+  try {
+    showSpinner(); // Affichage du spinner lors de l'attente de la réponse du serveur
 
-      const response = await fetch('/.netlify/functions/decliner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codeID }),
-      });
+    const response = await fetch('/.netlify/functions/decliner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codeID }),
+    });
 
-      const result = await response.json();
-      hideSpinner();
+    const result = await response.json();
+    hideSpinner(); // Masquage du spinner après la réponse
 
-      if (response.ok) {
-        showToast(result.message, 'success');
-        elements.colisInfo.hidden = true;
-      } else {
-        showAlert(result.error || 'Erreur lors du traitement.', 'error');
-      }
-    } catch (error) {
-      console.error(error);
-      hideSpinner();
-      showAlert('Erreur de connexion au serveur.', 'error');
+    // Si la réponse est correcte
+    if (response.ok) {
+      // Affichage de l'alerte après avoir confirmé le refus
+      showAlert("Le colis a été supprimé de notre serveur. Veuillez contacter votre expéditeur pour réexpédier le colis.", 'success');
+      elements.colisInfo.hidden = true; // Masquage des informations du colis
+    } else {
+      showAlert(result.error || 'Erreur lors du traitement.', 'error'); // Affichage d'un message d'erreur
     }
-  });
+  } catch (error) {
+    console.error(error);
+    hideSpinner(); // Masquage du spinner en cas d'erreur
+    showAlert('Erreur de connexion au serveur.', 'error'); // Affichage d'une erreur de connexion
+  }
+});
 }
 
 // Fonctions utilitaires
@@ -389,7 +391,7 @@ if (response.ok) {
 
 
   <script>
-    function showCheckmark(duration = 4000) {
+    function showCheckmark(duration = 5000) {
   const wrapper = document.getElementById('check-animation');
   wrapper.classList.remove('hidden');
 
