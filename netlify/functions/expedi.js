@@ -1,73 +1,126 @@
 const { MongoClient } = require('mongodb');
 
-const mongoURI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
-const client = new MongoClient(mongoURI, {
+// Configuration MongoDB
+const mongoConfig = {
+  uri: process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority",
+  dbName: "FarmsConnect",
+  collectionName: "Colis"
+};
+
+// Connexion pool
+const client = new MongoClient(mongoConfig.uri, {
+  connectTimeoutMS: 5000,
+  socketTimeoutMS: 30000,
+  serverSelectionTimeoutMS: 5000,
+  maxPoolSize: 10,
+  retryWrites: true,
+  retryReads: true
 });
 
-exports.handler = async function (event, context) {
-  // Autoriser CORS
+// Middleware CORS
+const setCorsHeaders = (response) => {
+  response.headers = {
+    ...response.headers,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+  return response;
+};
+
+exports.handler = async function(event, context) {
+  // Pré-vérification CORS
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-      body: '',
-    };
+    return setCorsHeaders({
+      statusCode: 204,
+      body: ''
+    });
   }
 
+  // Vérification méthode HTTP
   if (event.httpMethod !== 'POST') {
-    return {
+    return setCorsHeaders({
       statusCode: 405,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ message: 'Méthode non autorisée' }),
-    };
+      body: JSON.stringify({ message: 'Méthode non autorisée' })
+    });
   }
 
   try {
-    const body = JSON.parse(event.body);
+    // Validation des données
+    if (!event.body) {
+      return setCorsHeaders({
+        statusCode: 400,
+        body: JSON.stringify({ message: 'Données manquantes' })
+      });
+    }
+
+    const data = JSON.parse(event.body);
+    
+    // Validation des champs obligatoires
+    const requiredFields = ['colisID', 'sender', 'phone1', 'recipient', 'phone', 'address', 'type'];
+    const missingFields = requiredFields.filter(field => !data[field]);
+    
+    if (missingFields.length > 0) {
+      return setCorsHeaders({
+        statusCode: 400,
+        body: JSON.stringify({ 
+          message: 'Champs manquants', 
+          missing: missingFields 
+        })
+      });
+    }
 
     // Connexion à MongoDB
-    if (!client.isConnected?.()) {
-        await client.connect();
-      }
+    await client.connect();
+    const db = client.db(mongoConfig.dbName);
+    const collection = db.collection(mongoConfig.collectionName);
 
-    const db = client.db('FarmsConnect'); // nom de la base
-    const collection = db.collection('Colis'); // nom de la collection
+    // Vérification si le colis existe déjà
+    const existingColis = await collection.findOne({ colisID: data.colisID });
+    if (existingColis) {
+      return setCorsHeaders({
+        statusCode: 409,
+        body: JSON.stringify({ message: 'Un colis avec cet ID existe déjà' })
+      });
+    }
 
+    // Création du document
     const document = {
-      colisID: body.colisID,
-      recipient: body.recipient,
-      phone: body.phone,
-      address: body.address,
-      type: body.type,
-      details: body.details,
-      location: body.location,
-      photos: body.photos,
-      createdAt: new Date()
+      ...data,
+      status: 'enregistré',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      history: [{
+        status: 'enregistré',
+        date: new Date(),
+        location: data.location
+      }]
     };
 
-    await collection.insertOne(document);
+    // Insertion dans la base de données
+    const result = await collection.insertOne(document);
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ message: 'Colis enregistré avec succès', id: body.colisID }),
-    };
+    if (!result.acknowledged) {
+      throw new Error('Échec de l\'insertion');
+    }
+
+    return setCorsHeaders({
+      statusCode: 201,
+      body: JSON.stringify({ 
+        success: true,
+        message: 'Colis enregistré avec succès',
+        colisID: data.colisID
+      })
+    });
+
   } catch (error) {
-    console.error('Erreur Lambda:', error);
-    return {
+    console.error('Erreur:', error);
+    return setCorsHeaders({
       statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ message: 'Erreur serveur', error: error.message }),
-    };
+      body: JSON.stringify({ 
+        message: 'Erreur serveur',
+        error: error.message
+      })
+    });
   }
 };

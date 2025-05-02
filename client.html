@@ -1,110 +1,310 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Client - Suivi de colis</title>
-  <link rel="stylesheet" href="client.css" />
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Suivi de colis en temps réel">
+  <title>Suivi Colis | Plateforme de livraison</title>
+  <style>
+    :root {
+      --primary: #4361ee;
+      --secondary: #3a0ca3;
+      --success: #4cc9f0;
+      --error: #f72585;
+      --warning: #f8961e;
+      --dark: #212529;
+      --light: #f8f9fa;
+      --radius: 8px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 2rem;
+      color: var(--dark);
+      background: #f5f7ff;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-left: 0.5rem;
+    }
+    
+    .status-enregistré { background: var(--primary); color: white; }
+    .status-transit { background: var(--warning); color: white; }
+    .status-livré { background: var(--success); color: white; }
+    .status-problème { background: var(--error); color: white; }
+  </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 </head>
 <body>
-
-  <h1>🔍 Suivre mon colis</h1>
-  <p id="location-status">📍 Récupération de la localisation...</p>
-
-  <form id="client-form">
-    <label>Nom</label>
-    <input type="text" id="nom" required>
+  <div class="container">
+    <h1>🔍 Suivi de colis</h1>
+    <p id="location-status">📍 Localisation en cours...</p>
     
-    <label>Prénom</label>
-    <input type="text" id="prenom" required>
-
-    <label>Numéro de téléphone</label>
-    <input type="tel" id="numero" required>
-
-    <label>Code d'expédition</label>
-    <input type="text" id="code" required>
-
-    <button type="submit">📦 Voir mon colis</button>
-  </form>
-
-  <div id="colis-info"></div>
-  <p id="msg" class="error"></p>
+    <form id="client-form" class="card">
+      <h2>Rechercher un colis</h2>
+      
+      <div class="form-group">
+        <label for="nom">Nom</label>
+        <input type="text" id="nom" required autocomplete="family-name">
+      </div>
+      
+      <div class="form-group">
+        <label for="prenom">Prénom</label>
+        <input type="text" id="prenom" required autocomplete="given-name">
+      </div>
+      
+      <div class="form-group">
+        <label for="numero">Téléphone</label>
+        <input type="tel" id="numero" required autocomplete="tel">
+      </div>
+      
+      <div class="form-group">
+        <label for="code">Code colis</label>
+        <input type="text" id="code" required pattern="[A-Z0-9]{8,12}">
+      </div>
+      
+      <button type="submit" class="btn-primary">
+        <span class="btn-text">📦 Rechercher</span>
+        <span class="btn-loader" hidden></span>
+      </button>
+    </form>
+    
+    <div id="messages">
+      <p id="error-msg" class="message-error" hidden></p>
+    </div>
+    
+    <div id="colis-info" class="card" hidden>
+      <div id="colis-content"></div>
+    </div>
+  </div>
 
   <script>
-    let userLocation = null;
-
-    // Récupération de la position
-    window.onload = () => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            userLocation = {
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude
-            };
-            document.getElementById("location-status").textContent = "📍 Position récupérée.";
-          },
-          () => {
-            document.getElementById("location-status").textContent = "❌ Position non autorisée.";
+    document.addEventListener('DOMContentLoaded', () => {
+      // Configuration
+      const config = {
+        apiEndpoint: '/.netlify/functions/client-handler'
+      };
+      
+      // Éléments DOM
+      const elements = {
+        form: document.getElementById('client-form'),
+        nom: document.getElementById('nom'),
+        prenom: document.getElementById('prenom'),
+        numero: document.getElementById('numero'),
+        code: document.getElementById('code'),
+        submitBtn: document.querySelector('#client-form button[type="submit"]'),
+        btnText: document.querySelector('.btn-text'),
+        btnLoader: document.querySelector('.btn-loader'),
+        locationStatus: document.getElementById('location-status'),
+        colisInfo: document.getElementById('colis-info'),
+        colisContent: document.getElementById('colis-content'),
+        errorMsg: document.getElementById('error-msg')
+      };
+      
+      let userLocation = null;
+      
+      // Gestion de la géolocalisation
+      const getLocation = () => {
+        return new Promise((resolve, reject) => {
+          if (!navigator.geolocation) {
+            elements.locationStatus.textContent = '❌ Géolocalisation non supportée';
+            reject(new Error('Géolocalisation non supportée'));
+            return;
           }
-        );
-      }
-    };
-
-    // Soumission du formulaire
-    document.getElementById("client-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const nom = document.getElementById("nom").value;
-      const prenom = document.getElementById("prenom").value;
-      const numero = document.getElementById("numero").value;
-      const code = document.getElementById("code").value;
-
-      // Envoi vers le backend
-      try {
-        const res = await fetch("/.netlify/functions/client-handler", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nom, prenom, numero, code,
-            location: userLocation
-          })
+          
+          elements.locationStatus.textContent = '🔄 Localisation en cours...';
+          
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              userLocation = {
+                latitude: position.coords.latitude.toFixed(6),
+                longitude: position.coords.longitude.toFixed(6)
+              };
+              elements.locationStatus.textContent = '📍 Localisation activée';
+              resolve(userLocation);
+            },
+            error => {
+              let message = 'Erreur de localisation';
+              switch(error.code) {
+                case error.PERMISSION_DENIED:
+                  message = '❌ Permission refusée';
+                  break;
+                case error.POSITION_UNAVAILABLE:
+                  message = '❌ Service indisponible';
+                  break;
+                case error.TIMEOUT:
+                  message = '⚠️ Temps écoulé';
+                  break;
+              }
+              elements.locationStatus.textContent = message;
+              reject(new Error(message));
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000
+            }
+          );
         });
-
-        const data = await res.json();
-
-        if (!res.ok) throw new Error(data.message || "Erreur de recherche");
-
-        const colis = data.colis;
-
-        document.getElementById("msg").textContent = "";
-        document.getElementById("colis-info").style.display = "block";
-        document.getElementById("colis-info").innerHTML = `
-  <h3>📦 Détails du colis</h3>
-  <p><strong>Destinataire :</strong> ${colis.recipient}</p>
-  <p><strong>Téléphone :</strong> ${colis.phone}</p>
-  <p><strong>Adresse de livraison :</strong> ${colis.address}</p>
-  <p><strong>Type :</strong> ${colis.type}</p>
-  <p><strong>Détails :</strong> ${colis.details}</p>
-  <p><strong>Date d'enregistrement :</strong> ${new Date(colis.createdAt).toLocaleString("fr-FR")}</p>
-  ${
-    colis.location && colis.location.latitude && colis.location.longitude
-      ? `<p><strong>Localisation :</strong> ${colis.location.latitude}, ${colis.location.longitude}</p>`
-      : "<p><em>Localisation non disponible</em></p>"
-  }
-  ${
-    colis.photos && colis.photos.length > 0
-      ? `<img src="${colis.photos[0]}" alt="Photo du colis" width="200"/>`
-      : "<p><em>Aucune photo disponible</em></p>"
-  }
-`;
-
-
-      } catch (err) {
-        document.getElementById("msg").textContent = "❌ " + err.message;
-        document.getElementById("colis-info").style.display = "none";
+      };
+      
+      // Soumission du formulaire
+      elements.form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        // Reset UI
+        elements.errorMsg.hidden = true;
+        elements.colisInfo.hidden = true;
+        elements.btnText.hidden = true;
+        elements.btnLoader.hidden = false;
+        elements.submitBtn.disabled = true;
+        
+        try {
+          // Validation
+          if (!elements.code.value.match(/^[A-Z0-9]{8,12}$/)) {
+            throw new Error('Code colis invalide');
+          }
+          
+          // Envoi des données
+          const response = await fetch(config.apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nom: elements.nom.value.trim(),
+              prenom: elements.prenom.value.trim(),
+              numero: elements.numero.value.trim(),
+              code: elements.code.value.trim(),
+              location: userLocation
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(data.message || 'Erreur de recherche');
+          }
+          
+          if (!data.colis) {
+            throw new Error('Aucune information de colis disponible');
+          }
+          
+          // Affichage des résultats
+          displayColisInfo(data.colis);
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          elements.btnText.hidden = false;
+          elements.btnLoader.hidden = true;
+          elements.submitBtn.disabled = false;
+        }
+      });
+      
+      // Affichage des informations du colis
+      function displayColisInfo(colis) {
+        const statusClass = `status-${colis.status || 'enregistré'}`.toLowerCase();
+        
+        elements.colisContent.innerHTML = `
+          <div class="colis-header">
+            <h2>
+              Colis #${colis.colisID}
+              <span class="status-badge ${statusClass}">
+                ${(colis.status || 'enregistré').toUpperCase()}
+              </span>
+            </h2>
+            <p class="colis-meta">
+              <strong>Créé le:</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+            </p>
+          </div>
+          
+          <div class="colis-grid">
+            <div class="colis-section">
+              <h3>Expéditeur</h3>
+              <p>${escapeHTML(colis.sender)}</p>
+              <p>${escapeHTML(colis.phone1)}</p>
+            </div>
+            
+            <div class="colis-section">
+              <h3>Destinataire</h3>
+              <p>${escapeHTML(colis.recipient)}</p>
+              <p>${escapeHTML(colis.phone)}</p>
+              <p>${escapeHTML(colis.address)}</p>
+            </div>
+            
+            <div class="colis-section">
+              <h3>Détails</h3>
+              <p><strong>Type:</strong> ${escapeHTML(colis.type)}</p>
+              <p><strong>Description:</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
+            </div>
+          </div>
+          
+          ${colis.photos && colis.photos.length > 0 ? `
+            <div class="colis-photos">
+              <h3>Photos</h3>
+              <div class="photos-grid">
+                ${colis.photos.slice(0, 2).map(photo => `
+                  <img src="${photo.data}" alt="Photo du colis" class="photo-preview">
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          ${colis.history && colis.history.length > 0 ? `
+            <div class="colis-timeline">
+              <h3>Historique</h3>
+              <div class="timeline">
+                ${colis.history.map(item => `
+                  <div class="timeline-item">
+                    <div class="timeline-date">
+                      ${new Date(item.date).toLocaleString('fr-FR')}
+                    </div>
+                    <div class="timeline-content">
+                      <strong>${item.status.toUpperCase()}</strong>
+                      ${item.location ? `<p>${item.location.latitude}, ${item.location.longitude}</p>` : ''}
+                      ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        `;
+        
+        elements.colisInfo.hidden = false;
       }
+      
+      // Fonctions utilitaires
+      function showError(message) {
+        elements.errorMsg.textContent = message;
+        elements.errorMsg.hidden = false;
+        elements.colisInfo.hidden = true;
+      }
+      
+      function escapeHTML(str) {
+        if (!str) return '';
+        return str.toString()
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+      
+      // Initialisation
+      getLocation().catch(error => {
+        console.error('Erreur de localisation:', error);
+      });
     });
   </script>
 </body>

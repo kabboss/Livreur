@@ -1,225 +1,367 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Expéditeur - Expédier un colis</title>
-  <link rel="stylesheet" href="expedi.css" />
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Plateforme d'expédition de colis">
+  <title>Expéditeur | Plateforme Colis</title>
+  <style>
+    /* CSS critique intégré */
+    :root {
+      --primary: #4361ee;
+      --secondary: #3a0ca3;
+      --accent: #f72585;
+      --success: #4cc9f0;
+      --error: #f72585;
+      --dark: #212529;
+      --light: #f8f9fa;
+      --radius: 8px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.6;
+      margin: 0;
+      padding: 2rem;
+      color: var(--dark);
+      background: #f5f7ff;
+    }
+    
+    .form-container {
+      display: none;
+      max-width: 700px;
+      margin: 2rem auto;
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 2rem;
+      animation: fadeIn 0.4s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 </head>
 <body>
-
-    <h1>Bienvenue, Expéditeur </h1>
-
-    <p id="location-status">🔄 Récupération de votre position en cours...</p>
+  <div class="container">
+    <h1>Bienvenue, Expéditeur 👋</h1>
+    <p id="location-status">🔄 Localisation en cours...</p>
     
-    <button id="show-form">📦 Expédier un colis</button>
+    <button id="show-form" class="btn-primary">📦 Nouvelle expédition</button>
     
     <div class="form-container" id="expedition-form">
       <h2>Formulaire d'expédition</h2>
-    
-      <form id="form">
-        <!-- Nom de l'expéditeur -->
-        <label for="sender">Nom de l'expéditeur</label>
-        <input type="text" id="sender" name="sender" required placeholder="Votre nom">
-    
-        <!-- Téléphone de l'expéditeur -->
-        <label for="phone1">Téléphone de l'expéditeur</label>
-        <input type="tel" id="phone1" name="phone1" required placeholder="Ex: +226 76 00 00 00">
-    
-        <!-- Nom du destinataire -->
-        <label for="recipient">Nom du destinataire</label>
-        <input type="text" id="recipient" name="recipient" required placeholder="Ex: Jean Kaboré">
-    
-        <!-- Téléphone du destinataire -->
-        <label for="phone">Téléphone du destinataire</label>
-        <input type="tel" id="phone" name="phone" required placeholder="Ex: +226 70 00 00 00">
-    
-        <!-- Adresse de livraison -->
-        <label for="address">Adresse de livraison</label>
-        <input type="text" id="address" name="address" required placeholder="Ex: Quartier Pissy, Karpala, Goughin...">
-    
-        <!-- Type de colis -->
-        <label for="type">Type de colis</label>
-        <select id="type" name="type" required>
-          <option value="">-- Choisissez --</option>
-          <option value="alimentaire">Alimentaire</option>
-          <option value="fragile">Fragile</option>
-          <option value="sante">Santé</option>
-          <option value="document">Document</option>
-          <option value="autre">Autre</option>
-        </select>
-    
-        <!-- Détails supplémentaires -->
-        <label for="details">Détails supplémentaires</label>
-        <textarea id="details" name="details" rows="4" placeholder="Ex: Poids, dimensions, contenu, consignes..."></textarea>
-    
-        <!-- Joindre des photos -->
-        <label for="photos">Joindre 2 photos max</label>
-        <input type="file" id="photos" name="photos" accept="image/*" multiple required>
-    
-        <!-- Localisation automatique -->
-        <label for="location">Votre localisation actuelle</label>
-        <input type="text" id="location" name="location" readonly placeholder="Chargement...">
-    
-        <!-- Bouton de soumission -->
-        <button type="submit">🚀 Expédier</button>
-      </form>
-    
-      <!-- Messages -->
-      <p class="success" id="success-msg"></p>
-      <p class="error" id="error-msg"></p>
-    </div>
-    
-
-
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const showFormBtn = document.getElementById('show-form');
-    const formContainer = document.getElementById('expedition-form');
-    
-    // Afficher le formulaire avec animation
-    showFormBtn.addEventListener('click', function() {
-      formContainer.classList.add('show');
       
-      // Ajouter la classe form-group à tous les éléments du formulaire pour les animations
-      const formElements = formContainer.querySelectorAll('label, input, select, textarea, button');
-      formElements.forEach((el, index) => {
-        el.classList.add('form-group');
-        el.style.animationDelay = `${index * 0.1}s`;
-      });
-    });
-    
-    // Animation de la localisation
-    navigator.geolocation.getCurrentPosition(
-      function(position) {
-        const locationStatus = document.getElementById('location-status');
-        const locationInput = document.getElementById('location');
+      <form id="form">
+        <div class="form-grid">
+          <!-- Section Expéditeur -->
+          <div class="form-section">
+            <h3>Informations expéditeur</h3>
+            <div class="form-group">
+              <label for="sender">Nom complet</label>
+              <input type="text" id="sender" name="sender" required autocomplete="name">
+            </div>
+            <div class="form-group">
+              <label for="phone1">Téléphone</label>
+              <input type="tel" id="phone1" name="phone1" required autocomplete="tel" pattern="^\+?[0-9\s\-]+$">
+            </div>
+          </div>
+          
+          <!-- Section Destinataire -->
+          <div class="form-section">
+            <h3>Informations destinataire</h3>
+            <div class="form-group">
+              <label for="recipient">Nom complet</label>
+              <input type="text" id="recipient" name="recipient" required>
+            </div>
+            <div class="form-group">
+              <label for="phone">Téléphone</label>
+              <input type="tel" id="phone" name="phone" required pattern="^\+?[0-9\s\-]+$">
+            </div>
+            <div class="form-group">
+              <label for="address">Adresse complète</label>
+              <input type="text" id="address" name="address" required>
+            </div>
+          </div>
+          
+          <!-- Section Colis -->
+          <div class="form-section">
+            <h3>Détails du colis</h3>
+            <div class="form-group">
+              <label for="type">Type de colis</label>
+              <select id="type" name="type" required>
+                <option value="">-- Sélectionnez --</option>
+                <option value="alimentaire">Alimentaire</option>
+                <option value="fragile">Fragile</option>
+                <option value="sante">Produits de santé</option>
+                <option value="document">Documents</option>
+                <option value="autre">Autre</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="details">Description</label>
+              <textarea id="details" name="details" rows="3" placeholder="Dimensions, poids, consignes..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="photos">Photos (max 2)</label>
+              <input type="file" id="photos" name="photos" accept="image/*" multiple required>
+              <div id="preview-container" class="preview-container"></div>
+            </div>
+            <div class="form-group">
+              <label for="location">Localisation</label>
+              <input type="text" id="location" name="location" readonly>
+              <button type="button" id="refresh-location" class="btn-icon">🔄 Actualiser</button>
+            </div>
+          </div>
+        </div>
         
-        locationStatus.textContent = '📍 Position récupérée avec succès';
-        locationStatus.style.animation = 'none';
-        
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        locationInput.value = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
-      },
-      function(error) {
-        document.getElementById('location-status').textContent = '❌ Impossible de récupérer la position';
-      }
-    );
-  });
-  </script>
+        <button type="submit" class="btn-submit">🚀 Envoyer le colis</button>
+      </form>
+      
+      <div id="messages">
+        <p id="success-msg" class="message-success"></p>
+        <p id="error-msg" class="message-error"></p>
+      </div>
+    </div>
+  </div>
 
-
-
-
-
-
-
-    <script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Configuration
+      const config = {
+        maxPhotos: 2,
+        maxPhotoSize: 2 * 1024 * 1024 // 2MB
+      };
+      
+      // Éléments DOM
+      const elements = {
+        showFormBtn: document.getElementById('show-form'),
+        formContainer: document.getElementById('expedition-form'),
+        form: document.getElementById('form'),
+        locationStatus: document.getElementById('location-status'),
+        locationInput: document.getElementById('location'),
+        refreshLocationBtn: document.getElementById('refresh-location'),
+        photosInput: document.getElementById('photos'),
+        previewContainer: document.getElementById('preview-container'),
+        successMsg: document.getElementById('success-msg'),
+        errorMsg: document.getElementById('error-msg')
+      };
+      
       let userLocation = null;
-
-      // Obtenir la géolocalisation
-      window.onload = () => {
-        if (navigator.geolocation) {
+      
+      // Afficher le formulaire
+      elements.showFormBtn.addEventListener('click', () => {
+        elements.formContainer.style.display = 'block';
+        elements.showFormBtn.style.display = 'none';
+      });
+      
+      // Gestion de la géolocalisation
+      const getLocation = () => {
+        return new Promise((resolve, reject) => {
+          if (!navigator.geolocation) {
+            reject(new Error('Géolocalisation non supportée'));
+            return;
+          }
+          
+          elements.locationStatus.textContent = '🔄 Localisation en cours...';
+          
           navigator.geolocation.getCurrentPosition(
-            (pos) => {
+            position => {
               userLocation = {
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude
+                latitude: position.coords.latitude.toFixed(6),
+                longitude: position.coords.longitude.toFixed(6),
+                accuracy: position.coords.accuracy.toFixed(2)
               };
-              document.getElementById("location-status").textContent = "📍 Position enregistrée.";
-              document.getElementById("location").value = `${userLocation.latitude}, ${userLocation.longitude}`;
+              
+              elements.locationInput.value = 
+                `${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`;
+              elements.locationStatus.textContent = '📍 Position enregistrée';
+              resolve(userLocation);
             },
-            () => {
-              document.getElementById("location-status").textContent = "❌ Impossible d’obtenir la position.";
+            error => {
+              let message = '';
+              switch(error.code) {
+                case error.PERMISSION_DENIED:
+                  message = '❌ Permission refusée';
+                  break;
+                case error.POSITION_UNAVAILABLE:
+                  message = '❌ Position indisponible';
+                  break;
+                case error.TIMEOUT:
+                  message = '⚠️ Temps de réponse dépassé';
+                  break;
+                default:
+                  message = '❌ Erreur de localisation';
+              }
+              elements.locationStatus.textContent = message;
+              reject(new Error(message));
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 0
             }
           );
-        }
+        });
       };
-
-      // Afficher le formulaire
-      document.getElementById("show-form").addEventListener("click", () => {
-        document.getElementById("expedition-form").style.display = "block";
+      
+      // Actualiser la localisation
+      elements.refreshLocationBtn.addEventListener('click', async () => {
+        try {
+          await getLocation();
+        } catch (error) {
+          console.error('Erreur de localisation:', error);
+        }
       });
-
-      // Générer un ID colis unique
+      
+      // Prévisualisation des photos
+      elements.photosInput.addEventListener('change', () => {
+        elements.previewContainer.innerHTML = '';
+        const files = elements.photosInput.files;
+        
+        if (files.length > config.maxPhotos) {
+          showError(`Maximum ${config.maxPhotos} photos autorisées`);
+          elements.photosInput.value = '';
+          return;
+        }
+        
+        for (const file of files) {
+          if (file.size > config.maxPhotoSize) {
+            showError(`La photo ${file.name} dépasse 2MB`);
+            elements.photosInput.value = '';
+            elements.previewContainer.innerHTML = '';
+            return;
+          }
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const preview = document.createElement('div');
+            preview.className = 'photo-preview';
+            preview.innerHTML = `
+              <img src="${e.target.result}" alt="Prévisualisation">
+              <span>${file.name}</span>
+              <span>${(file.size / 1024).toFixed(2)} KB</span>
+            `;
+            elements.previewContainer.appendChild(preview);
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      
+      // Soumission du formulaire
+      elements.form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        // Validation
+        const files = elements.photosInput.files;
+        if (files.length === 0 || files.length > config.maxPhotos) {
+          showError(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`);
+          return;
+        }
+        
+        // Préparation des données
+        const formData = {
+          sender: document.getElementById('sender').value.trim(),
+          phone1: document.getElementById('phone1').value.trim(),
+          recipient: document.getElementById('recipient').value.trim(),
+          phone: document.getElementById('phone').value.trim(),
+          address: document.getElementById('address').value.trim(),
+          type: document.getElementById('type').value,
+          details: document.getElementById('details').value.trim(),
+          location: userLocation,
+          photos: []
+        };
+        
+        // Conversion des photos en base64
+        try {
+          for (const file of files) {
+            const base64 = await toBase64(file);
+            formData.photos.push({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: base64
+            });
+          }
+          
+          // Génération ID colis
+          formData.colisID = generateID();
+          
+          // Envoi au serveur
+          const response = await sendData(formData);
+          
+          if (response.success) {
+            showSuccess(`Colis ${formData.colisID} créé avec succès!`);
+            elements.form.reset();
+            elements.previewContainer.innerHTML = '';
+          } else {
+            showError(response.message || 'Erreur lors de l\'envoi');
+          }
+        } catch (error) {
+          console.error('Erreur:', error);
+          showError('Une erreur est survenue');
+        }
+      });
+      
+      // Fonctions utilitaires
       function generateID() {
-        return Math.random().toString(36).substring(2, 10).toUpperCase();
+        const datePart = Date.now().toString(36);
+        const randomPart = Math.random().toString(36).substr(2, 6);
+        return (datePart + randomPart).toUpperCase();
       }
-
-      // Convertir une image en base64
+      
       function toBase64(file) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.readAsDataURL(file);
           reader.onload = () => resolve(reader.result);
-          reader.onerror = (error) => reject(error);
+          reader.onerror = error => reject(error);
         });
       }
-
-      // Soumission du formulaire
-      document.getElementById("form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-
-        const sender = document.getElementById("sender").value;
-        const phone1 = document.getElementById("phone1").value;
-        const recipient = document.getElementById("recipient").value;
-        const phone = document.getElementById("phone").value;
-        const address = document.getElementById("address").value;
-        const type = document.getElementById("type").value;
-        const details = document.getElementById("details").value;
-        const files = document.getElementById("photos").files;
-
-        if (files.length > 2) {
-          document.getElementById("error-msg").textContent = "❌ Vous ne pouvez joindre que 2 photos.";
-          return;
-        }
-
-        // Convertir les fichiers en base64
-        const photosBase64 = [];
-        for (const file of files) {
-          const base64 = await toBase64(file);
-          photosBase64.push(base64);
-        }
-
-        const colisID = generateID();
-
-        const data = {
-          colisID,
-          sender,
-          phone1,
-          recipient,
-          phone,
-          address,
-          type,
-          details,
-          location: userLocation,
-          photos: photosBase64
-        };
-
+      
+      async function sendData(data) {
         try {
-          const res = await fetch('/.netlify/functions/expedi', {
+          elements.form.querySelector('button[type="submit"]').disabled = true;
+          
+          const response = await fetch('/.netlify/functions/expedi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
           });
-
-          const result = await res.json();
-
-          if (res.ok) {
-            document.getElementById("success-msg").textContent = `✅ Colis expédié avec succès! ID : ${colisID}`;
-            document.getElementById("error-msg").textContent = '';
-            document.getElementById("form").reset();
-          } else {
-            document.getElementById("error-msg").textContent = result.message || "❌ Erreur lors de l’envoi.";
-          }
-        } catch (err) {
-          document.getElementById("error-msg").textContent = "❌ Erreur réseau ou serveur.";
+          
+          return await response.json();
+        } finally {
+          elements.form.querySelector('button[type="submit"]').disabled = false;
         }
-      });
-    </script>
-
+      }
+      
+      function showSuccess(message) {
+        elements.successMsg.textContent = message;
+        elements.successMsg.style.display = 'block';
+        elements.errorMsg.style.display = 'none';
+        
+        setTimeout(() => {
+          elements.successMsg.style.display = 'none';
+        }, 5000);
+      }
+      
+      function showError(message) {
+        elements.errorMsg.textContent = message;
+        elements.errorMsg.style.display = 'block';
+        elements.successMsg.style.display = 'none';
+      }
+      
+      // Initialisation
+      try {
+        await getLocation();
+      } catch (error) {
+        console.error('Erreur initiale de localisation:', error);
+      }
+    });
+  </script>
 </body>
 </html>
