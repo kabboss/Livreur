@@ -81,6 +81,11 @@
     <img src="${colis.colis.photos[0].data}" alt="Photo du colis" style="max-width: 100%; height: auto; margin-bottom: 10px;" />
   ` : ''}
 
+  ${colis.colis.photos.length > 1 ? `
+  <span class="voir-plus" onclick="alert('Voir plus bientôt disponible !')">
+    Voir plus d'images (${colis.colis.photos.length - 1})
+  </span>` : ''}
+
   <div class="colis-details">
     <p><strong>Type:</strong> ${colis.colis.type}</p>
 
@@ -120,6 +125,25 @@
 
       colisList.appendChild(card);
     });
+
+    // Ouvrir modale image
+document.querySelectorAll('.card img').forEach(img => {
+  img.addEventListener('click', () => {
+    const modal = document.getElementById('imageModal');
+    const modalImg = document.getElementById('modalImage');
+    modal.style.display = 'flex';
+    modalImg.src = img.src;
+  });
+});
+
+// Fermer modale
+document.getElementById('modalClose').addEventListener('click', () => {
+  document.getElementById('imageModal').style.display = 'none';
+});
+
+
+
+
 
     // Ajouter les écouteurs d'événements
     document.querySelectorAll('.expedier-btn').forEach((btn) => {
@@ -179,6 +203,14 @@
 
 </script>
 
+
+<!-- Modale pour image agrandie -->
+<div id="imageModal" class="modal">
+  <span id="modalClose" class="modal-close">&times;</span>
+  <div class="modal-content">
+    <img id="modalImage" src="" alt="Image agrandie">
+  </div>
+</div>
 
 
 
