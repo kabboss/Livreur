@@ -1,240 +1,370 @@
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    margin: 0;
-    padding: 0;
-  }
-  
-  .container {
-    max-width: 900px;
-    margin: auto;
-    padding: 20px;
-  }
-  
-  h1 {
-    text-align: center;
-  }
-  
-
-  #location-status {
-    font-size: 1rem;
-    margin-bottom: 1rem;
-    color: #333;
-  }
-
-  .colis-card {
-    background: white;
-    padding: 1rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    margin-bottom: 1.5rem;
-    transition: transform 0.2s ease;
-  }
-
-  .colis-card:hover {
-    transform: scale(1.01);
-  }
-
-  .colis-card h2 {
-    margin-top: 0;
-    color: #333;
-  }
-
-  .colis-image {
-    width: 100%;
-    max-height: 200px;
-    object-fit: cover;
-    border-radius: 8px;
-    margin: 0.5rem 0;
-  }
-
-  .button-group {
-    margin-top: 1rem;
-  }
-
-  .button-group button {
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-weight: bold;
-    margin-right: 0.5rem;
-  }
-
-  .expedier-btn {
-    background-color: #007bff;
-    color: white;
-  }
-
-  .terminer-btn {
-    background-color: #28a745;
-    color: white;
-  }
-
-  .expedier-btn:hover {
-    background-color: #0056b3;
-  }
-
-  .terminer-btn:hover {
-    background-color: #1e7e34;
-  }
-
-  .voir-plus {
-    display: block;
-    color: #007bff;
-    cursor: pointer;
-    font-size: 0.9rem;
-    margin-bottom: 1rem;
-  }
-
-  hr {
-    border: none;
-    border-top: 1px solid #ddd;
-    margin: 1rem 0;
-  }
-
-  a {
-    color: #007bff;
-    text-decoration: none;
-  }
-
-  a:hover {
-    text-decoration: underline;
-  }
-
-
-
-
-
-  /* Container principal */
-.colis-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  justify-content: center;
-  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  background-color: #f4f4f4;
+  color: #333;
+  line-height: 1.5; /* Légèrement réduit pour les petits écrans */
+  padding: 10px; /* Réduit la marge extérieure */
+  box-sizing: border-box;
 }
 
-/* Carte colis */
+.container {
+  background-color: #fff;
+  padding: 20px; /* Réduit le padding intérieur */
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); /* Ombre plus subtile */
+  width: 100%;
+  max-width: 100%; /* Utilise toute la largeur disponible */
+  animation: fade-in 0.5s ease-out;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 20px; /* Réduit la marge */
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px; /* Réduit le padding */
+}
+
+header h1 {
+  color: #2c3e50;
+  margin-bottom: 3px; /* Réduit la marge */
+  font-size: 1.5em; /* Taille de police plus petite */
+}
+
+#location-status {
+  font-size: 0.85em; /* Taille de police plus petite */
+  color: #777;
+  margin-top: 8px; /* Réduit la marge */
+  transition: color 0.3s ease;
+}
+
+#location-status.success {
+  color: #27ae60;
+}
+
+#location-status.error {
+  color: #c0392b;
+}
+
+main {
+  padding: 10px 0; /* Réduit le padding */
+}
+
+.colis-container {
+  display: grid;
+  grid-template-columns: 1fr; /* Force une seule colonne sur petit écran */
+  gap: 15px; /* Réduit l'espacement */
+}
+
 .card {
-  flex: 1 1 calc(25% - 20px); /* max 4 par ligne */
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-  padding: 16px;
-  transition: transform 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  position: relative;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Ombre plus subtile */
+  padding: 12px; /* Réduit le padding intérieur */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  animation: slide-up 0.3s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes slide-up {
+  from {
+      transform: translateY(15px); /* Distance de glissement réduite */
+      opacity: 0;
+  }
+  to {
+      transform: translateY(0);
+      opacity: 1;
+  }
 }
 
 .card:hover {
-  transform: scale(1.02);
+  transform: translateY(-2px); /* Translation au survol réduite */
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1); /* Ombre au survol réduite */
 }
 
-/* Titre */
-.card h2 {
-  font-size: 1.2rem;
-  margin-bottom: 12px;
-  color: #333;
+.colis-image-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  margin-bottom: 8px; /* Réduit la marge */
+  background-color: #f9f9f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 120px; /* Hauteur réduite */
 }
 
-/* Image colis */
-.card img {
+.colis-image {
+  display: block;
   width: 100%;
-  height: auto;
-  border-radius: 12px;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease-in-out;
+}
+
+.colis-image:hover {
+  transform: scale(1.02); /* Zoom au survol réduit */
   cursor: pointer;
 }
 
-/* Détails */
-.colis-details p {
-  margin: 6px 0;
-  font-size: 0.95rem;
-  color: #444;
+.no-image {
+  font-size: 2.5em; /* Taille de police réduite */
+  color: #bbb;
 }
 
-/* Coordonnées */
+.card-content h2 {
+  color: #34495e;
+  margin-top: 0;
+  margin-bottom: 8px; /* Réduit la marge */
+  font-size: 1.1em; /* Taille de police réduite */
+}
+
+.colis-details p,
+.coordonnees p,
+.meta-info p {
+  margin-bottom: 6px; /* Réduit la marge */
+  font-size: 0.9em; /* Taille de police réduite */
+  color: #555;
+}
+
+.coordonnees {
+  margin-top: 10px; /* Réduit la marge */
+  padding: 8px; /* Réduit le padding */
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.coordonnees h3 {
+  color: #777;
+  font-size: 0.95em; /* Taille de police réduite */
+  margin-top: 0;
+  margin-bottom: 3px; /* Réduit la marge */
+}
+
 .coordonnees a {
-  color: #1d72b8;
+  color: #3498db;
   text-decoration: none;
-}
-.coordonnees a:hover {
-  text-decoration: underline;
+  transition: color 0.3s ease;
 }
 
-/* Boutons */
+.coordonnees a:hover {
+  color: #2980b9;
+}
+
+.meta-info {
+  margin-top: 10px; /* Réduit la marge */
+  font-size: 0.85em; /* Taille de police réduite */
+}
+
+.statut {
+  padding: 4px 7px; /* Réduit le padding */
+  border-radius: 8px; /* Coins légèrement moins arrondis */
+  font-weight: bold;
+  color: #fff;
+  font-size: 0.8em; /* Taille de police réduite */
+}
+
+.statut.en-cours {
+  background-color: #f39c12;
+}
+
+.statut.expedie {
+  background-color: #27ae60;
+}
+
+.statut.termine {
+  background-color: #3498db;
+}
+
 .button-group {
-  margin-top: 12px;
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: row; /* S'assure que les boutons sont en ligne par défaut */
+  gap: 8px; /* Réduit l'espacement */
+  margin-top: 10px; /* Réduit la marge */
 }
 
 .expedier-btn,
 .terminer-btn {
-  flex: 1;
-  padding: 8px 10px;
+  background-color: #3498db;
+  color: #fff;
   border: none;
-  border-radius: 8px;
-  font-weight: bold;
-  color: white;
+  border-radius: 4px;
+  padding: 8px 12px; /* Réduit le padding des boutons */
   cursor: pointer;
-  transition: background 0.3s ease;
+  font-size: 0.85em; /* Taille de police réduite */
+  transition: background-color 0.3s ease;
+  flex-grow: 1; /* Permet aux boutons de s'étirer pour occuper l'espace */
+  min-width: 0; /* Empêche les boutons de devenir trop petits */
 }
 
-.expedier-btn {
-  background-color: #ff9800;
-}
 .expedier-btn:hover {
-  background-color: #e68900;
+  background-color: #2980b9;
 }
 
-.terminer-btn {
-  background-color: #4caf50;
-}
 .terminer-btn:hover {
-  background-color: #3e8e41;
+  background-color: #2ecc71;
 }
 
-/* Voir plus */
-.voir-plus {
-  margin-top: 5px;
-  font-size: 0.85rem;
-  color: #1d72b8;
-  cursor: pointer;
+.expedier-btn:disabled,
+.terminer-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
-/* MODALE */
+.spinner {
+  display: inline-block;
+  width: 14px; /* Taille réduite du spinner */
+  height: 14px; /* Taille réduite du spinner */
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .modal {
   display: none;
   position: fixed;
-  z-index: 1000;
-  left: 0; top: 0;
-  width: 100%; height: 100%;
-  background: rgba(0, 0, 0, 0.8);
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.9);
+}
+
+.modal.active {
+  display: flex;
   justify-content: center;
   align-items: center;
+  animation: fade-in 0.3s ease-out;
 }
 
 .modal-content {
-  max-width: 90%;
-  max-height: 90%;
-  border-radius: 12px;
-  box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+  margin: auto;
+  display: block;
+  max-width: 95%; /* Prend un peu plus de largeur sur petit écran */
+  max-height: 95%; /* Prend un peu plus de hauteur sur petit écran */
+  animation: zoom 0.3s ease-out;
 }
 
-.modal-content img {
-  width: 100%;
-  height: auto;
-  border-radius: 12px;
+@keyframes zoom {
+  from {transform: scale(0.9)} /* Zoom initial légèrement plus grand */
+  to {transform: scale(1)}
 }
 
 .modal-close {
   position: absolute;
-  top: 20px; right: 30px;
-  color: white;
-  font-size: 30px;
+  top: 10px; /* Positionnement ajusté */
+  right: 20px; /* Positionnement ajusté */
+  color: #f1f1f1;
+  font-size: 30px; /* Taille réduite du bouton de fermeture */
   font-weight: bold;
+  transition: 0.3s;
   cursor: pointer;
+  opacity: 0.8;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+  color: #bbb;
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 1;
+}
+
+.loading {
+  text-align: center;
+  color: #777;
+  padding: 15px; /* Réduit le padding */
+  font-size: 0.9em; /* Taille de police réduite */
+}
+
+.empty-state {
+  text-align: center;
+  color: #999;
+  padding: 15px; /* Réduit le padding */
+  font-style: italic;
+  font-size: 0.9em; /* Taille de police réduite */
+}
+
+.error-message {
+  color: #c0392b;
+  text-align: center;
+  padding: 12px; /* Réduit le padding */
+  background-color: #ffebee;
+  border: 1px solid #e57373;
+  border-radius: 4px;
+  font-size: 0.9em; /* Taille de police réduite */
+}
+
+.toast {
+  position: fixed;
+  bottom: 15px; /* Positionnement ajusté */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: #fff;
+  padding: 10px 15px; /* Réduit le padding */
+  border-radius: 5px;
+  opacity: 0;
+  z-index: 1000;
+  transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Réduit l'espacement */
+  font-size: 0.85em; /* Taille de police réduite */
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, -5px); /* Translation ajustée */
+}
+
+.toast.success {
+  background-color: #27ae60;
+}
+
+.toast.error {
+  background-color: #c0392b;
+}
+
+.close-btn {
+  color: #fff;
+  font-size: 1em; /* Taille de police réduite */
+  cursor: pointer;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  opacity: 1;
+}
+
+.fade-out {
+  animation: fadeOut 0.3s ease-in-out forwards;
+}
+
+@keyframes fadeOut {
+  to {
+      opacity: 0;
+      transform: scale(0.95); /* Réduction d'échelle moins importante */
+  }
+}
+
+/* Media query pour les écrans plus larges (au-delà de 600px) */
+@media (min-width: 601px) {
+  .colis-container {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Rétablit le comportement multi-colonnes */
+      gap: 20px; /* Rétablit l'espacement plus important */
+  }
+
+  .button-group {
+      flex-direction: row; /* S'assure que les boutons sont en ligne */
+  }
 }
