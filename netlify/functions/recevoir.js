@@ -69,10 +69,10 @@ exports.handler = async function(event, context) {
       destinataire: {
         nom: clientInfo.nom,
         prenom: clientInfo.prenom,
-        telephone: clientInfo.phone,
-        adresse: clientInfo.address,
-        localisation: clientInfo.location || null,
-      },
+        telephone: clientInfo.numero,
+        adresse: '', // ou tu peux ne pas inclure ce champ s’il est inutile
+        localisation: clientInfo.localisation || null,
+      }
     };
 
     // 📦 Enregistrement dans Livraison

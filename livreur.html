@@ -91,7 +91,6 @@
     
             <p><strong>👤 Destinataire :</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
             <p><strong>📞 Tél :</strong> ${colis.destinataire.telephone}</p>
-            <p><strong>📍 Adresse :</strong> ${colis.destinataire.adresse}</p>
             ${colis.destinataire.localisation ? `
               <p><a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" target="_blank">🗺️ Localiser le destinataire</a></p>` : ''}
     

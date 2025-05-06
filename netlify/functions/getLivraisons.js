@@ -43,7 +43,7 @@ exports.handler = async function (event, context) {
       colis: {
         type: livraison.colis?.type || 'Type non précisé',
         details: livraison.colis?.details || '',
-        photos: livraison.photos || [],
+        photos: livraison.colis?.photos || [],
       },
       expediteur: {
         nom: livraison.expediteur?.nom || 'Inconnu',
@@ -54,7 +54,6 @@ exports.handler = async function (event, context) {
         nom: livraison.destinataire?.nom || 'Inconnu',
         prenom: livraison.destinataire?.prenom || '',
         telephone: livraison.destinataire?.telephone || 'Non fourni',
-        adresse: livraison.destinataire?.adresse || 'Adresse non fournie',
         localisation: livraison.destinataire?.localisation || null,
       },
       statut: livraison.statut || 'Statut inconnu',
