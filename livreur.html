@@ -17,207 +17,161 @@
 
 
 
-<script>
+  <script>
     document.addEventListener('DOMContentLoaded', () => {
-  const locationStatus = document.getElementById('location-status');
-  const colisList = document.getElementById('colis-list');
-  let livreurLocation = null;
-
-  // Obtenir la localisation du livreur
-  if ('geolocation' in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        livreurLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        };
-        locationStatus.textContent = `📍 Localisation détectée: ${livreurLocation.latitude.toFixed(5)}, ${livreurLocation.longitude.toFixed(5)}`;
-        fetchColis();
-      },
-      (error) => {
-        locationStatus.textContent = '⚠️ Impossible de détecter la localisation.';
-        console.error(error);
-        fetchColis();
-      }
-    );
-  } else {
-    locationStatus.textContent = '⚠️ Géolocalisation non supportée par ce navigateur.';
-    fetchColis();
-  }
-
-  // Récupérer les colis à livrer
-  async function fetchColis() {
-    try {
-      const response = await fetch('/.netlify/functions/getLivraisons');
-      const data = await response.json();
-
-      if (response.ok) {
-        displayColis(data);
+      const locationStatus = document.getElementById('location-status');
+      const colisList = document.getElementById('colis-list');
+      let livreurLocation = null;
+    
+      // Obtenir la position du livreur
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            livreurLocation = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+            };
+            locationStatus.textContent = `📍 Ma position : ${livreurLocation.latitude.toFixed(5)}, ${livreurLocation.longitude.toFixed(5)}`;
+            fetchColis();
+          },
+          err => {
+            locationStatus.textContent = '⚠️ Impossible d’obtenir la localisation.';
+            fetchColis();
+          }
+        );
       } else {
-        colisList.innerHTML = `<p>Erreur: ${data.error}</p>`;
+        locationStatus.textContent = '⚠️ Géolocalisation non supportée.';
+        fetchColis();
       }
-    } catch (err) {
-      console.error(err);
-      colisList.innerHTML = '<p>Erreur de connexion au serveur.</p>';
-    }
-  }
-
-// Fonction pour afficher les colis
-function displayColis(colisArray) {
-  if (colisArray.length === 0) {
-    colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
-    return;
-  }
-
-  colisList.innerHTML = '';
-
-  colisArray.forEach((colis) => {
-    const card = document.createElement('div');
-    card.className = 'colis-card';
-
-    // Récupération de la première image
-    let imageHTML = '';
-    if (colis.colis?.photos?.length > 0) {
-      const imgData = colis.colis.photos[0]; // On suppose que l'image est directement dans la base64
-
-      // Vérifie si c'est déjà une URL ou une chaîne base64
-      const isURL = imgData.startsWith('http');
-      const src = isURL ? imgData : `data:image/jpeg;base64,${imgData}`;
-
-      imageHTML = `
-        <img src="${src}" alt="Photo du colis" class="colis-image" style="max-width: 100%; height: auto; margin-bottom: 10px;" />
-      `;
-    }
-
-    // Voir plus d'images
-    let voirPlusHTML = '';
-    if (colis.colis.photos.length > 1) {
-      voirPlusHTML = `
-        <span class="voir-plus" onclick="alert('Voir plus bientôt disponible !')">
-          Voir plus d'images (${colis.colis.photos.length - 1})
-        </span>
-      `;
-    }
-
-    // Construction de la carte
-    card.innerHTML = `
-      <h2>Colis #${colis.codeID}</h2>
-      ${imageHTML}
-      ${voirPlusHTML}
-
-      <div class="colis-details">
-        <p><strong>Type:</strong> ${colis.colis.type}</p>
-        <p><strong>Expéditeur:</strong> ${colis.expediteur.nom} (${colis.expediteur.telephone})</p>
-        ${colis.expediteur.localisation ? `
-          <p class="coordonnees">📍 
-            <a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" 
-               target="_blank" rel="noopener noreferrer">
-              Localiser l'expéditeur
-            </a>
-          </p>` : ''}
-
-        <p><strong>Destinataire:</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom} (${colis.destinataire.telephone})</p>
-        <p><strong>Adresse:</strong> ${colis.destinataire.adresse}</p>
-        ${colis.destinataire.localisation ? `
-          <p class="coordonnees">📍 
-            <a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" 
-               target="_blank" rel="noopener noreferrer">
-              Localiser le destinataire
-            </a>
-          </p>` : ''}
-
-        ${livreurLocation ? `
-          <p class="coordonnees">🛵 
-            <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" 
-               target="_blank" rel="noopener noreferrer">
-              Ma position (Livreur)
-            </a>
-          </p>` : ''}
-      </div>
-
-      <div class="button-group">
-        <button class="expedier-btn" data-id="${colis.codeID}">Expédier</button>
-        <button class="terminer-btn" data-id="${colis.codeID}">Terminer</button>
-      </div>
-    `;
-
-    colisList.appendChild(card);
-  });
-
-
-    // Gestion de la modale image
-    document.querySelectorAll('.colis-image').forEach(img => {
-      img.addEventListener('click', () => {
-        const modal = document.getElementById('imageModal');
-        const modalImg = document.getElementById('modalImage');
-        modal.style.display = 'flex';
-        modalImg.src = img.src;
-      });
-    });
-
-    // Fermer la modale
-    document.getElementById('modalClose').addEventListener('click', () => {
-      document.getElementById('imageModal').style.display = 'none';
-    });
-
-    // Bouton Expédier
-    document.querySelectorAll('.expedier-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (btn.classList.contains('disabled')) return;
-
-        const codeID = btn.getAttribute('data-id');
+    
+      // Récupérer la liste des colis depuis l’API
+      async function fetchColis() {
         try {
-          const response = await fetch('/.netlify/functions/expedierColis', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ codeID }),
-          });
-
-          const result = await response.json();
-
-          if (response.ok) {
-            btn.textContent = 'En cours d\'expédition';
-            btn.classList.add('disabled');
-          } else {
-            alert(result.error || 'Erreur lors de la mise à jour.');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Erreur de connexion au serveur.');
+          const res = await fetch('/.netlify/functions/getLivraisons');
+          const data = await res.json();
+          if (res.ok) displayColis(data);
+          else colisList.innerHTML = `<p>Erreur: ${data.error}</p>`;
+        } catch (e) {
+          console.error(e);
+          colisList.innerHTML = '<p>Erreur de connexion au serveur.</p>';
         }
-      });
-    });
-
-    // Bouton Terminer
-    document.querySelectorAll('.terminer-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const codeID = btn.getAttribute('data-id');
-        if (!confirm('Confirmez-vous la livraison de ce colis ?')) return;
-
-        try {
-          const response = await fetch('/.netlify/functions/terminerColis', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ codeID }),
-          });
-
-          const result = await response.json();
-
-          if (response.ok) {
-            btn.closest('.colis-card').remove();
-          } else {
-            alert(result.error || 'Erreur lors de la suppression.');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Erreur de connexion au serveur.');
+      }
+    
+      // Afficher chaque colis
+      function displayColis(colisArray) {
+        if (!colisArray.length) {
+          colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
+          return;
         }
-      });
+    
+        colisList.innerHTML = '';
+        colisArray.forEach(colis => {
+          const card = document.createElement('div');
+          card.className = 'colis-card';
+    
+          const photo = colis.colis?.photos?.[0];
+          const photoSrc = photo ? (photo.startsWith('http') ? photo : `data:image/jpeg;base64,${photo}`) : null;
+    
+          card.innerHTML = `
+            <h2>📦 Colis #${colis.codeID}</h2>
+            ${photo ? `<img src="${photoSrc}" alt="Image du colis" class="colis-image"/>` : ''}
+            ${colis.colis?.photos?.length > 1 ? `<span class="voir-plus">Voir plus (${colis.colis.photos.length - 1})</span>` : ''}
+            
+            <p><strong>Type :</strong> ${colis.colis.type}</p>
+            <p><strong>Détails :</strong> ${colis.colis.details || 'Non spécifié'}</p>
+    
+            <hr/>
+    
+            <p><strong>👤 Expéditeur :</strong> ${colis.expediteur.nom}</p>
+            <p><strong>📞 Tél :</strong> ${colis.expediteur.telephone}</p>
+            ${colis.expediteur.localisation ? `
+              <p><a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" target="_blank">🗺️ Localiser l'expéditeur</a></p>` : ''}
+    
+            <hr/>
+    
+            <p><strong>👤 Destinataire :</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
+            <p><strong>📞 Tél :</strong> ${colis.destinataire.telephone}</p>
+            <p><strong>📍 Adresse :</strong> ${colis.destinataire.adresse}</p>
+            ${colis.destinataire.localisation ? `
+              <p><a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" target="_blank">🗺️ Localiser le destinataire</a></p>` : ''}
+    
+            <hr/>
+    
+            <p><strong>📅 Date de livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString() : 'Non précisée'}</p>
+            <p><strong>🚚 Statut :</strong> ${colis.statut}</p>
+            ${livreurLocation ? `<p>🧭 Ma position : <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" target="_blank">${livreurLocation.latitude.toFixed(5)}, ${livreurLocation.longitude.toFixed(5)}</a></p>` : ''}
+    
+            <div class="button-group">
+              <button class="expedier-btn" data-id="${colis.codeID}">📤 Expédier</button>
+              <button class="terminer-btn" data-id="${colis.codeID}">✅ Terminer</button>
+            </div>
+          `;
+    
+          colisList.appendChild(card);
+        });
+    
+        // Gestion des clics "Voir plus"
+        document.querySelectorAll('.voir-plus').forEach(span => {
+          span.addEventListener('click', () => {
+            alert('Fonctionnalité "Voir plus" à venir !');
+          });
+        });
+    
+        // Bouton "Expédier"
+        document.querySelectorAll('.expedier-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const codeID = btn.dataset.id;
+            btn.disabled = true;
+            btn.textContent = '⏳ En cours...';
+            try {
+              const res = await fetch('/.netlify/functions/expedierColis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ codeID }),
+              });
+              const data = await res.json();
+              if (res.ok) {
+                btn.textContent = '📤 Expédié';
+              } else {
+                btn.textContent = '📤 Expédier';
+                btn.disabled = false;
+                alert(data.error || 'Erreur lors de l’expédition');
+              }
+            } catch (e) {
+              alert('Erreur de connexion.');
+              btn.disabled = false;
+              btn.textContent = '📤 Expédier';
+            }
+          });
+        });
+    
+        // Bouton "Terminer"
+        document.querySelectorAll('.terminer-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const codeID = btn.dataset.id;
+            if (!confirm(`Confirmer la livraison du colis #${codeID} ?`)) return;
+    
+            try {
+              const res = await fetch('/.netlify/functions/terminerColis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ codeID }),
+              });
+              const data = await res.json();
+              if (res.ok) {
+                btn.closest('.colis-card').remove();
+              } else {
+                alert(data.error || 'Erreur lors de la finalisation');
+              }
+            } catch (e) {
+              alert('Erreur de connexion au serveur.');
+            }
+          });
+        });
+      }
     });
-  }
-})
-</script>
-
+    </script>
+    
 
 <!-- Modale pour image agrandie -->
 <div id="imageModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; justify-content:center; align-items:center; background-color:rgba(0,0,0,0.8); z-index:999;">
