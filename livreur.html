@@ -10,6 +10,24 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
+
+
+  <div class="navigation-arrows">
+    <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
+      <svg viewBox="0 0 24 24">
+        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+      </svg>
+    </a>
+    <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+      <svg viewBox="0 0 24 24">
+        <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+      </svg>
+    </button>
+  </div>
+
+
+
+  
   <div class="container">
     <header>
       <h1>Interface Livreur</h1>
@@ -166,12 +184,34 @@
           colisList.appendChild(card);
 
           // Gestion du clic sur l'image
-          if (mainPhoto) {
-            card.querySelector('.colis-image').addEventListener('click', () => {
-              modalImage.src = mainPhoto;
-              modal.classList.add('active');
-            });
-          }
+          // Gestion du clic sur l'image
+         if (mainPhoto) {
+card.querySelector('.colis-image').addEventListener('click', () => {
+const img = new Image();
+img.onload = () => {
+let maxWidth = window.innerWidth * 0.9; // 90% de la largeur de la fenêtre
+                let maxHeight = window.innerHeight * 0.9; // 90% de la hauteur de la fenêtre
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                  height *= maxWidth / width;
+                  width = maxWidth;
+                }
+
+                if (height > maxHeight) {
+                  width *= maxHeight / height;
+                  height = maxHeight;
+                }
+
+                modalImage.style.width = width + 'px';
+                modalImage.style.height = height + 'px';
+                modalImage.src = mainPhoto;
+                modal.classList.add('active');
+              };
+              img.src = mainPhoto;
+            });
+          }
         });
 
         // Gestion des boutons
