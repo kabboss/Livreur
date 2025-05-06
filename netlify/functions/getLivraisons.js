@@ -1,5 +1,3 @@
-// netlify/functions/getLivraisons.js
-
 const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
@@ -12,7 +10,7 @@ exports.handler = async function (event, context) {
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
   };
 
-  // Gestion des requêtes CORS préalables (OPTIONS)
+  // Gérer les requêtes CORS préalables
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -21,7 +19,7 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // Refuser les méthodes autres que GET
+  // Refuser toute méthode autre que GET
   if (event.httpMethod !== 'GET') {
     return {
       statusCode: 405,
@@ -40,25 +38,27 @@ exports.handler = async function (event, context) {
     const collection = client.db(dbName).collection('Livraison');
     const livraisons = await collection.find({}).toArray();
 
-    // Transformation des données pour correspondre au format attendu par le frontend
     const formattedLivraisons = livraisons.map((livraison) => ({
-      codeID: livraison.colisID,
+      codeID: livraison.codeID || 'Code ID manquant',
       colis: {
-        type: livraison.type,
+        type: livraison.colis?.type || 'Type non précisé',
+        details: livraison.colis?.details || '',
         photos: livraison.photos || [],
       },
       expediteur: {
-        nom: livraison.sender || 'Inconnu',
-        telephone: livraison.phone1 || 'Non fourni',
-        localisation: livraison.senderLocation || null,
+        nom: livraison.expediteur?.nom || 'Inconnu',
+        telephone: livraison.expediteur?.telephone || 'Non fourni',
+        localisation: livraison.expediteur?.localisation || null,
       },
       destinataire: {
-        nom: livraison.recipient || 'Inconnu',
-        prenom: livraison.recipientPrenom || '',
-        telephone: livraison.phone || 'Non fourni',
-        adresse: livraison.address || 'Adresse non fournie',
-        localisation: livraison.recipientLocation || null,
+        nom: livraison.destinataire?.nom || 'Inconnu',
+        prenom: livraison.destinataire?.prenom || '',
+        telephone: livraison.destinataire?.telephone || 'Non fourni',
+        adresse: livraison.destinataire?.adresse || 'Adresse non fournie',
+        localisation: livraison.destinataire?.localisation || null,
       },
+      statut: livraison.statut || 'Statut inconnu',
+      dateLivraison: livraison.dateLivraison || null,
     }));
 
     return {
