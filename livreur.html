@@ -57,57 +57,61 @@
         }
       }
     
-      // Afficher chaque colis
       function displayColis(colisArray) {
-        if (!colisArray.length) {
-          colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
-          return;
-        }
+  if (!colisArray.length) {
+    colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
+    return;
+  }
+
+  colisList.innerHTML = '';
+  colisArray.forEach(colis => {
+    const card = document.createElement('div');
+    card.className = 'colis-card';
+
+    // Récupération de l'objet photo
+    const photo = colis.colis?.photos?.[0];
     
-        colisList.innerHTML = '';
-        colisArray.forEach(colis => {
-          const card = document.createElement('div');
-          card.className = 'colis-card';
-    
-          const photo = colis.colis?.photos?.[0];
-          const photoSrc = photo ? (photo.startsWith('http') ? photo : `data:image/jpeg;base64,${photo}`) : null;
-    
-          card.innerHTML = `
-            <h2>📦 Colis #${colis.codeID}</h2>
-            ${photo ? `<img src="${photoSrc}" alt="Image du colis" class="colis-image"/>` : ''}
-            ${colis.colis?.photos?.length > 1 ? `<span class="voir-plus">Voir plus (${colis.colis.photos.length - 1})</span>` : ''}
-            
-            <p><strong>Type :</strong> ${colis.colis.type}</p>
-            <p><strong>Détails :</strong> ${colis.colis.details || 'Non spécifié'}</p>
-    
-            <hr/>
-    
-            <p><strong>👤 Expéditeur :</strong> ${colis.expediteur.nom}</p>
-            <p><strong>📞 Tél :</strong> ${colis.expediteur.telephone}</p>
-            ${colis.expediteur.localisation ? `
-              <p><a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" target="_blank">🗺️ Localiser l'expéditeur</a></p>` : ''}
-    
-            <hr/>
-    
-            <p><strong>👤 Destinataire :</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
-            <p><strong>📞 Tél :</strong> ${colis.destinataire.telephone}</p>
-            ${colis.destinataire.localisation ? `
-              <p><a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" target="_blank">🗺️ Localiser le destinataire</a></p>` : ''}
-    
-            <hr/>
-    
-            <p><strong>📅 Date de livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString() : 'Non précisée'}</p>
-            <p><strong>🚚 Statut :</strong> ${colis.statut}</p>
-            ${livreurLocation ? `<p>🧭 Ma position : <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" target="_blank">${livreurLocation.latitude.toFixed(5)}, ${livreurLocation.longitude.toFixed(5)}</a></p>` : ''}
-    
-            <div class="button-group">
-              <button class="expedier-btn" data-id="${colis.codeID}">📤 Expédier</button>
-              <button class="terminer-btn" data-id="${colis.codeID}">✅ Terminer</button>
-            </div>
-          `;
-    
-          colisList.appendChild(card);
-        });
+    // Vérifier si 'photo' existe et a un champ 'data' avec l'image base64
+    const photoSrc = photo && photo.data ? photo.data : null;
+
+    // Ajout de la card avec les informations du colis
+    card.innerHTML = `
+      <h2>📦 Colis #${colis.codeID}</h2>
+      ${photoSrc ? `<img src="${photoSrc}" alt="Image du colis" class="colis-image"/>` : ''}
+      ${colis.colis?.photos?.length > 1 ? `<span class="voir-plus">Voir plus (${colis.colis.photos.length - 1})</span>` : ''}
+      
+      <p><strong>Type :</strong> ${colis.colis.type}</p>
+      <p><strong>Détails :</strong> ${colis.colis.details || 'Non spécifié'}</p>
+
+      <hr/>
+
+      <p><strong>👤 Expéditeur :</strong> ${colis.expediteur.nom}</p>
+      <p><strong>📞 Tél :</strong> ${colis.expediteur.telephone}</p>
+      ${colis.expediteur.localisation ? `
+        <p><a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" target="_blank">🗺️ Localiser l'expéditeur</a></p>` : ''}
+
+      <hr/>
+
+      <p><strong>👤 Destinataire :</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
+      <p><strong>📞 Tél :</strong> ${colis.destinataire.telephone}</p>
+      ${colis.destinataire.localisation ? `
+        <p><a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" target="_blank">🗺️ Localiser le destinataire</a></p>` : ''}
+
+      <hr/>
+
+      <p><strong>📅 Date de livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString() : 'Non précisée'}</p>
+      <p><strong>🚚 Statut :</strong> ${colis.statut}</p>
+      ${livreurLocation ? `<p>🧭 Ma position : <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" target="_blank">${livreurLocation.latitude.toFixed(5)}, ${livreurLocation.longitude.toFixed(5)}</a></p>` : ''}
+
+      <div class="button-group">
+        <button class="expedier-btn" data-id="${colis.codeID}">📤 Expédier</button>
+        <button class="terminer-btn" data-id="${colis.codeID}">✅ Terminer</button>
+      </div>
+    `;
+
+    colisList.appendChild(card);
+  });
+
     
         // Gestion des clics "Voir plus"
         document.querySelectorAll('.voir-plus').forEach(span => {
