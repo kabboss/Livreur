@@ -2,15 +2,16 @@ const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
+const collectionName = 'Livraison';
 
-exports.handler = async function (event, context) {
+exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
   };
 
-  // Gérer les requêtes CORS préalables
+  // ✅ Gérer les pré-requêtes CORS
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
@@ -19,7 +20,7 @@ exports.handler = async function (event, context) {
     };
   }
 
-  // Refuser toute méthode autre que GET
+  // ❌ Méthode non autorisée
   if (event.httpMethod !== 'GET') {
     return {
       statusCode: 405,
@@ -35,38 +36,42 @@ exports.handler = async function (event, context) {
 
   try {
     await client.connect();
-    const collection = client.db(dbName).collection('Livraison');
+    const collection = client.db(dbName).collection(collectionName);
+
+    // 🔍 Récupération des livraisons
     const livraisons = await collection.find({}).toArray();
 
-    const formattedLivraisons = livraisons.map((livraison) => ({
-      codeID: livraison.codeID || 'Code ID manquant',
+    // 🔧 Formatage propre
+    const formatted = livraisons.map(l => ({
+      codeID: l.codeID || 'Code ID manquant',
       colis: {
-        type: livraison.colis?.type || 'Type non précisé',
-        details: livraison.colis?.details || '',
-        photos: livraison.colis?.photos || [],
+        type: l.colis?.type || 'Type non précisé',
+        details: l.colis?.details || '',
+        photos: l.colis?.photos || [],
       },
       expediteur: {
-        nom: livraison.expediteur?.nom || 'Inconnu',
-        telephone: livraison.expediteur?.telephone || 'Non fourni',
-        localisation: livraison.expediteur?.localisation || null,
+        nom: l.expediteur?.nom || 'Inconnu',
+        telephone: l.expediteur?.telephone || 'Non fourni',
+        localisation: l.expediteur?.localisation || null,
       },
       destinataire: {
-        nom: livraison.destinataire?.nom || 'Inconnu',
-        prenom: livraison.destinataire?.prenom || '',
-        telephone: livraison.destinataire?.telephone || 'Non fourni',
-        localisation: livraison.destinataire?.localisation || null,
+        nom: l.destinataire?.nom || 'Inconnu',
+        prenom: l.destinataire?.prenom || '',
+        telephone: l.destinataire?.telephone || 'Non fourni',
+        localisation: l.destinataire?.localisation || null,
       },
-      statut: livraison.statut || 'Statut inconnu',
-      dateLivraison: livraison.dateLivraison || null,
+      statut: l.statut || 'Statut inconnu',
+      dateLivraison: l.dateLivraison || null,
     }));
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(formattedLivraisons),
+      body: JSON.stringify(formatted),
     };
-  } catch (error) {
-    console.error('Erreur lors de la récupération des livraisons :', error);
+
+  } catch (err) {
+    console.error('Erreur de récupération des livraisons :', err);
     return {
       statusCode: 500,
       headers,
