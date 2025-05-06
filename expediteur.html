@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Plateforme d'expédition de colis">
   <link rel="stylesheet" href="expedi.css" />
-
   <title>Expéditeur | Plateforme Colis</title>
   <style>
-    /* CSS critique intégré */
+    /* CSS critique intégré (sera remplacé par expedi.css) */
     :root {
       --primary: #4361ee;
       --secondary: #3a0ca3;
@@ -18,38 +17,453 @@
       --dark: #212529;
       --light: #f8f9fa;
       --radius: 8px;
-      --shadow: 0 4px 20px rgba(0,0,0,0.08);
+      --shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      --transition: all 0.2s ease-in-out;
     }
-    
+
     body {
       font-family: 'Inter', system-ui, sans-serif;
-      line-height: 1.6;
+      line-height: 1.5;
       margin: 0;
-      padding: 2rem;
+      padding: 1.5rem;
       color: var(--dark);
       background: #f5f7ff;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    
-    .form-container {
-      display: none;
-      max-width: 700px;
-      margin: 2rem auto;
+
+    h1 {
+      font-size: 2rem;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+    }
+
+    .container {
+      width: 360px;
+      max-width: 200%;
+      margin: 1.5rem -20px;
       background: white;
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-      padding: 2rem;
-      animation: fadeIn 0.4s ease-out;
+      padding: 1.5rem;
+      animation: fadeIn 0.3s ease-out;
     }
-    
+
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(15px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #location-status {
+      font-size: 0.9rem;
+      color: var(--accent);
+      margin-top: 0.75rem;
+      transition: var(--transition);
+    }
+
+    #location-status.error {
+      color: var(--error);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.8rem 1.5rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: var(--transition);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      display: inline-block;
+      margin-top: 1.5rem;
+    }
+
+    .btn-primary:hover {
+      background: var(--secondary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .form-container {
+      display: none;
+      max-width: 100%;
+      margin: 1.5rem auto;
+      background: #f9f9f9;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      animation: slideIn 0.4s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    @media (min-width: 600px) {
+      .form-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      }
+    }
+
+    .form-section {
+      width: 280px;
+      padding: 1rem;
+      border: 1px solid #eee;
+      border-radius: var(--radius);
+      background: white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+      font-size: 0.9rem;
+      color: var(--secondary);
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 0.8rem;
+      border: 1px solid #ddd;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      transition: var(--transition);
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 3px rgba(var(--primary-rgb), 0.2);
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    .btn-submit {
+      background: var(--success);
+      color: white;
+      border: none;
+      padding: 1rem 2rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: var(--transition);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      display: block;
+      margin: 1.5rem auto;
+    }
+
+    .btn-submit:hover {
+      background: #34b7d7;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      color: var(--primary);
+      transition: var(--transition);
+    }
+
+    .btn-icon:hover {
+      color: var(--secondary);
+      transform: scale(1.05);
+    }
+
+    .preview-container {
+      display: flex;
+      overflow-x: auto;
+      margin-top: 0.75rem;
+      padding-bottom: 0.5rem;
+    }
+
+    .photo-preview {
+      margin-right: 0.75rem;
+      text-align: center;
+      flex: 0 0 auto;
+      width: 80px;
+    }
+
+    .photo-preview img {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      transition: var(--transition);
+    }
+
+    .photo-preview img:hover {
+      transform: scale(1.02);
+    }
+
+    .photo-preview span {
+      display: block;
+      font-size: 0.75rem;
+      color: #777;
+      margin-top: 0.3rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .message-success,
+    .message-error {
+      padding: 0.8rem;
+      border-radius: var(--radius);
+      margin-top: 0.75rem;
+      display: none;
+      animation: slideIn 0.3s ease-out;
+      font-size: 0.85rem;
+    }
+
+    .message-success {
+      background: rgba(76, 201, 240, 0.15);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .message-error {
+      background: rgba(247, 37, 133, 0.15);
+      color: var(--error);
+      border: 1px solid var(--error);
+    }
+
+    /* Styles pour les flèches de navigation */
+    .navigation-arrows {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+    }
+
+    .arrow {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 40px;
+      height: 40px;
+      background-color: #f0f0f0;
+      border-radius: 50%;
+      text-decoration: none;
+      color: var(--primary);
+      transition: var(--transition);
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .arrow:hover {
+      background-color: var(--primary);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .arrow svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .refresh-button:hover {
+      transform: rotate(180deg);
+    }
+
+    /* Styles pour la modale d'ID d'expédition */
+    .modal-expedition-id {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.4);
+    }
+
+    .modal-expedition-id.active {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content-expedition {
+      background-color: #fefefe;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      animation: zoomIn 0.4s ease-out;
+    }
+
+    @keyframes zoomIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .modal-header-expedition {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 1rem;
+    }
+
+    .modal-header-expedition h2 {
+      font-size: 1.2rem;
+      color: var(--secondary);
+      margin: 0;
+    }
+
+    .close-button-expedition {
+      color: #aaa;
+      font-size: 1.5rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close-button-expedition:hover,
+    .close-button-expedition:focus {
+      color: black;
+      text-decoration: none;
+    }
+
+    .modal-body-expedition p {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .modal-body-expedition #expedition-code {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--primary);
+      background-color: #e0f7fa;
+      padding: 0.5rem;
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      text-align: center;
+      user-select: all;
+    }
+
+    .copy-button {
+      background-color: var(--success);
+      color: white;
+      border: none;
+      padding: 0.8rem 1.5rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: var(--transition);
+    }
+
+    .copy-button:hover {
+      background-color: #34b7d7;
+    }
+
+    /* Styles pour les toasts */
+    .toast-container {
+      position: fixed;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .toast {
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 0.8rem 1.2rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      opacity: 0;
+      animation: fadeOutToast 3s ease-in-out forwards, slideInToast 0.5s ease-out forwards;
+    }
+
+    .toast.success {
+      background-color: rgba(76, 201, 240, 0.9);
+    }
+
+    .toast.error {
+      background-color: rgba(247, 37, 133, 0.9);
+    }
+
+    @keyframes slideInToast {
+      from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%);
+      }
+    }
+
+    @keyframes fadeOutToast {
+      from {
+        opacity: 1;
+      }
+      to {
+        opacity: 0;
+        delay: 2.5s;
+      }
+      
     }
   </style>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
 </head>
 <body>
-
 
   <div class="navigation-arrows">
     <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
@@ -64,19 +478,17 @@
     </button>
   </div>
 
-
   <div class="container">
-    <h1>Bienvenue, Expéditeur </h1>
+    <h1>Bienvenue, Expéditeur</h1>
     <p id="location-status">🔄 Localisation en cours...</p>
-    
+
     <button id="show-form" class="btn-primary">📦 Nouvelle expédition</button>
-    
+
     <div class="form-container" id="expedition-form">
       <h2>Formulaire d'expédition</h2>
-      
+
       <form id="form">
         <div class="form-grid">
-          <!-- Section Expéditeur -->
           <div class="form-section">
             <h3>Informations expéditeur</h3>
             <div class="form-group">
@@ -88,8 +500,7 @@
               <input type="tel" id="phone1" name="phone1" required autocomplete="tel" pattern="^\+?[0-9\s\-]+$">
             </div>
           </div>
-          
-          <!-- Section Destinataire -->
+
           <div class="form-section">
             <h3>Informations destinataire</h3>
             <div class="form-group">
@@ -105,8 +516,7 @@
               <input type="text" id="address" name="address" required>
             </div>
           </div>
-          
-          <!-- Section Colis -->
+
           <div class="form-section">
             <h3>Détails du colis</h3>
             <div class="form-group">
@@ -136,15 +546,33 @@
             </div>
           </div>
         </div>
-        
+
         <button type="submit" class="btn-submit">🚀 Envoyer le colis</button>
       </form>
-      
+
       <div id="messages">
         <p id="success-msg" class="message-success"></p>
         <p id="error-msg" class="message-error"></p>
       </div>
     </div>
+  </div>
+
+  <div id="expeditionIdModal" class="modal-expedition-id">
+    <div class="modal-content-expedition">
+      <div class="modal-header-expedition">
+        <h2>ID d'expédition généré</h2>
+        <span class="close-button-expedition" id="closeExpeditionIdModal">&times;</span>
+      </div>
+      <div class="modal-body-expedition">
+        <p>Votre ID d'expédition est :</p>
+        <p id="expedition-code"></p>
+        <button class="copy-button" id="copyExpeditionId">Copier l'ID</button>
+        <p id="copy-message" style="display:none; color: green;">Copié !</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container">
   </div>
 
   <script>
@@ -154,7 +582,7 @@
         maxPhotos: 2,
         maxPhotoSize: 2 * 1024 * 1024 // 2MB
       };
-      
+
       // Éléments DOM
       const elements = {
         showFormBtn: document.getElementById('show-form'),
@@ -166,17 +594,23 @@
         photosInput: document.getElementById('photos'),
         previewContainer: document.getElementById('preview-container'),
         successMsg: document.getElementById('success-msg'),
-        errorMsg: document.getElementById('error-msg')
+        errorMsg: document.getElementById('error-msg'),
+        modalExpeditionId: document.getElementById('expeditionIdModal'),
+        closeExpeditionIdModal: document.getElementById('closeExpeditionIdModal'),
+        expeditionCodeDisplay: document.getElementById('expedition-code'),
+        copyExpeditionIdButton: document.getElementById('copyExpeditionId'),
+        copyMessage: document.getElementById('copy-message'),
+        toastContainer: document.getElementById('toast-container')
       };
-      
+
       let userLocation = null;
-      
+
       // Afficher le formulaire
       elements.showFormBtn.addEventListener('click', () => {
         elements.formContainer.style.display = 'block';
         elements.showFormBtn.style.display = 'none';
       });
-      
+
       // Gestion de la géolocalisation
       const getLocation = () => {
         return new Promise((resolve, reject) => {
@@ -184,9 +618,9 @@
             reject(new Error('Géolocalisation non supportée'));
             return;
           }
-          
+
           elements.locationStatus.textContent = '🔄 Localisation en cours...';
-          
+
           navigator.geolocation.getCurrentPosition(
             position => {
               userLocation = {
@@ -194,15 +628,15 @@
                 longitude: position.coords.longitude.toFixed(6),
                 accuracy: position.coords.accuracy.toFixed(2)
               };
-              
-              elements.locationInput.value = 
+
+              elements.locationInput.value =
                 `${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`;
               elements.locationStatus.textContent = '📍 Position enregistrée';
               resolve(userLocation);
             },
             error => {
               let message = '';
-              switch(error.code) {
+              switch (error.code) {
                 case error.PERMISSION_DENIED:
                   message = '❌ Permission refusée';
                   break;
@@ -226,35 +660,36 @@
           );
         });
       };
-      
+
       // Actualiser la localisation
       elements.refreshLocationBtn.addEventListener('click', async () => {
         try {
           await getLocation();
         } catch (error) {
           console.error('Erreur de localisation:', error);
+          showToast('Erreur lors de la récupération de la localisation', 'error');
         }
       });
-      
+
       // Prévisualisation des photos
       elements.photosInput.addEventListener('change', () => {
         elements.previewContainer.innerHTML = '';
         const files = elements.photosInput.files;
-        
+
         if (files.length > config.maxPhotos) {
-          showError(`Maximum ${config.maxPhotos} photos autorisées`);
+          showToast(`Maximum ${config.maxPhotos} photos autorisées`, 'error');
           elements.photosInput.value = '';
           return;
         }
-        
+
         for (const file of files) {
           if (file.size > config.maxPhotoSize) {
-            showError(`La photo ${file.name} dépasse 2MB`);
+            showToast(`La photo ${file.name} dépasse 2MB`, 'error');
             elements.photosInput.value = '';
             elements.previewContainer.innerHTML = '';
             return;
           }
-          
+
           const reader = new FileReader();
           reader.onload = (e) => {
             const preview = document.createElement('div');
@@ -269,19 +704,72 @@
           reader.readAsDataURL(file);
         }
       });
-      
+
+      // Fonction pour afficher la modale d'ID d'expédition
+      function showExpeditionIdModal(colisID) {
+        elements.expeditionCodeDisplay.textContent = colisID;
+        elements.modalExpeditionId.classList.add('active');
+      }
+
+      // Fonction pour fermer la modale d'ID d'expédition
+      function hideExpeditionIdModal() {
+        elements.modalExpeditionId.classList.remove('active');
+        elements.copyMessage.style.display = 'none';
+      }
+
+      // Fermer la modale au clic sur la croix
+      elements.closeExpeditionIdModal.addEventListener('click', hideExpeditionIdModal);
+
+      // Fermer la modale en cliquant en dehors
+      window.addEventListener('click', (event) => {
+        if (event.target === elements.modalExpeditionId) {
+          hideExpeditionIdModal();
+        }
+      });
+
+      // Copier l'ID d'expédition au clic
+      elements.copyExpeditionIdButton.addEventListener('click', () => {
+        const range = document.createRange();
+        range.selectNode(elements.expeditionCodeDisplay);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+
+        try {
+          document.execCommand('copy');
+          elements.copyMessage.style.display = 'inline';
+          setTimeout(() => {
+            elements.copyMessage.style.display = 'none';
+          }, 1500);
+        } catch (err) {
+          console.error('Impossible de copier l\'ID:', err);
+          showToast('Erreur lors de la copie de l\'ID', 'error');
+        }
+
+        window.getSelection().removeAllRanges();
+      });
+
+      // Fonction pour afficher un toast
+      function showToast(message, type = 'default') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        elements.toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+          toast.remove();
+        }, 3000);
+      }
+
       // Soumission du formulaire
       elements.form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
-        // Validation
+
         const files = elements.photosInput.files;
         if (files.length === 0 || files.length > config.maxPhotos) {
-          showError(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`);
+          showToast(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`, 'error');
           return;
         }
-        
-        // Préparation des données
+
         const formData = {
           sender: document.getElementById('sender').value.trim(),
           phone1: document.getElementById('phone1').value.trim(),
@@ -293,8 +781,7 @@
           location: userLocation,
           photos: []
         };
-        
-        // Conversion des photos en base64
+
         try {
           for (const file of files) {
             const base64 = await toBase64(file);
@@ -305,33 +792,34 @@
               data: base64
             });
           }
-          
+
           // Génération ID colis
           formData.colisID = generateID();
-          
+
           // Envoi au serveur
           const response = await sendData(formData);
-          
+
           if (response.success) {
-            showSuccess(`Colis ${formData.colisID} créé avec succès!`);
+            showToast(`Colis créé avec succès! ID: ${formData.colisID}`, 'success');
+            showExpeditionIdModal(formData.colisID);
             elements.form.reset();
             elements.previewContainer.innerHTML = '';
           } else {
-            showError(response.message || 'Erreur lors de l\'envoi');
+            showToast(response.message || 'Erreur lors de l\'envoi', 'error');
           }
         } catch (error) {
           console.error('Erreur:', error);
-          showError('Une erreur est survenue');
+          showToast('Une erreur est survenue', 'error');
         }
       });
-      
+
       // Fonctions utilitaires
       function generateID() {
         const datePart = Date.now().toString(36);
         const randomPart = Math.random().toString(36).substr(2, 6);
         return (datePart + randomPart).toUpperCase();
       }
-      
+
       function toBase64(file) {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -340,44 +828,29 @@
           reader.onerror = error => reject(error);
         });
       }
-      
+
       async function sendData(data) {
         try {
           elements.form.querySelector('button[type="submit"]').disabled = true;
-          
+
           const response = await fetch('/.netlify/functions/expedi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
           });
-          
+
           return await response.json();
         } finally {
           elements.form.querySelector('button[type="submit"]').disabled = false;
         }
       }
-      
-      function showSuccess(message) {
-        elements.successMsg.textContent = message;
-        elements.successMsg.style.display = 'block';
-        elements.errorMsg.style.display = 'none';
-        
-        setTimeout(() => {
-          elements.successMsg.style.display = 'none';
-        }, 5000);
-      }
-      
-      function showError(message) {
-        elements.errorMsg.textContent = message;
-        elements.errorMsg.style.display = 'block';
-        elements.successMsg.style.display = 'none';
-      }
-      
+
       // Initialisation
       try {
         await getLocation();
       } catch (error) {
         console.error('Erreur initiale de localisation:', error);
+        showToast('Erreur lors de la récupération initiale de la localisation', 'error');
       }
     });
   </script>
