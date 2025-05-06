@@ -62,87 +62,88 @@
     }
   }
 
-  // Fonction pour afficher les colis
-  function displayColis(colisArray) {
-    if (colisArray.length === 0) {
-      colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
-      return;
+// Fonction pour afficher les colis
+function displayColis(colisArray) {
+  if (colisArray.length === 0) {
+    colisList.innerHTML = '<p>Aucun colis à livrer.</p>';
+    return;
+  }
+
+  colisList.innerHTML = '';
+
+  colisArray.forEach((colis) => {
+    const card = document.createElement('div');
+    card.className = 'colis-card';
+
+    // Récupération de la première image
+    let imageHTML = '';
+    if (colis.colis?.photos?.length > 0) {
+      const imgData = colis.colis.photos[0]; // On suppose que l'image est directement dans la base64
+
+      // Vérifie si c'est déjà une URL ou une chaîne base64
+      const isURL = imgData.startsWith('http');
+      const src = isURL ? imgData : `data:image/jpeg;base64,${imgData}`;
+
+      imageHTML = `
+        <img src="${src}" alt="Photo du colis" class="colis-image" style="max-width: 100%; height: auto; margin-bottom: 10px;" />
+      `;
     }
 
-    colisList.innerHTML = '';
-
-    colisArray.forEach((colis) => {
-      const card = document.createElement('div');
-      card.className = 'colis-card';
-
-      // Récupération de la première image
-      let imageHTML = '';
-      if (colis.colis?.photos?.length > 0) {
-        const imgData = colis.colis.photos[0].data;
-
-        // Vérifie si c'est déjà une URL ou une chaîne base64
-        const isURL = imgData.startsWith('http');
-        const src = isURL ? imgData : `data:image/jpeg;base64,${imgData}`;
-
-        imageHTML = `
-          <img src="${src}" alt="Photo du colis" class="colis-image" style="max-width: 100%; height: auto; margin-bottom: 10px;" />
-        `;
-      }
-
-      // Voir plus d'images
-      let voirPlusHTML = '';
-      if (colis.colis.photos.length > 1) {
-        voirPlusHTML = `
-          <span class="voir-plus" onclick="alert('Voir plus bientôt disponible !')">
-            Voir plus d'images (${colis.colis.photos.length - 1})
-          </span>
-        `;
-      }
-
-      // Construction de la carte
-      card.innerHTML = `
-        <h2>Colis #${colis.codeID}</h2>
-        ${imageHTML}
-        ${voirPlusHTML}
-
-        <div class="colis-details">
-          <p><strong>Type:</strong> ${colis.colis.type}</p>
-          <p><strong>Expéditeur:</strong> ${colis.expediteur.nom} (${colis.expediteur.telephone})</p>
-          ${colis.expediteur.localisation ? `
-            <p class="coordonnees">📍 
-              <a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" 
-                 target="_blank" rel="noopener noreferrer">
-                Localiser l'expéditeur
-              </a>
-            </p>` : ''}
-
-          <p><strong>Destinataire:</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom} (${colis.destinataire.telephone})</p>
-          <p><strong>Adresse:</strong> ${colis.destinataire.adresse}</p>
-          ${colis.destinataire.localisation ? `
-            <p class="coordonnees">📍 
-              <a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" 
-                 target="_blank" rel="noopener noreferrer">
-                Localiser le destinataire
-              </a>
-            </p>` : ''}
-
-          ${livreurLocation ? `
-            <p class="coordonnees">🛵 
-              <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" 
-                 target="_blank" rel="noopener noreferrer">
-                Ma position (Livreur)
-              </a>
-            </p>` : ''}
-        </div>
-
-        <div class="button-group">
-          <button class="expedier-btn" data-id="${colis.codeID}">Expédier</button>
-          <button class="terminer-btn" data-id="${colis.codeID}">Terminer</button>
-        </div>
+    // Voir plus d'images
+    let voirPlusHTML = '';
+    if (colis.colis.photos.length > 1) {
+      voirPlusHTML = `
+        <span class="voir-plus" onclick="alert('Voir plus bientôt disponible !')">
+          Voir plus d'images (${colis.colis.photos.length - 1})
+        </span>
       `;
+    }
 
-      colisList.appendChild(card);
-    });
+    // Construction de la carte
+    card.innerHTML = `
+      <h2>Colis #${colis.codeID}</h2>
+      ${imageHTML}
+      ${voirPlusHTML}
+
+      <div class="colis-details">
+        <p><strong>Type:</strong> ${colis.colis.type}</p>
+        <p><strong>Expéditeur:</strong> ${colis.expediteur.nom} (${colis.expediteur.telephone})</p>
+        ${colis.expediteur.localisation ? `
+          <p class="coordonnees">📍 
+            <a href="https://www.google.com/maps?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" 
+               target="_blank" rel="noopener noreferrer">
+              Localiser l'expéditeur
+            </a>
+          </p>` : ''}
+
+        <p><strong>Destinataire:</strong> ${colis.destinataire.nom} ${colis.destinataire.prenom} (${colis.destinataire.telephone})</p>
+        <p><strong>Adresse:</strong> ${colis.destinataire.adresse}</p>
+        ${colis.destinataire.localisation ? `
+          <p class="coordonnees">📍 
+            <a href="https://www.google.com/maps?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}" 
+               target="_blank" rel="noopener noreferrer">
+              Localiser le destinataire
+            </a>
+          </p>` : ''}
+
+        ${livreurLocation ? `
+          <p class="coordonnees">🛵 
+            <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" 
+               target="_blank" rel="noopener noreferrer">
+              Ma position (Livreur)
+            </a>
+          </p>` : ''}
+      </div>
+
+      <div class="button-group">
+        <button class="expedier-btn" data-id="${colis.codeID}">Expédier</button>
+        <button class="terminer-btn" data-id="${colis.codeID}">Terminer</button>
+      </div>
+    `;
+
+    colisList.appendChild(card);
+  });
+
 
     // Gestion de la modale image
     document.querySelectorAll('.colis-image').forEach(img => {
