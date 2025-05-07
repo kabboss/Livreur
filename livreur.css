@@ -708,3 +708,97 @@ main {
     transform: rotate(360deg);
   }
 }
+
+
+/* Styles pour le formulaire de terminaison */
+.terminer-form {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-top: 15px;
+}
+
+.terminer-form .form-group {
+  margin-bottom: 15px;
+}
+
+.terminer-form label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.terminer-form input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.button-group-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Styles pour les états de chargement */
+.btn-loading {
+  display: none;
+}
+
+.btn-animated[disabled] .btn-inner {
+  display: none;
+}
+
+.btn-animated[disabled] .btn-loading {
+  display: inline-block;
+}
+
+/* Toast notifications */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 15px 20px;
+  border-radius: 5px;
+  color: white;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  max-width: 300px;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+.toast.success {
+  background-color: #28a745;
+}
+
+.toast.error {
+  background-color: #dc3545;
+}
+
+.toast.warning {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.toast.info {
+  background-color: #17a2b8;
+}
+
+.close-btn {
+  float: right;
+  margin-left: 15px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* Animation pour la disparition des cartes */
+.fade-out {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
