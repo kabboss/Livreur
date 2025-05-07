@@ -94,8 +94,7 @@ exports.handler = async function(event, context) {
     await client.connect();
     const db = client.db(mongoConfig.dbName);
 
-    // Enregistrement de la soumission client
-    await db.collection(mongoConfig.collections.clients).insertOne({
+    const insertResult = await db.collection(mongoConfig.collections.clients).insertOne({
       nom: data.nom,
       prenom: data.prenom,
       numero: data.numero,
@@ -103,12 +102,11 @@ exports.handler = async function(event, context) {
       localisation: data.location || null,
       date: new Date()
     });
-
-
-// 📌 Récupération immédiate du client inséré
-const clientInfo = await db.collection(mongoConfig.collections.clients)
-.findOne({ _id: insertResult.insertedId });
-
+    
+    // Ensuite tu peux l'utiliser correctement ici
+    const clientInfo = await db.collection(mongoConfig.collections.clients)
+      .findOne({ _id: insertResult.insertedId });
+    
 
 
 let clientLocation = null;
