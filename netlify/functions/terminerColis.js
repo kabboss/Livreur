@@ -4,71 +4,78 @@ const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
+const suppressionsCollectionName = 'suppressions_colis'; // Nom de la nouvelle collection
 
 exports.handler = async function(event, context) {
   const headers = {
-    'Access-Control-Allow-Origin': '*', // Autorise toutes les origines
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
-  // Gestion de la requête de pré-vol (preflight)
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 204,
-      headers,
-      body: '', // Réponse vide pour la pré-vol
-    };
+    return { statusCode: 204, headers, body: '' };
   }
-
-  // Vérifier si la méthode HTTP est bien POST
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Méthode non autorisée' }),
-    };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Méthode non autorisée' }) };
   }
 
-  const client = new MongoClient(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
 
   try {
-    // Récupérer le codeID à partir du corps de la requête
-    const { codeID } = JSON.parse(event.body);
+    const { codeID, nomLivreur, prenomLivreur, idLivreur } = JSON.parse(event.body);
 
-    // Vérifier si le codeID est fourni
-    if (!codeID) {
+    if (!codeID || !nomLivreur || !prenomLivreur || !idLivreur) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Le codeID est requis' }),
+        body: JSON.stringify({ error: 'Le codeID, le nom, le prénom et l\'identifiant du livreur sont requis' }),
       };
     }
 
-    // Connexion à la base de données MongoDB
     await client.connect();
-    const collection = client.db(dbName).collection('Livraison');
+    const db = client.db(dbName);
 
-    // Suppression du colis correspondant au codeID
-    const result = await collection.deleteOne({ codeID });
+    // Suppression du colis des collections principales
+    const colisCollection = db.collection('Colis');
+    const livraisonCollection = db.collection('Livraison');
+    const expeditionCollection = db.collection('cour_expedition');
+    const suppressionsCollection = db.collection(suppressionsCollectionName);
 
-    // Vérifier si aucun colis n'a été supprimé
-    if (result.deletedCount === 0) {
+    const deleteColisResult = await colisCollection.deleteOne({ codeID });
+    const deleteLivraisonResult = await livraisonCollection.deleteOne({ codeID });
+    const deleteExpeditionResult = await expeditionCollection.deleteOne({ codeID });
+
+    if (deleteLivraisonResult.deletedCount === 0) {
       return {
         statusCode: 404,
         headers,
-        body: JSON.stringify({ error: 'Aucun colis trouvé avec ce codeID' }),
+        body: JSON.stringify({ error: 'Aucun colis ou livraison trouvé avec ce codeID' }),
       };
     }
 
-    // Réponse de succès après suppression
+    // Enregistrement de la suppression
+    const suppressionRecord = {
+      codeID: codeID,
+      nomLivreur: nomLivreur,
+      prenomLivreur: prenomLivreur,
+      idLivreur: idLivreur,
+      dateSuppression: new Date(),
+    };
+    await suppressionsCollection.insertOne(suppressionRecord);
+
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ message: 'Colis terminé et supprimé avec succès' }),
+      body: JSON.stringify({
+        message: 'Colis terminé et supprimé avec succès des collections.',
+        deletedCounts: {
+          Colis: deleteColisResult.deletedCount,
+          Livraison: deleteLivraisonResult.deletedCount,
+          cour_expedition: deleteExpeditionResult.deletedCount,
+        },
+        suppressionEnregistree: true,
+      }),
     };
 
   } catch (error) {
@@ -79,7 +86,6 @@ exports.handler = async function(event, context) {
       body: JSON.stringify({ error: 'Erreur interne du serveur' }),
     };
   } finally {
-    // Fermeture de la connexion à MongoDB
     await client.close();
   }
 };

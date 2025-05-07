@@ -481,48 +481,57 @@ function setupLocationUpdateButton(cardElement) {
 
 
 
-        // Bouton "Terminer"
-        document.querySelectorAll('.terminer-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const codeID = btn.dataset.id;
-            
-            if (!confirm(`Confirmer la livraison du colis #${codeID} ? Cette action est irréversible.`)) {
-              return;
-            }
-            
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Finalisation...';
-            
-            try {
-              const res = await fetch('/.netlify/functions/terminerColis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ codeID }),
-              });
-              
-              const data = await res.json();
-              
-              if (res.ok) {
-                showToast('Livraison terminée avec succès', 'success');
-                btn.closest('.card').classList.add('fade-out');
-                setTimeout(() => {
-                  btn.closest('.card').remove();
-                  if (!document.querySelectorAll('.card').length) {
-                    colisList.innerHTML = '<div class="empty-state">🎉 Tous les colis ont été livrés !</div>';
-                  }
-                }, 300);
-              } else {
-                btn.innerHTML = '✅ Terminer';
-                btn.disabled = false;
-                showToast(data.error || 'Erreur lors de la finalisation', 'error');
-              }
-            } catch (e) {
-              btn.innerHTML = '✅ Terminer';
-              btn.disabled = false;
-              showToast('Erreur de connexion au serveur', 'error');
-            }
-          });
-        });
+ document.querySelectorAll('.terminer-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const codeID = btn.dataset.id;
+
+    if (!confirm(`Confirmer la livraison du colis #${codeID} ? Cette action est irréversible et nécessitera vos informations.`)) {
+      return;
+    }
+
+    const nomLivreur = prompt("Nom du livreur :", "");
+    const prenomLivreur = prompt("Prénom du livreur :", "");
+    const idLivreur = prompt("Identifiant du livreur :", "");
+
+    if (!nomLivreur || !prenomLivreur || !idLivreur) {
+      showToast('Veuillez fournir le nom, le prénom et l\'identifiant du livreur.', 'warning');
+      return; // Arrête l'exécution si les informations sont manquantes
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Finalisation...';
+
+    try {
+      const res = await fetch('/.netlify/functions/deleteLivraison', { // Utilise la fonction renommée
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codeID, nomLivreur, prenomLivreur, idLivreur }), // Inclut les infos du livreur
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        showToast('Livraison terminée et colis supprimé avec succès', 'success');
+        btn.closest('.card').classList.add('fade-out');
+        setTimeout(() => {
+          btn.closest('.card').remove();
+          if (!document.querySelectorAll('.card').length) {
+            colisList.innerHTML = '<div class="empty-state">🎉 Tous les colis ont été livrés !</div>';
+          }
+        }, 300);
+      } else {
+        btn.innerHTML = '✅ Terminer';
+        btn.disabled = false;
+        showToast(data.error || 'Erreur lors de la finalisation', 'error');
+      }
+    } catch (e) {
+      btn.innerHTML = '✅ Terminer';
+      btn.disabled = false;
+      showToast('Erreur de connexion au serveur', 'error');
+    }
+  });
+});
+
       }
 
       function showToast(message, type = 'info') {
