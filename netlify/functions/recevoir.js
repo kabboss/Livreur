@@ -51,17 +51,6 @@ exports.handler = async function(event, context) {
     }
 
 
-
-let clientLocation = null;
-
-if (clientInfo.localisation && clientInfo.localisation.latitude && clientInfo.localisation.longitude) {
-  clientLocation = {
-    latitude: parseFloat(clientInfo.localisation.latitude),
-    longitude: parseFloat(clientInfo.localisation.longitude)
-  };
-}
-
-
     // 📝 Préparation de l'objet Livraison
     const livraisonData = {
       codeID: codeID,

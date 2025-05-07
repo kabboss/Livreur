@@ -104,6 +104,27 @@ exports.handler = async function(event, context) {
       date: new Date()
     });
 
+
+// 📌 Récupération immédiate du client inséré
+const clientInfo = await db.collection(mongoConfig.collections.clients)
+.findOne({ _id: insertResult.insertedId });
+
+
+
+let clientLocation = null;
+
+if (
+  clientInfo.localisation &&
+  clientInfo.localisation.latitude &&
+  clientInfo.localisation.longitude
+) {
+  clientLocation = {
+    latitude: parseFloat(clientInfo.localisation.latitude),
+    longitude: parseFloat(clientInfo.localisation.longitude)
+  };
+}
+
+
     // Recherche du colis
     const colis = await db.collection(mongoConfig.collections.colis)
       .findOne({ colisID: data.code });
