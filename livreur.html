@@ -88,171 +88,303 @@
         }
       };
 
-      // Récupérer la liste des colis depuis l'API
-      async function fetchColis() {
-        try {
-          colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
-          
-          const res = await fetch('/.netlify/functions/getLivraisons');
-          const data = await res.json();
-          
-          if (res.ok) {
-            displayColis(data);
-          } else {
-            colisList.innerHTML = `<div class="error-message">Erreur: ${data.error || 'Impossible de charger les colis'}</div>`;
-          }
-        } catch (e) {
-          console.error('Erreur fetch:', e);
-          colisList.innerHTML = '<div class="error-message">Erreur de connexion au serveur</div>';
-        }
-      }
+ // Récupérer la liste des colis depuis l'API
+ async function fetchColis() {
+   try {
+     colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
 
-      function displayColis(colisArray) {
-        if (!colisArray?.length) {
-          colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
-          return;
-        }
+     const res = await fetch('/.netlify/functions/getLivraisons');
+     const data = await res.json();
 
-        colisList.innerHTML = '';
-        colisArray.forEach((colis, index) => {
-          const card = document.createElement('article');
-          card.className = 'card';
-          card.setAttribute('data-id', colis.codeID);
-          card.setAttribute('aria-label', `Colis ${colis.codeID}`);
+     if (res.ok) {
+       displayColis(data);
+     } else {
+       colisList.innerHTML = `<div class="error-message">Erreur: ${data.error || 'Impossible de charger les colis'}</div>`;
+     }
+   } catch (e) {
+     console.error('Erreur fetch:', e);
+     colisList.innerHTML = '<div class="error-message">Erreur de connexion au serveur</div>';
+   }
+ }
 
-          // Gestion des photos
-          const photos = colis.colis?.photos || [];
-          const mainPhoto = photos[0]?.data ? photos[0].data : null;
-          const hasMultiplePhotos = photos.length > 1;
+ function displayColis(colisArray) {
+   if (!colisArray?.length) {
+     colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
+     return;
+   }
 
-          card.innerHTML = `
-            <div class="colis-image-container">
-              ${mainPhoto ? `
-                <img src="${mainPhoto}" 
-                     alt="Image du colis ${colis.codeID}" 
-                     class="colis-image"
-                     loading="${index < 3 ? 'eager' : 'lazy'}">` : `
-                <div class="no-image">📦</div>`}
-            </div>
+   colisList.innerHTML = '';
+   colisArray.forEach((colis, index) => {
+     const card = document.createElement('article');
+     card.className = 'card';
+     card.setAttribute('data-id', colis.codeID);
+     card.setAttribute('aria-label', `Colis ${colis.codeID}`);
 
-            <div class="card-content">
-              <h2>Colis #${colis.codeID}</h2>
-              
-              <div class="colis-details">
-                <p><strong>Type :</strong> ${colis.colis.type || 'Non spécifié'}</p>
-                <p><strong>Détails :</strong> ${colis.colis.details || 'Aucun détail supplémentaire'}</p>
-              </div>
+     // Gestion des photos
+     const photos = colis.colis?.photos || [];
+     const mainPhoto = photos[0]?.data ? photos[0].data : null;
+     const hasMultiplePhotos = photos.length > 1;
 
-              <div class="coordonnees expediteur">
-                <h3>Expéditeur</h3>
-                <p>👤 ${colis.expediteur.nom}</p>
-                <p>📞 <a href="tel:${colis.expediteur.telephone}">${colis.expediteur.telephone}</a></p>
-                ${colis.expediteur.localisation ? `
-                  <p><a href="https://maps.google.com?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}" 
-                        target="_blank" rel="noopener">
-                    🗺️ Localiser
-                  </a></p>` : ''}
-              </div>
+     card.innerHTML = `
+       <div class="colis-image-container">
+         ${mainPhoto ? `
+           <img src="${mainPhoto}"
+                alt="Image du colis ${colis.codeID}"
+                class="colis-image"
+                loading="${index < 3 ? 'eager' : 'lazy'}">` : `
+           <div class="no-image">📦</div>`}
+       </div>
 
-<div class="coordonnees destinataire">
-  <h3>Destinataire</h3>
-  <p>👤 ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
-  <p>📞 <a href="tel:${colis.destinataire.telephone}">${colis.destinataire.telephone}</a></p>
-  ${colis.destinataire.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
-  ${colis.destinataire.localisation ? `
-    <p><a href="https://maps.google.com?q=$${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
-        target="_blank" rel="noopener">
-      🗺️ Localiser
-    </a></p>` : ''}
-</div>
+       <div class="card-content">
+         <h2>Colis #${colis.codeID}</h2>
 
-              <div class="meta-info">
-                <p><strong>Statut :</strong> <span class="statut ${colis.statut.toLowerCase()}">${colis.statut}</span></p>
-                <p><strong>Livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString('fr-FR') : 'Non précisée'}</p>
-              </div>
+         <div class="colis-details">
+           <p><strong>Type :</strong> ${colis.colis.type || 'Non spécifié'}</p>
+           <p><strong>Détails :</strong> ${colis.colis.details || 'Aucun détail supplémentaire'}</p>
+         </div>
 
-              <div class="button-group">
-                <button class="expedier-btn" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
-                  📤 Expédier
-                </button>
-                <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Terminer la livraison du colis ${colis.codeID}">
-                  ✅ Terminer
-                </button>
-              </div>
-            </div>
-          `;
+         <div class="coordonnees expediteur">
+           <h3>Expéditeur</h3>
+           <p>👤 ${colis.expediteur.nom}</p>
+           <p>📞 <a href="tel:${colis.expediteur.telephone}">${colis.expediteur.telephone}</a></p>
+           ${colis.expediteur.localisation ? `
+             <p><a href="https://maps.google.com?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
+                   target="_blank" rel="noopener">
+               🗺️ Localiser
+             </a></p>` : ''}
+         </div>
 
-          colisList.appendChild(card);
+         <div class="coordonnees destinataire">
+           <h3>Destinataire</h3>
+           <p>👤 ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
+           <p>📞 <a href="tel:${colis.destinataire.telephone}">${colis.destinataire.telephone}</a></p>
+           ${colis.destinataire.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
+           ${colis.destinataire.localisation ? `
+             <p><a href="https://maps.google.com?q=$${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
+                 target="_blank" rel="noopener">
+               🗺️ Localiser
+             </a></p>` : ''}
+         </div>
 
-          // Gestion du clic sur l'image
-          // Gestion du clic sur l'image
-         if (mainPhoto) {
-card.querySelector('.colis-image').addEventListener('click', () => {
-const img = new Image();
-img.onload = () => {
-let maxWidth = window.innerWidth * 0.9; // 90% de la largeur de la fenêtre
-                let maxHeight = window.innerHeight * 0.9; // 90% de la hauteur de la fenêtre
-                let width = img.width;
-                let height = img.height;
+         <div class="meta-info">
+           <p><strong>Statut :</strong> <span class="statut ${colis.statut.toLowerCase()}">${colis.statut}</span></p>
+           <p><strong>Livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString('fr-FR') : 'Non précisée'}</p>
+         </div>
 
-                if (width > maxWidth) {
-                  height *= maxWidth / width;
-                  width = maxWidth;
-                }
+         <div class="button-group">
+           <button class="expedier-btn" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
+             📤 Expédier
+           </button>
+           <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Livraison Terminer ${colis.codeID}">
+             ✅ Terminer
+           </button>
+         </div>
+       </div>
+     `;
 
-                if (height > maxHeight) {
-                  width *= maxHeight / height;
-                  height = maxHeight;
-                }
+     colisList.appendChild(card);
 
-                modalImage.style.width = width + 'px';
-                modalImage.style.height = height + 'px';
-                modalImage.src = mainPhoto;
-                modal.classList.add('active');
-              };
-              img.src = mainPhoto;
-            });
-          }
-        });
+     // Gestion du clic sur l'image
+     if (mainPhoto) {
+       card.querySelector('.colis-image').addEventListener('click', () => {
+         const img = new Image();
+         img.onload = () => {
+           let maxWidth = window.innerWidth * 0.9; // 90% de la largeur de la fenêtre
+           let maxHeight = window.innerHeight * 0.9; // 90% de la hauteur de la fenêtre
+           let width = img.width;
+           let height = img.height;
 
-        // Gestion des boutons
-        setupEventListeners();
-      }
+           if (width > maxWidth) {
+             height *= maxWidth / width;
+             width = maxWidth;
+           }
 
-      function setupEventListeners() {
-        // Bouton "Expédier"
-        document.querySelectorAll('.expedier-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const codeID = btn.dataset.id;
-            const card = btn.closest('.card');
-            
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> En cours...';
-            
-            try {
-              const res = await fetch('/.netlify/functions/expedierColis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ codeID }),
-              });
-              
-              const data = await res.json();
-              
-              if (res.ok) {
-                btn.innerHTML = '✓ Expédié';
-                card.classList.add('expedie');
-              } else {
-                btn.innerHTML = '📤 Expédier';
-                btn.disabled = false;
-                showToast(data.error || 'Erreur lors de l\'expédition', 'error');
-              }
-            } catch (e) {
-              btn.innerHTML = '📤 Expédier';
-              btn.disabled = false;
-              showToast('Erreur de connexion', 'error');
-            }
-          });
-        });
+           if (height > maxHeight) {
+             width *= maxHeight / height;
+             height = maxHeight;
+           }
+
+           modalImage.style.width = width + 'px';
+           modalImage.style.height = height + 'px';
+           modalImage.src = mainPhoto;
+           modal.classList.add('active');
+         };
+         img.src = mainPhoto;
+       });
+     }
+   });
+
+   // Gestion des boutons après l'affichage
+   setupEventListeners();
+ }
+
+ function setupEventListeners() {
+   // Bouton "Expédier"
+   document.querySelectorAll('.expedier-btn').forEach(btn => {
+     btn.addEventListener('click', async () => {
+       const codeID = btn.dataset.id;
+       const card = btn.closest('.card');
+
+       // Créer un formulaire de saisie
+       const formHTML = `
+         <div class="expedition-form">
+           <h3>Informations d'expédition</h3>
+           <label for="livreur-id-${codeID}">Identifiant Livreur:</label>
+           <input type="text" id="livreur-id-${codeID}" required><br><br>
+           <label for="livreur-tel1-${codeID}">Téléphone Livreur 1:</label>
+           <input type="tel" id="livreur-tel1-${codeID}" required><br><br>
+           <label for="livreur-tel2-${codeID}">Téléphone Livreur 2:</label>
+           <input type="tel" id="livreur-tel2-${codeID}"><br><br>
+           <button class="confirm-expedition-btn" data-id="${codeID}">Confirmer l'expédition</button>
+           <button class="cancel-expedition-btn" data-id="${codeID}">Annuler</button>
+         </div>
+       `;
+
+       btn.insertAdjacentHTML('afterend', formHTML);
+       btn.style.display = 'none'; // Cacher le bouton "Expédier"
+
+       const confirmBtn = card.querySelector('.confirm-expedition-btn');
+       const cancelBtn = card.querySelector('.cancel-expedition-btn');
+       const formDiv = card.querySelector('.expedition-form');
+
+       cancelBtn.addEventListener('click', () => {
+         formDiv.remove();
+         btn.style.display = 'inline-block'; // Réafficher le bouton "Expédier"
+       });
+
+       confirmBtn.addEventListener('click', async () => {
+         const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
+         const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
+         const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
+
+         if (!livreurID || !livreurTel1) {
+           showToast('L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'error');
+           return;
+         }
+
+         confirmBtn.disabled = true;
+         confirmBtn.innerHTML = '<span class="spinner"></span> Envoi...';
+         cancelBtn.disabled = true;
+
+         try {
+           // Récupérer la localisation du livreur
+           if (navigator.geolocation) {
+             navigator.geolocation.getCurrentPosition(async (position) => {
+               const localisationLivreur = {
+                 latitude: position.coords.latitude,
+                 longitude: position.coords.longitude,
+               };
+
+               const res = await fetch('/.netlify/functions/enregistrerExpedition', { // Nouvelle fonction serverless
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                   codeID: codeID,
+                   localisationLivreur: localisationLivreur,
+                   telephoneLivreur1: livreurTel1,
+                   telephoneLivreur2: livreurTel2,
+                   idLivreur: livreurID,
+                 }),
+               });
+
+               const data = await res.json();
+
+               if (res.ok) {
+                 formDiv.remove();
+                 card.querySelector('.button-group').innerHTML = `
+                   <p class="info-expedition">📝 Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
+                   <button class="update-location-btn" data-id="${codeID}">📍 Actuliser ma position</button>
+                 `;
+                 card.classList.add('en-cours-expedition');
+                 setupLocationUpdateButton(card); // Initialiser l'écouteur pour le nouveau bouton
+               } else {
+                 confirmBtn.innerHTML = 'Confirmer l\'expédition';
+                 confirmBtn.disabled = false;
+                 cancelBtn.disabled = false;
+                 showToast(data.error || 'Erreur lors de l\'enregistrement de l\'expédition', 'error');
+               }
+
+             }, (error) => {
+               confirmBtn.innerHTML = 'Confirmer l\'expédition';
+               confirmBtn.disabled = false;
+               cancelBtn.disabled = false;
+               showToast('Erreur lors de la récupération de la localisation', 'error');
+             });
+           } else {
+             confirmBtn.innerHTML = 'Confirmer l\'expédition';
+             confirmBtn.disabled = false;
+             cancelBtn.disabled = false;
+             showToast('La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+           }
+
+         } catch (e) {
+           confirmBtn.innerHTML = 'Confirmer l\'expédition';
+           confirmBtn.disabled = false;
+           cancelBtn.disabled = false;
+           showToast('Erreur de connexion', 'error');
+         }
+       });
+     });
+   });
+ }
+
+ function setupLocationUpdateButton(cardElement) {
+   const updateButton = cardElement.querySelector('.update-location-btn');
+   if (updateButton) {
+     updateButton.addEventListener('click', async () => {
+       const codeID = updateButton.dataset.id;
+       updateButton.disabled = true;
+       updateButton.innerHTML = '<span class="spinner"></span> Mise à jour...';
+
+       if (navigator.geolocation) {
+         navigator.geolocation.getCurrentPosition(async (position) => {
+           const nouvelleLocalisation = {
+             latitude: position.coords.latitude,
+             longitude: position.coords.longitude,
+           };
+
+           try {
+             const res = await fetch('/.netlify/functions/mettreAJourLocalisation', { // Nouvelle fonction serverless
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ codeID: codeID, localisation: nouvelleLocalisation }),
+             });
+
+             const data = await res.json();
+
+             if (res.ok) {
+               updateButton.innerHTML = '📍 Position mise à jour';
+               setTimeout(() => {
+                 updateButton.innerHTML = '📍 Actuliser ma position';
+                 updateButton.disabled = false;
+               }, 2000);
+               showToast('Votre position a été mise à jour.', 'success');
+             } else {
+               updateButton.innerHTML = '📍 Actuliser ma position';
+               updateButton.disabled = false;
+               showToast(data.error || 'Erreur lors de la mise à jour de la localisation', 'error');
+             }
+           } catch (error) {
+             updateButton.innerHTML = '📍 Actuliser ma position';
+             updateButton.disabled = false;
+             showToast('Erreur de connexion lors de la mise à jour de la localisation', 'error');
+           }
+         }, (error) => {
+           updateButton.innerHTML = '📍 Actuliser ma position';
+           updateButton.disabled = false;
+           showToast('Erreur lors de la récupération de la localisation', 'error');
+         });
+       } else {
+         updateButton.innerHTML = '📍 Actuliser ma position';
+         updateButton.disabled = false;
+         showToast('La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+       }
+     });
+   }
+ 
+
+ // Initialisation au chargement de la page
+ fetchColis();
 
         // Bouton "Terminer"
         document.querySelectorAll('.terminer-btn').forEach(btn => {
