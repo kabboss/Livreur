@@ -219,168 +219,256 @@
  }
 
  function setupEventListeners() {
-   // Bouton "Expédier"
-   document.querySelectorAll('.expedier-btn').forEach(btn => {
-     btn.addEventListener('click', async () => {
-       const codeID = btn.dataset.id;
-       const card = btn.closest('.card');
+  // Sélectionne tous les boutons "Expédier" et attache un écouteur d'événements à chacun.
+  document.querySelectorAll('.expedier-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      // Récupère l'identifiant unique du colis à partir de l'attribut "data-id" du bouton.
+      const codeID = btn.dataset.id;
+      // Remonte à l'élément de carte parent pour manipuler son contenu.
+      const card = btn.closest('.card');
 
-       // Créer un formulaire de saisie
-       const formHTML = `
-         <div class="expedition-form">
-           <h3>Informations d'expédition</h3>
-           <label for="livreur-id-${codeID}">Identifiant Livreur:</label>
-           <input type="text" id="livreur-id-${codeID}" required><br><br>
-           <label for="livreur-tel1-${codeID}">Téléphone Livreur 1:</label>
-           <input type="tel" id="livreur-tel1-${codeID}" required><br><br>
-           <label for="livreur-tel2-${codeID}">Téléphone Livreur 2:</label>
-           <input type="tel" id="livreur-tel2-${codeID}"><br><br>
-           <button class="confirm-expedition-btn" data-id="${codeID}">Confirmer l'expédition</button>
-           <button class="cancel-expedition-btn" data-id="${codeID}">Annuler</button>
-         </div>
-       `;
+      // Crée dynamiquement le formulaire de saisie des informations du livreur.
+      const formHTML = `
+        <div class="expedition-form animate__animated animate__fadeIn">
+          <h3 class="form-title"><i class="fas fa-truck-loading mr-2"></i> Informations d'expédition</h3>
+          <div class="form-group">
+            <label for="livreur-id-${codeID}"><i class="fas fa-user mr-2"></i> Identifiant Livreur:</label>
+            <input type="text" id="livreur-id-${codeID}" class="form-control" required placeholder="Saisir l'identifiant">
+          </div>
+          <div class="form-group">
+            <label for="livreur-tel1-${codeID}"><i class="fas fa-phone mr-2"></i> Téléphone Livreur 1:</label>
+            <input type="tel" id="livreur-tel1-${codeID}" class="form-control" required placeholder="Numéro principal">
+          </div>
+          <div class="form-group">
+            <label for="livreur-tel2-${codeID}"><i class="fas fa-phone-alt mr-2"></i> Téléphone Livreur 2:</label>
+            <input type="tel" id="livreur-tel2-${codeID}" class="form-control" placeholder="Numéro secondaire (optionnel)">
+          </div>
+          <div class="button-group-form">
+            <button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="${codeID}">
+              <span class="btn-inner"><i class="fas fa-check-circle mr-2"></i> Confirmer l'expédition</span>
+              <span class="btn-loading"><i class="fas fa-spinner fa-spin"></i></span>
+            </button>
+            <button class="cancel-expedition-btn btn btn-secondary btn-animated" data-id="${codeID}">
+              <span class="btn-inner"><i class="fas fa-times-circle mr-2"></i> Annuler</span>
+            </button>
+          </div>
+        </div>
+      `;
 
-       btn.insertAdjacentHTML('afterend', formHTML);
-       btn.style.display = 'none'; // Cacher le bouton "Expédier"
+      // Insère le formulaire juste après le bouton "Expédier" avec une animation d'apparition.
+      btn.insertAdjacentHTML('afterend', formHTML);
+      // Cache le bouton "Expédier" initial avec une animation de disparition progressive.
+      btn.classList.add('animate__animated', 'animate__fadeOut');
+      setTimeout(() => {
+        btn.style.display = 'none';
+      }, 300);
 
-       const confirmBtn = card.querySelector('.confirm-expedition-btn');
-       const cancelBtn = card.querySelector('.cancel-expedition-btn');
-       const formDiv = card.querySelector('.expedition-form');
+      // Sélectionne les éléments du formulaire nouvellement créés.
+      const confirmBtn = card.querySelector('.confirm-expedition-btn');
+      const cancelBtn = card.querySelector('.cancel-expedition-btn');
+      const formDiv = card.querySelector('.expedition-form');
 
-       cancelBtn.addEventListener('click', () => {
-         formDiv.remove();
-         btn.style.display = 'inline-block'; // Réafficher le bouton "Expédier"
-       });
+      // Gestionnaire d'événement pour le bouton "Annuler".
+      cancelBtn.addEventListener('click', () => {
+        // Supprime le formulaire avec une animation de disparition progressive.
+        formDiv.classList.remove('animate__fadeIn');
+        formDiv.classList.add('animate__fadeOut');
+        setTimeout(() => {
+          formDiv.remove();
+          // Réaffiche le bouton "Expédier" avec une animation d'apparition progressive.
+          btn.classList.remove('animate__fadeOut');
+          btn.classList.add('animate__animated', 'animate__fadeIn');
+          btn.style.display = 'inline-block';
+        }, 300);
+      });
 
-       confirmBtn.addEventListener('click', async () => {
-         const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
-         const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
-         const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
+      // Gestionnaire d'événement pour le bouton "Confirmer l'expédition".
+      confirmBtn.addEventListener('click', async () => {
+        // Récupère les valeurs saisies par le livreur.
+        const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
+        const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
+        const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
 
-         if (!livreurID || !livreurTel1) {
-           showToast('L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'error');
-           return;
-         }
+        // Validation des champs obligatoires avec un feedback visuel.
+        if (!livreurID || !livreurTel1) {
+          showToast('⚠️ L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'warning');
+          const idInput = document.getElementById(`livreur-id-${codeID}`);
+          const tel1Input = document.getElementById(`livreur-tel1-${codeID}`);
+          if (!livreurID) idInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+          if (!livreurTel1) tel1Input.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+          setTimeout(() => {
+            idInput.classList.remove('is-invalid', 'animate__shakeX');
+            tel1Input.classList.remove('is-invalid', 'animate__shakeX');
+          }, 1000);
+          return;
+        }
 
-         confirmBtn.disabled = true;
-         confirmBtn.innerHTML = '<span class="spinner"></span> Envoi...';
-         cancelBtn.disabled = true;
+        // Désactive les boutons et affiche un indicateur de chargement dynamique.
+        confirmBtn.disabled = true;
+        confirmBtn.querySelector('.btn-inner').style.display = 'none';
+        confirmBtn.querySelector('.btn-loading').style.display = 'inline-block';
+        cancelBtn.disabled = true;
+        cancelBtn.classList.add('disabled');
 
-         try {
-           // Récupérer la localisation du livreur
-           if (navigator.geolocation) {
-             navigator.geolocation.getCurrentPosition(async (position) => {
-               const localisationLivreur = {
-                 latitude: position.coords.latitude,
-                 longitude: position.coords.longitude,
-               };
+        try {
+          // Tentative de récupération de la localisation du livreur avec un message informatif.
+          if (navigator.geolocation) {
+            showToast('🛰️ Récupération de votre position...', 'info');
+            navigator.geolocation.getCurrentPosition(async (position) => {
+              const localisationLivreur = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+              };
 
-               const res = await fetch('/.netlify/functions/enregistrerExpedition', { // Nouvelle fonction serverless
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({
-                   codeID: codeID,
-                   localisationLivreur: localisationLivreur,
-                   telephoneLivreur1: livreurTel1,
-                   telephoneLivreur2: livreurTel2,
-                   idLivreur: livreurID,
-                 }),
-               });
+              // Envoi des données d'expédition au serveur via une requête POST animée.
+              const res = await fetch('/.netlify/functions/enregistrerExpedition', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  codeID: codeID,
+                  localisationLivreur: localisationLivreur,
+                  telephoneLivreur1: livreurTel1,
+                  telephoneLivreur2: livreurTel2,
+                  idLivreur: livreurID,
+                }),
+              });
 
-               const data = await res.json();
+              const data = await res.json();
 
-               if (res.ok) {
-                 formDiv.remove();
-                 card.querySelector('.button-group').innerHTML = `
-                   <p class="info-expedition">📝 Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
-                   <button class="update-location-btn" data-id="${codeID}">📍 Actuliser ma position</button>
-                 `;
-                 card.classList.add('en-cours-expedition');
-                 setupLocationUpdateButton(card); // Initialiser l'écouteur pour le nouveau bouton
-               } else {
-                 confirmBtn.innerHTML = 'Confirmer l\'expédition';
-                 confirmBtn.disabled = false;
-                 cancelBtn.disabled = false;
-                 showToast(data.error || 'Erreur lors de l\'enregistrement de l\'expédition', 'error');
-               }
+              // Gestion de la réponse du serveur avec des animations et des messages clairs.
+              if (res.ok) {
+                formDiv.classList.remove('animate__fadeIn');
+                formDiv.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+                setTimeout(() => {
+                  formDiv.remove();
+                  card.querySelector('.button-group').innerHTML = `
+                    <p class="info-expedition animate__animated animate__fadeIn"><i class="fas fa-check-double mr-2 text-success"></i> Expédition enregistrée !</p>
+                    <p class="instruction-livreur animate__animated animate__fadeIn delay-0-5s"><i class="fas fa-info-circle mr-2 text-info"></i> Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
+                    <button class="update-location-btn btn btn-outline-primary btn-sm mt-2 animate__animated animate__fadeIn delay-1s" data-id="${codeID}">
+                      <i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position
+                    </button>
+                  `;
+                  card.classList.add('en-cours-expedition');
+                  setupLocationUpdateButton(card); // Initialiser l'écouteur pour le nouveau bouton
+                }, 300);
+                showToast('✅ Informations d\'expédition enregistrées avec succès !', 'success');
+              } else {
+                // Affichage d'un message d'erreur dynamique.
+                confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+                confirmBtn.disabled = false;
+                confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+                confirmBtn.querySelector('.btn-loading').style.display = 'none';
+                cancelBtn.disabled = false;
+                cancelBtn.classList.remove('disabled');
+                showToast(`❌ Erreur lors de l'enregistrement: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+              }
 
-             }, (error) => {
-               confirmBtn.innerHTML = 'Confirmer l\'expédition';
-               confirmBtn.disabled = false;
-               cancelBtn.disabled = false;
-               showToast('Erreur lors de la récupération de la localisation', 'error');
-             });
-           } else {
-             confirmBtn.innerHTML = 'Confirmer l\'expédition';
-             confirmBtn.disabled = false;
-             cancelBtn.disabled = false;
-             showToast('La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
-           }
+            }, (error) => {
+              // Gestion des erreurs de géolocalisation avec des messages spécifiques.
+              confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+              confirmBtn.disabled = false;
+              confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+              confirmBtn.querySelector('.btn-loading').style.display = 'none';
+              cancelBtn.disabled = false;
+              cancelBtn.classList.remove('disabled');
+              let errorMessage = 'Erreur lors de la récupération de la localisation.';
+              if (error.code === error.PERMISSION_DENIED) {
+                errorMessage = '⚠️ Autorisation de localisation refusée.';
+              } else if (error.code === error.POSITION_UNAVAILABLE) {
+                errorMessage = '📍 Position indisponible.';
+              } else if (error.code === error.TIMEOUT) {
+                errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
+              }
+              showToast(errorMessage, 'warning');
+            });
+          } else {
+            // Message si la géolocalisation n'est pas supportée.
+            confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+            confirmBtn.disabled = false;
+            confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+            confirmBtn.querySelector('.btn-loading').style.display = 'none';
+            cancelBtn.disabled = false;
+            cancelBtn.classList.remove('disabled');
+            showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+          }
 
-         } catch (e) {
-           confirmBtn.innerHTML = 'Confirmer l\'expédition';
-           confirmBtn.disabled = false;
-           cancelBtn.disabled = false;
-           showToast('Erreur de connexion', 'error');
-         }
-       });
-     });
-   });
- }
+        } catch (e) {
+          // Gestion des erreurs de connexion générales.
+          confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+          confirmBtn.disabled = false;
+          confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+          confirmBtn.querySelector('.btn-loading').style.display = 'none';
+          cancelBtn.disabled = false;
+          cancelBtn.classList.remove('disabled');
+          showToast('⚡ Erreur de connexion au serveur.', 'error');
+        }
+      });
+    });
+  });
+}
 
- function setupLocationUpdateButton(cardElement) {
-   const updateButton = cardElement.querySelector('.update-location-btn');
-   if (updateButton) {
-     updateButton.addEventListener('click', async () => {
-       const codeID = updateButton.dataset.id;
-       updateButton.disabled = true;
-       updateButton.innerHTML = '<span class="spinner"></span> Mise à jour...';
+function setupLocationUpdateButton(cardElement) {
+  const updateButton = cardElement.querySelector('.update-location-btn');
+  if (updateButton) {
+    updateButton.addEventListener('click', async () => {
+      const codeID = updateButton.dataset.id;
+      updateButton.disabled = true;
+      updateButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mise à jour...';
 
-       if (navigator.geolocation) {
-         navigator.geolocation.getCurrentPosition(async (position) => {
-           const nouvelleLocalisation = {
-             latitude: position.coords.latitude,
-             longitude: position.coords.longitude,
-           };
+      if (navigator.geolocation) {
+        showToast('🛰️ Tentative de mise à jour de votre position...', 'info');
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const nouvelleLocalisation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
 
-           try {
-             const res = await fetch('/.netlify/functions/mettreAJourLocalisation', { // Nouvelle fonction serverless
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ codeID: codeID, localisation: nouvelleLocalisation }),
-             });
+          try {
+            const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ codeID: codeID, localisation: nouvelleLocalisation }),
+            });
 
-             const data = await res.json();
+            const data = await res.json();
 
-             if (res.ok) {
-               updateButton.innerHTML = '📍 Position mise à jour';
-               setTimeout(() => {
-                 updateButton.innerHTML = '📍 Actuliser ma position';
-                 updateButton.disabled = false;
-               }, 2000);
-               showToast('Votre position a été mise à jour.', 'success');
-             } else {
-               updateButton.innerHTML = '📍 Actuliser ma position';
-               updateButton.disabled = false;
-               showToast(data.error || 'Erreur lors de la mise à jour de la localisation', 'error');
-             }
-           } catch (error) {
-             updateButton.innerHTML = '📍 Actuliser ma position';
-             updateButton.disabled = false;
-             showToast('Erreur de connexion lors de la mise à jour de la localisation', 'error');
-           }
-         }, (error) => {
-           updateButton.innerHTML = '📍 Actuliser ma position';
-           updateButton.disabled = false;
-           showToast('Erreur lors de la récupération de la localisation', 'error');
-         });
-       } else {
-         updateButton.innerHTML = '📍 Actuliser ma position';
-         updateButton.disabled = false;
-         showToast('La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
-       }
-     });
-   }
+            if (res.ok) {
+              updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2 text-success"></i> Position mise à jour !';
+              showToast('📍 Votre position a été mise à jour avec succès !', 'success');
+              setTimeout(() => {
+                updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position';
+                updateButton.disabled = false;
+              }, 3000);
+            } else {
+              updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
+              updateButton.disabled = false;
+              showToast(`❌ Erreur lors de la mise à jour de la localisation: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+            }
+          } catch (error) {
+            updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
+            updateButton.disabled = false;
+            showToast('⚡ Erreur de connexion lors de la mise à jour de la localisation.', 'error');
+          }
+        }, (error) => {
+          updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position';
+          updateButton.disabled = false;
+          let errorMessage = 'Erreur lors de la récupération de la localisation.';
+          if (error.code === error.PERMISSION_DENIED) {
+            errorMessage = '⚠️ Autorisation de localisation refusée.';
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            errorMessage = '📍 Position indisponible.';
+          } else if (error.code === error.TIMEOUT) {
+            errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
+          }
+          showToast(errorMessage, 'warning');
+        });
+      } else {
+        updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position';
+        updateButton.disabled = false;
+        showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+      }
+    });
+  }
  
 
  // Initialisation au chargement de la page
