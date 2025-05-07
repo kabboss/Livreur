@@ -136,55 +136,61 @@
         });
       };
       
-      // Soumission du formulaire
-      elements.form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        // Reset UI
-        elements.errorMsg.hidden = true;
-        elements.colisInfo.hidden = true;
-        elements.btnText.hidden = true;
-        elements.btnLoader.hidden = false;
-        elements.submitBtn.disabled = true;
-        
-        try {
-          // Validation
-          if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
-            throw new Error('Code colis invalide');
-          }
-          
-          // Envoi des données
-          const response = await fetch(config.apiEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              nom: elements.nom.value.trim(),
-              prenom: elements.prenom.value.trim(),
-              numero: elements.numero.value.trim(),
-              code: elements.code.value.trim(),
-              location: userLocation
-            })
-          });
-          
-          const data = await response.json();
-          
-          if (!response.ok) {
-            throw new Error(data.message || 'Erreur de recherche');
-          }
-          
-          if (!data.colis) {
-            throw new Error('Aucune information de colis disponible');
-          }
-          
-          // Affichage des résultats
-          displayColisInfo(data.colis);
-        } catch (error) {
-          showError(error.message);
-        } finally {
-          elements.btnText.hidden = false;
-          elements.btnLoader.hidden = true;
-          elements.submitBtn.disabled = false;
-        }
+// Soumission du formulaire
+elements.form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  // Reset UI
+  elements.errorMsg.hidden = true;
+  elements.colisInfo.hidden = true;
+  elements.btnText.hidden = true;
+  elements.btnLoader.hidden = false;
+  elements.submitBtn.disabled = true;
+
+  try {
+    // Validation
+    if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
+      throw new Error('Code colis invalide');
+    }
+
+    // 🔽 Obtenir la localisation juste avant d’envoyer
+    if (!userLocation) {
+      await getLocation(); // Cela mettra à jour userLocation
+    }
+
+    // Envoi des données
+    const response = await fetch(config.apiEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nom: elements.nom.value.trim(),
+        prenom: elements.prenom.value.trim(),
+        numero: elements.numero.value.trim(),
+        code: elements.code.value.trim(),
+        location: userLocation
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Erreur de recherche');
+    }
+
+    if (!data.colis) {
+      throw new Error('Aucune information de colis disponible');
+    }
+
+    // Affichage des résultats
+    displayColisInfo(data.colis);
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    elements.btnText.hidden = false;
+    elements.btnLoader.hidden = true;
+    elements.submitBtn.disabled = false;
+  }
+
       });
 // 🔍 Affiche les détails d’un colis sélectionné
 function displayColisInfo(colis) {
