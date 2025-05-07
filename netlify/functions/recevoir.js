@@ -72,7 +72,7 @@ exports.handler = async function(event, context) {
         prenom: clientInfo.prenom,
         telephone: clientInfo.numero,
         adresse: colis.address , // ou tu peux ne pas inclure ce champ s’il est inutile
-        localisation: clientLocation,
+        localisation: clientInfo?.localisation ?? null,
 
       }
     };
