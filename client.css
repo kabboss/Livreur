@@ -470,3 +470,286 @@
     /* Ajouter une transition pour la rotation */
     transition: background-color 0.3s ease, color 0.3s ease, transform 0.3s ease-in-out;
   }
+
+
+
+
+  /* Styles pour la section d'informations du colis (optimisé mobile) */
+ #colis-info {
+  background-color: #fff;
+  border-radius: 8px; /* Légèrement réduit pour les petits écrans */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Ombre plus subtile */
+  overflow: hidden;
+  animation: fadeInUpMobile 0.4s ease-out; /* Animation plus rapide */
+  margin: 1rem; /* Ajout de marges latérales */
+ }
+
+ @keyframes fadeInUpMobile {
+  from {
+   opacity: 0;
+   transform: translateY(10px);
+  }
+  to {
+   opacity: 1;
+   transform: translateY(0);
+  }
+ }
+
+ .colis-header {
+  background-color: var(--primary);
+  color: white;
+  padding: 15px; /* Réduit le padding */
+  border-bottom: 2px solid var(--secondary);
+  display: flex;
+  flex-direction: column; /* Empile le titre et le badge */
+  align-items: flex-start; /* Alignement à gauche */
+ }
+
+ .colis-header h2 {
+  font-size: 1.5rem; /* Taille de police réduite */
+  margin: 0 0 5px 0; /* Ajout de marge inférieure */
+  font-weight: 600;
+ }
+
+ .status-badge {
+  background-color: #f0ad4e;
+  color: white;
+  padding: 6px 10px; /* Padding réduit */
+  border-radius: 4px; /* BorderRadius réduit */
+  font-size: 0.8rem; /* Taille de police réduite */
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  transition: background-color 0.3s ease-in-out;
+ }
+
+ .colis-meta {
+  font-size: 0.8rem; /* Taille de police réduite */
+  color: #ddd;
+  margin-top: 3px;
+ }
+
+ .colis-grid {
+  padding: 15px; /* Padding réduit */
+  display: flex;
+  flex-direction: column; /* Empile les sections */
+  gap: 10px; /* Espacement réduit */
+ }
+
+ .colis-section {
+  padding: 10px; /* Padding réduit */
+  border: 1px solid #eee;
+  border-radius: var(--radius);
+  background-color: #f9f9f9;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+ }
+
+ .colis-section:hover {
+  transform: translateY(-2px); /* Mouvement au survol réduit */
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08); /* Ombre au survol réduite */
+ }
+
+ .colis-section h3 {
+  font-size: 1rem; /* Taille de police réduite */
+  color: var(--secondary);
+  margin-top: 0;
+  margin-bottom: 8px; /* Marge réduite */
+  border-bottom: 1px solid #eee; /* Bordure plus fine */
+  padding-bottom: 5px; /* Padding réduit */
+ }
+
+ .colis-section p {
+  font-size: 0.9rem; /* Taille de police réduite */
+  color: var(--dark);
+  margin-bottom: 6px; /* Marge réduite */
+ }
+
+ .colis-photos {
+  padding: 15px; /* Padding réduit */
+  border-top: 1px solid #eee;
+ }
+
+ .colis-photos h3 {
+  font-size: 1rem; /* Taille de police réduite */
+  color: var(--secondary);
+  margin-top: 0;
+  margin-bottom: 10px; /* Marge réduite */
+  border-bottom: 1px solid #eee; /* Bordure plus fine */
+  padding-bottom: 5px; /* Padding réduit */
+ }
+
+ .photos-grid {
+  display: flex;
+  gap: 8px; /* Espacement réduit */
+  overflow-x: auto;
+  padding-bottom: 8px; /* Padding réduit */
+ }
+
+ .photo-preview {
+  width: 100px; /* Largeur réduite */
+  height: auto;
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Ombre réduite */
+  transition: transform 0.2s ease-in-out;
+ }
+
+ .photo-preview:hover {
+  transform: scale(1.02); /* Zoom au survol réduit */
+ }
+
+ .colis-timeline {
+  padding: 15px; /* Padding réduit */
+  border-top: 1px solid #eee;
+ }
+
+ .colis-timeline h3 {
+  font-size: 1rem; /* Taille de police réduite */
+  color: var(--secondary);
+  margin-top: 0;
+  margin-bottom: 10px; /* Marge réduite */
+  border-bottom: 1px solid #eee; /* Bordure plus fine */
+  padding-bottom: 5px; /* Padding réduit */
+ }
+
+ .timeline {
+  position: relative;
+  padding-left: 1.5rem; /* Padding réduit */
+ }
+
+ .timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.3rem; /* Position réduite */
+  width: 1px; /* Épaisseur réduite */
+  background-color: #ddd;
+ }
+
+ .timeline-item {
+  position: relative;
+  margin-bottom: 1rem; /* Marge réduite */
+ }
+
+ .timeline-item::before {
+  content: '';
+  position: absolute;
+  top: 0.2rem; /* Position réduite */
+  left: -0.5rem; /* Position réduite */
+  width: 0.8rem; /* Taille réduite */
+  height: 0.8rem; /* Taille réduite */
+  border-radius: 50%;
+  background-color: var(--primary);
+  border: 1px solid white; /* Bordure plus fine */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Ombre réduite */
+ }
+
+ .timeline-date {
+  font-size: 0.75rem; /* Taille de police réduite */
+  color: #777;
+  margin-bottom: 0.2rem; /* Marge réduite */
+ }
+
+ .timeline-content {
+  padding: 0.5rem 0.8rem; /* Padding réduit */
+  background-color: white;
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Ombre réduite */
+  border: 1px solid #eee; /* Bordure plus fine */
+ }
+
+ .timeline-content strong {
+  font-weight: bold;
+  color: var(--secondary);
+  display: block;
+  margin-bottom: 0.2rem; /* Marge réduite */
+ }
+
+ .action-buttons {
+  padding: 15px; /* Padding réduit */
+  border-top: 1px solid #eee;
+  display: flex;
+  flex-direction: column; /* Empile les boutons */
+  gap: 10px; /* Espacement réduit */
+  align-items: stretch; /* Étire les boutons sur la largeur */
+ }
+
+ .btn.receive-btn,
+ .btn.decline-btn {
+  padding: 8px 15px; /* Padding réduit */
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.9rem; /* Taille de police légèrement réduite */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+ }
+
+ .btn.receive-btn:hover {
+  transform: translateY(-1px); /* Mouvement au survol réduit */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); /* Ombre au survol réduite */
+ }
+
+ .btn.decline-btn:hover {
+  transform: translateY(-1px); /* Mouvement au survol réduit */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); /* Ombre au survol réduite */
+ }
+
+ /* Animation d'apparition progressive pour mobile */
+ #colis-info.appear {
+  animation: appearMobile 0.3s ease-out forwards;
+ }
+
+ @keyframes appearMobile {
+  from {
+   opacity: 0;
+   transform: scale(0.98);
+  }
+  to {
+   opacity: 1;
+   transform: scale(1);
+  }
+ }
+
+ /* Media query pour les écrans plus larges (tablettes et desktops) */
+ @media (min-width: 600px) {
+  #colis-info {
+   border-radius: 12px;
+   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+   margin: 1.5rem auto; /* Centre la carte sur les écrans plus grands */
+   max-width: 95%; /* Limite la largeur sur les grands écrans */
+  }
+
+  .colis-header {
+   flex-direction: row; /* Aligne le titre et le badge horizontalement */
+   align-items: center; /* Centre verticalement */
+   padding: 20px;
+  }
+
+  .colis-header h2 {
+   font-size: 1.8rem;
+   margin-bottom: 0;
+   margin-right: 15px; /* Ajoute de l'espace entre le titre et le badge */
+  }
+
+  .colis-grid {
+   padding: 20px;
+   flex-direction: row; /* Revient à une disposition en grille */
+   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+   gap: 20px;
+  }
+
+  .action-buttons {
+   flex-direction: row; /* Aligne les boutons horizontalement */
+   justify-content: flex-end;
+   gap: 15px;
+  }
+
+  .btn.receive-btn:hover,
+  .btn.decline-btn:hover {
+   transform: translateY(-2px);
+   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .photo-preview:hover {
+   transform: scale(1.05);
+  }
+ }

@@ -268,37 +268,58 @@ function displayColisInfo(colis) {
     </div>
   `;
 
-  // 📦 Affiche la section d'informations colis
-  elements.colisInfo.hidden = false;
+ // 📦 Affiche la section d'informations colis
+ elements.colisInfo.hidden = false;
 
-  // ✅ Écouteur : clic sur "Recevoir"
-  document.getElementById('btn-recevoir').addEventListener('click', async () => {
-    const codeID = colis.colisID;
+const recevoirButton = document.getElementById('btn-recevoir');
+let recevoirClicked = false;
 
-    try {
-      showSpinner();
+// ✅ Écouteur : clic sur "Recevoir"
+recevoirButton.addEventListener('click', async () => {
+  if (recevoirClicked) {
+    return; // Empêche de cliquer à nouveau
+  }
+  recevoirClicked = true;
+  recevoirButton.disabled = true; // Désactive le bouton après le clic
+  recevoirButton.classList.add('disabled'); // Ajoute une classe pour le style désactivé
 
-      const response = await fetch('/.netlify/functions/recevoir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codeID }),
-      });
+  const codeID = colis.colisID;
 
-      const data = await response.json();
-      hideSpinner();
+  try {
+    showSpinner();
 
-      if (response.ok) {
-        showCheckmark();
-        showToast(data.message, 'success');
-      } else {
-        showAlert(data.error || 'Erreur lors de l’enregistrement.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      hideSpinner();
-      showAlert('Erreur de connexion au serveur.', 'error');
+    const response = await fetch('/.netlify/functions/recevoir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codeID }),
+    });
+
+    const data = await response.json();
+    hideSpinner();
+
+    if (response.ok) {
+      showCheckmark();
+      showToast(data.message, 'success');
+      // Désactiver définitivement le bouton ou le masquer après succès
+      recevoirButton.disabled = true;
+      recevoirButton.classList.add('disabled');
+    } else {
+      showAlert(data.error || 'Erreur lors de l’enregistrement.', 'error');
+      // Réactiver le bouton en cas d'erreur pour permettre une nouvelle tentative
+      recevoirButton.disabled = false;
+      recevoirButton.classList.remove('disabled');
+      recevoirClicked = false;
     }
-  });
+  } catch (err) {
+    console.error(err);
+    hideSpinner();
+    showAlert('Erreur de connexion au serveur.', 'error');
+    // Réactiver le bouton en cas d'erreur de connexion
+    recevoirButton.disabled = false;
+    recevoirButton.classList.remove('disabled');
+    recevoirClicked = false;
+  }
+});
 
 // ❌ Écouteur : clic sur "Décliner"
 document.getElementById('btn-decliner').addEventListener('click', async () => {
