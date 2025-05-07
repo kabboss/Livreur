@@ -88,134 +88,137 @@
         }
       };
 
- // Récupérer la liste des colis depuis l'API
- async function fetchColis() {
-   try {
-     colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
+// Récupérer la liste des colis depuis l'API
+async function fetchColis() {
+  try {
+    colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
 
-     const res = await fetch('/.netlify/functions/getLivraisons');
-     const data = await res.json();
+    const res = await fetch('/.netlify/functions/getLivraisons');
+    const data = await res.json();
 
-     if (res.ok) {
-       displayColis(data);
-     } else {
-       colisList.innerHTML = `<div class="error-message">Erreur: ${data.error || 'Impossible de charger les colis'}</div>`;
-     }
-   } catch (e) {
-     console.error('Erreur fetch:', e);
-     colisList.innerHTML = '<div class="error-message">Erreur de connexion au serveur</div>';
-   }
+    if (res.ok) {
+      displayColis(data);
+    } else {
+      colisList.innerHTML = `<div class="error-message">Erreur: ${data.error || 'Impossible de charger les colis'}</div>`;
+    }
+  } catch (e) {
+    console.error('Erreur fetch:', e);
+    colisList.innerHTML = '<div class="error-message">Erreur de connexion au serveur</div>';
+  }
  }
 
  function displayColis(colisArray) {
-   if (!colisArray?.length) {
-     colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
-     return;
-   }
+  if (!colisArray?.length) {
+    colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
+    return;
+  }
 
-   colisList.innerHTML = '';
-   colisArray.forEach((colis, index) => {
-     const card = document.createElement('article');
-     card.className = 'card';
-     card.setAttribute('data-id', colis.codeID);
-     card.setAttribute('aria-label', `Colis ${colis.codeID}`);
+  colisList.innerHTML = '';
+  colisArray.forEach((colis, index) => {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.setAttribute('data-id', colis.codeID);
+    card.setAttribute('aria-label', `Colis ${colis.codeID}`);
 
-     // Gestion des photos
-     const photos = colis.colis?.photos || [];
-     const mainPhoto = photos[0]?.data ? photos[0].data : null;
-     const hasMultiplePhotos = photos.length > 1;
+    // Gestion des photos
+    const photos = colis.colis?.photos || [];
+    const mainPhoto = photos[0]?.data ? photos[0].data : null;
+    const hasMultiplePhotos = photos.length > 1;
 
-     card.innerHTML = `
-       <div class="colis-image-container">
-         ${mainPhoto ? `
-           <img src="${mainPhoto}"
-                alt="Image du colis ${colis.codeID}"
-                class="colis-image"
-                loading="${index < 3 ? 'eager' : 'lazy'}">` : `
-           <div class="no-image">📦</div>`}
-       </div>
+    card.innerHTML = `
+      <div class="colis-image-container">
+        ${mainPhoto ? `
+          <img src="${mainPhoto}"
+               alt="Image du colis ${colis.codeID}"
+               class="colis-image"
+               loading="${index < 3 ? 'eager' : 'lazy'}">` : `
+          <div class="no-image">📦</div>`}
+      </div>
 
-       <div class="card-content">
-         <h2>Colis #${colis.codeID}</h2>
+      <div class="card-content">
+        <h2>Colis #${colis.codeID}</h2>
 
-         <div class="colis-details">
-           <p><strong>Type :</strong> ${colis.colis.type || 'Non spécifié'}</p>
-           <p><strong>Détails :</strong> ${colis.colis.details || 'Aucun détail supplémentaire'}</p>
-         </div>
+        <div class="colis-details">
+          <p><strong>Type :</strong> ${colis.colis.type || 'Non spécifié'}</p>
+          <p><strong>Détails :</strong> ${colis.colis.details || 'Aucun détail supplémentaire'}</p>
+        </div>
 
-         <div class="coordonnees expediteur">
-           <h3>Expéditeur</h3>
-           <p>👤 ${colis.expediteur.nom}</p>
-           <p>📞 <a href="tel:${colis.expediteur.telephone}">${colis.expediteur.telephone}</a></p>
-           ${colis.expediteur.localisation ? `
-             <p><a href="https://maps.google.com?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
-                   target="_blank" rel="noopener">
-               🗺️ Localiser
-             </a></p>` : ''}
-         </div>
+        <div class="coordonnees expediteur">
+          <h3>Expéditeur</h3>
+          <p>👤 <span class="math-inline">\{colis\.expediteur\.nom\}</p\>
+<p\>📞 <a href\="tel\:</span>{colis.expediteur.telephone}">${colis.expediteur.telephone}</a></p>
+          ${colis.expediteur.localisation ? `
+            <p><a href="https://maps.google.com?q=$?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
+                  target="_blank" rel="noopener">
+              🗺️ Localiser
+            </a></p>` : ''}
+        </div>
 
-         <div class="coordonnees destinataire">
-           <h3>Destinataire</h3>
-           <p>👤 ${colis.destinataire.nom} ${colis.destinataire.prenom}</p>
-           <p>📞 <a href="tel:${colis.destinataire.telephone}">${colis.destinataire.telephone}</a></p>
-           ${colis.destinataire.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
-           ${colis.destinataire.localisation ? `
-             <p><a href="https://maps.google.com?q=$${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
-                 target="_blank" rel="noopener">
-               🗺️ Localiser
-             </a></p>` : ''}
-         </div>
+        <div class="coordonnees destinataire">
+          <h3>Destinataire</h3>
+          <p>👤 ${colis.destinataire.nom} <span class="math-inline">\{colis\.destinataire\.prenom\}</p\>
+<p\>📞 <a href\="tel\:</span>{colis.destinataire.telephone}">${colis.destinataire.telephone}</a></p>
+          ${colis.destinataire.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
+          ${colis.destinataire.localisation ? `
+            <p><a href="https://maps.google.com?q=$$?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
+                  target="_blank" rel="noopener">
+              🗺️ Localiser
+            </a></p>` : ''}
+        </div>
 
-         <div class="meta-info">
-           <p><strong>Statut :</strong> <span class="statut ${colis.statut.toLowerCase()}">${colis.statut}</span></p>
-           <p><strong>Livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString('fr-FR') : 'Non précisée'}</p>
-         </div>
+        <div class="meta-info">
+          <p><strong>Statut :</strong> <span class="statut <span class="math-inline">\{colis\.statut\.toLowerCase\(\)\}"\></span>{colis.statut}</span></p>
+          <p><strong>Livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString('fr-FR') : 'Non précisée'}</p>
+        </div>
 
-         <div class="button-group">
-           <button class="expedier-btn" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
-             📤 Expédier
-           </button>
-           <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Livraison Terminer ${colis.codeID}">
-             ✅ Terminer
-           </button>
-         </div>
-       </div>
-     `;
+        <div class="button-group">
+          ${colis.estExpedie
+            ? '<p class="text-muted"><i class="fas fa-lock mr-2"></i> Ce colis est en cours d\'expédition.</p>'
+            : `<button class="expedier-btn" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
+                <i class="fas fa-truck-loading mr-2"></i> Expédier
+              </button>`
+          }
+          <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Livraison Terminer ${colis.codeID}">
+            ✅ Terminer
+          </button>
+        </div>
+      </div>
+    `;
 
-     colisList.appendChild(card);
+    colisList.appendChild(card);
 
-     // Gestion du clic sur l'image
-     if (mainPhoto) {
-       card.querySelector('.colis-image').addEventListener('click', () => {
-         const img = new Image();
-         img.onload = () => {
-           let maxWidth = window.innerWidth * 0.9; // 90% de la largeur de la fenêtre
-           let maxHeight = window.innerHeight * 0.9; // 90% de la hauteur de la fenêtre
-           let width = img.width;
-           let height = img.height;
+    // Gestion du clic sur l'image
+    if (mainPhoto) {
+      card.querySelector('.colis-image').addEventListener('click', () => {
+        const img = new Image();
+        img.onload = () => {
+          let maxWidth = window.innerWidth * 0.9; // 90% de la largeur de la fenêtre
+          let maxHeight = window.innerHeight * 0.9; // 90% de la hauteur de la fenêtre
+          let width = img.width;
+          let height = img.height;
 
-           if (width > maxWidth) {
-             height *= maxWidth / width;
-             width = maxWidth;
-           }
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
 
-           if (height > maxHeight) {
-             width *= maxHeight / height;
-             height = maxHeight;
-           }
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
 
-           modalImage.style.width = width + 'px';
-           modalImage.style.height = height + 'px';
-           modalImage.src = mainPhoto;
-           modal.classList.add('active');
-         };
-         img.src = mainPhoto;
-       });
-     }
-   });
+          modalImage.style.width = width + 'px';
+          modalImage.style.height = height + 'px';
+          modalImage.src = mainPhoto;
+          modal.classList.add('active');
+        };
+        img.src = mainPhoto;
+      });
+    }
+  });
 
-   // Gestion des boutons après l'affichage
-   setupEventListeners();
+  // Gestion des boutons après l'affichage
+  setupEventListeners();
  }
 
  function setupEventListeners() {
@@ -232,23 +235,23 @@
         <div class="expedition-form animate__animated animate__fadeIn">
           <h3 class="form-title"><i class="fas fa-truck-loading mr-2"></i> Informations d'expédition</h3>
           <div class="form-group">
-            <label for="livreur-id-${codeID}"><i class="fas fa-user mr-2"></i> Identifiant Livreur:</label>
-            <input type="text" id="livreur-id-${codeID}" class="form-control" required placeholder="Saisir l'identifiant">
+            <label for="livreur-id-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-user mr\-2"\></i\> Identifiant Livreur\:</label\>
+<input type\="text" id\="livreur\-id\-</span>{codeID}" class="form-control" required placeholder="Saisir l'identifiant">
           </div>
           <div class="form-group">
-            <label for="livreur-tel1-${codeID}"><i class="fas fa-phone mr-2"></i> Téléphone Livreur 1:</label>
-            <input type="tel" id="livreur-tel1-${codeID}" class="form-control" required placeholder="Numéro principal">
+            <label for="livreur-tel1-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-phone mr\-2"\></i\> Téléphone Livreur 1\:</label\>
+<input type\="tel" id\="livreur\-tel1\-</span>{codeID}" class="form-control" required placeholder="Numéro principal">
           </div>
           <div class="form-group">
-            <label for="livreur-tel2-${codeID}"><i class="fas fa-phone-alt mr-2"></i> Téléphone Livreur 2:</label>
-            <input type="tel" id="livreur-tel2-${codeID}" class="form-control" placeholder="Numéro secondaire (optionnel)">
+            <label for="livreur-tel2-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-phone\-alt mr\-2"\></i\> Téléphone Livreur 2\:</label\>
+<input type\="tel" id\="livreur\-tel2\-</span>{codeID}" class="form-control" placeholder="Numéro secondaire (optionnel)">
           </div>
           <div class="button-group-form">
-            <button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="${codeID}">
-              <span class="btn-inner"><i class="fas fa-check-circle mr-2"></i> Confirmer l'expédition</span>
-              <span class="btn-loading"><i class="fas fa-spinner fa-spin"></i></span>
-            </button>
-            <button class="cancel-expedition-btn btn btn-secondary btn-animated" data-id="${codeID}">
+            <button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="<span class="math-inline">\{codeID\}"\>
+<span class\="btn\-inner"\><i class\="fas fa\-check\-circle mr\-2"\></i\> Confirmer l'expédition</span\>
+<span class\="btn\-loading"\><i class\="fas fa\-spinner fa\-spin"\></i\></span\>
+</button\>
+<button class\="cancel\-expedition\-btn btn btn\-secondary btn\-animated" data\-id\="</span>{codeID}">
               <span class="btn-inner"><i class="fas fa-times-circle mr-2"></i> Annuler</span>
             </button>
           </div>
@@ -402,6 +405,7 @@
           cancelBtn.classList.remove('disabled');
           showToast('⚡ Erreur de connexion au serveur.', 'error');
         }
+
       });
     });
   });
@@ -473,6 +477,10 @@ function setupLocationUpdateButton(cardElement) {
 
  // Initialisation au chargement de la page
  fetchColis();
+
+
+
+
 
         // Bouton "Terminer"
         document.querySelectorAll('.terminer-btn').forEach(btn => {

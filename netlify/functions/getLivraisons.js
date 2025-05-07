@@ -2,7 +2,8 @@ const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
-const collectionName = 'Livraison';
+const livraisonCollectionName = 'Livraison'; // Correction du nom de la collection
+const expeditionCollectionName = 'cour_expedition';
 
 exports.handler = async (event) => {
   const headers = {
@@ -36,12 +37,18 @@ exports.handler = async (event) => {
 
   try {
     await client.connect();
-    const collection = client.db(dbName).collection(collectionName);
+    const db = client.db(dbName);
+    const livraisonCollection = db.collection(livraisonCollectionName);
+    const expeditionCollection = db.collection(expeditionCollectionName);
 
     // 🔍 Récupération des livraisons
-    const livraisons = await collection.find({}).toArray();
+    const livraisons = await livraisonCollection.find({}).toArray();
 
-    // 🔧 Formatage propre
+    // 🚚 Récupération de tous les enregistrements d'expédition pour une vérification rapide
+    const expeditions = await expeditionCollection.find({}).toArray();
+    const expeditionsMap = new Map(expeditions.map(exp => [exp.codeID, true]));
+
+    // 🔧 Formatage propre et ajout de l'état d'expédition
     const formatted = livraisons.map(l => ({
       codeID: l.codeID || 'Code ID manquant',
       colis: {
@@ -62,6 +69,7 @@ exports.handler = async (event) => {
       },
       statut: l.statut || 'Statut inconnu',
       dateLivraison: l.dateLivraison || null,
+      estExpedie: expeditionsMap.has(l.codeID), // Vérifie si un enregistrement d'expédition existe pour ce codeID
     }));
 
     return {
