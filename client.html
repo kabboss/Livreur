@@ -1,513 +1,1158 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Suivi de colis en temps réel">
-  <title>Suivi Colis | Plateforme de livraison</title>
- 
-  <link rel="stylesheet" href="client.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Plateforme de suivi de colis en temps réel avec géolocalisation">
+    <title>Suivi Colis | Plateforme de Livraison Intelligente</title>
+    
+    <!-- Polices Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Style principal -->
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3f37c9;
+            --success-color: #4cc9f0;
+            --error-color: #f72585;
+            --warning-color: #f8961e;
+            --light-color: #f8f9fa;
+            --dark-color: #212529;
+            --gray-color: #6c757d;
+            --border-radius: 12px;
+            --box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--dark-color);
+            background-color: #f5f7ff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Navigation */
+        .navigation-arrows {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+
+        .arrow, .refresh-button {
+            background: white;
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--box-shadow);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .arrow:hover, .refresh-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .arrow svg, .refresh-button svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* En-tête */
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            text-align: center;
+        }
+
+        #location-status {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 1rem;
+            color: var(--gray-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* Carte formulaire */
+        .card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 30px;
+            box-shadow: var(--box-shadow);
+            margin-bottom: 30px;
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 25px;
+            color: var(--secondary-color);
+            text-align: center;
+        }
+
+        /* Formulaire */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark-color);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        .form-group input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        /* Bouton principal */
+        .btn-primary {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: var(--transition);
+            margin-top: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(67, 97, 238, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: var(--gray-color);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-loader {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Informations colis */
+        #colis-info {
+            display: none;
+        }
+
+        .colis-header {
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .colis-header h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-enregistré {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status-en cours {
+            background-color: #fff8e1;
+            color: #ff8f00;
+        }
+
+        .status-livré {
+            background-color: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .status-annulé {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+
+        .colis-meta {
+            color: var(--gray-color);
+            font-size: 0.9rem;
+        }
+
+        .colis-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .colis-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: var(--border-radius);
+        }
+
+        .colis-section h3 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+
+        .colis-section p {
+            margin-bottom: 8px;
+        }
+
+        .colis-section strong {
+            font-weight: 600;
+        }
+
+        /* Photos */
+        .colis-photos {
+            margin-bottom: 30px;
+        }
+
+        .colis-photos h3 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+
+        .photos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .photo-preview {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: var(--border-radius);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: var(--transition);
+        }
+
+        .photo-preview:hover {
+            transform: scale(1.03);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Timeline */
+        .colis-timeline {
+            margin-bottom: 30px;
+        }
+
+        .colis-timeline h3 {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .timeline-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .timeline-date {
+            font-size: 0.8rem;
+            color: var(--gray-color);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .timeline-date::before {
+            content: '';
+            position: absolute;
+            left: -30px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            border: 2px solid white;
+        }
+
+        .timeline-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: var(--border-radius);
+        }
+
+        .timeline-content strong {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--secondary-color);
+        }
+
+        /* Boutons d'action */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .receive-btn {
+            background: linear-gradient(135deg, #4cc9f0, #4895ef);
+            color: white;
+        }
+
+        .receive-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(76, 201, 240, 0.3);
+        }
+
+        .receive-btn:disabled {
+            background: var(--gray-color);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .decline-btn {
+            background: linear-gradient(135deg, #f72585, #b5179e);
+            color: white;
+        }
+
+        .decline-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(247, 37, 133, 0.3);
+        }
+
+        /* Messages */
+        .message-error {
+            color: var(--error-color);
+            background: #ffebee;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        /* Alertes personnalisées */
+        .custom-alert {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition);
+        }
+
+        .custom-alert:not(.hidden) {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .alert-content {
+            background: white;
+            width: 90%;
+            max-width: 400px;
+            padding: 30px;
+            border-radius: var(--border-radius);
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            transform: translateY(20px);
+            transition: var(--transition);
+        }
+
+        .custom-alert:not(.hidden) .alert-content {
+            transform: translateY(0);
+        }
+
+        .alert-icon {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 20px;
+        }
+
+        #alert-message, #confirm-message {
+            margin-bottom: 25px;
+            font-size: 1.1rem;
+            line-height: 1.5;
+        }
+
+        #alert-close, #confirm-yes, #confirm-no {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        #alert-close {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        #confirm-yes {
+            background: var(--error-color);
+            color: white;
+            margin-right: 10px;
+        }
+
+        #confirm-no {
+            background: var(--gray-color);
+            color: white;
+        }
+
+        /* Spinner */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition);
+        }
+
+        .spinner-overlay:not(.hidden) {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(67, 97, 238, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s linear infinite;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: white;
+            padding: 15px 25px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            z-index: 100;
+            opacity: 0;
+            transition: var(--transition);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Checkmark animation */
+        .checkmark-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            opacity: 0;
+            visibility: hidden;
+            transition: var(--transition);
+        }
+
+        .checkmark-wrapper:not(.hidden) {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .checkmark {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: block;
+            stroke-width: 5;
+            stroke: #4bb71b;
+            stroke-miterlimit: 10;
+            box-shadow: inset 0px 0px 0px rgba(76, 201, 240, 0.3);
+            animation: fill 0.4s ease-in-out 0.4s forwards, scale 0.3s ease-in-out 0.9s both;
+        }
+
+        .checkmark-circle {
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            stroke-width: 5;
+            stroke-miterlimit: 10;
+            stroke: #4bb71b;
+            fill: none;
+            animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+
+        .checkmark-check {
+            transform-origin: 50% 50%;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+        }
+
+        @keyframes stroke {
+            100% { stroke-dashoffset: 0; }
+        }
+
+        @keyframes scale {
+            0%, 100% { transform: none; }
+            50% { transform: scale3d(1.1, 1.1, 1); }
+        }
+
+        @keyframes fill {
+            100% { box-shadow: inset 0px 0px 0px 50px rgba(76, 201, 240, 0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .card {
+                padding: 20px;
+            }
+
+            .colis-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .card h2 {
+                font-size: 1.2rem;
+            }
+
+            .form-group input {
+                padding: 10px 12px;
+            }
+
+            .btn-primary, .btn {
+                padding: 12px;
+            }
+        }
+    </style>
 </head>
 <body>
-
-
-
-  <div class="navigation-arrows">
-    <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
-      <svg viewBox="0 0 24 24">
-        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
-      </svg>
-    </a>
-    <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
-      <svg viewBox="0 0 24 24">
-        <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-      </svg>
-    </button>
-  </div>
-
-  <div class="container">
-    <h1>🔍 Suivi de colis</h1>
-    <p id="location-status">📍 Localisation en cours...</p>
-    
-    <form id="client-form" class="card">
-      <h2>Rechercher un colis</h2>
-      
-      <div class="form-group">
-        <label for="nom">Nom</label>
-        <input type="text" id="nom" required autocomplete="family-name">
-      </div>
-      
-      <div class="form-group">
-        <label for="prenom">Prénom</label>
-        <input type="text" id="prenom" required autocomplete="given-name">
-      </div>
-      
-      <div class="form-group">
-        <label for="numero">Téléphone</label>
-        <input type="tel" id="numero" required autocomplete="tel">
-      </div>
-      
-      <div class="form-group">
-        <label for="code">Code colis</label>
-        <input type="text" id="code" required pattern="[A-Z0-9]{8,20}">
-      </div>
-      
-      <button type="submit" class="btn-primary">
-        <span class="btn-text">📦 Rechercher</span>
-        <span class="btn-loader" hidden></span>
-      </button>
-    </form>
-    
-    <div id="messages">
-      <p id="error-msg" class="message-error" hidden></p>
-    </div>
-    
-    <div id="colis-info" class="card" hidden>
-      <div id="colis-content"></div>
-    </div>
-  </div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // Configuration
-      const config = {
-        apiEndpoint: '/.netlify/functions/client-handler'
-      };
-      
-      // Éléments DOM
-      const elements = {
-        form: document.getElementById('client-form'),
-        nom: document.getElementById('nom'),
-        prenom: document.getElementById('prenom'),
-        numero: document.getElementById('numero'),
-        code: document.getElementById('code'),
-        submitBtn: document.querySelector('#client-form button[type="submit"]'),
-        btnText: document.querySelector('.btn-text'),
-        btnLoader: document.querySelector('.btn-loader'),
-        locationStatus: document.getElementById('location-status'),
-        colisInfo: document.getElementById('colis-info'),
-        colisContent: document.getElementById('colis-content'),
-        errorMsg: document.getElementById('error-msg')
-      };
-      
-      let userLocation = null;
-      
-      // Gestion de la géolocalisation
-      const getLocation = () => {
-        return new Promise((resolve, reject) => {
-          if (!navigator.geolocation) {
-            elements.locationStatus.textContent = '❌ Géolocalisation non supportée';
-            reject(new Error('Géolocalisation non supportée'));
-            return;
-          }
-          
-          elements.locationStatus.textContent = '🔄 Localisation en cours...';
-          
-          navigator.geolocation.getCurrentPosition(
-            position => {
-              userLocation = {
-                latitude: position.coords.latitude.toFixed(6),
-                longitude: position.coords.longitude.toFixed(6)
-              };
-              elements.locationStatus.textContent = '📍 Localisation activée';
-              resolve(userLocation);
-            },
-            error => {
-              let message = 'Erreur de localisation';
-              switch(error.code) {
-                case error.PERMISSION_DENIED:
-                  message = '❌ Permission refusée';
-                  break;
-                case error.POSITION_UNAVAILABLE:
-                  message = '❌ Service indisponible';
-                  break;
-                case error.TIMEOUT:
-                  message = '⚠️ Temps écoulé';
-                  break;
-              }
-              elements.locationStatus.textContent = message;
-              reject(new Error(message));
-            },
-            {
-              enableHighAccuracy: true,
-              timeout: 10000
-            }
-          );
-        });
-      };
-      
-// Soumission du formulaire
-elements.form.addEventListener('submit', async (e) => {
-  e.preventDefault();
-
-  // Reset UI
-  elements.errorMsg.hidden = true;
-  elements.colisInfo.hidden = true;
-  elements.btnText.hidden = true;
-  elements.btnLoader.hidden = false;
-  elements.submitBtn.disabled = true;
-
-  try {
-    // Validation
-    if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
-      throw new Error('Code colis invalide');
-    }
-
-    // 🔽 Obtenir la localisation juste avant d’envoyer
-    if (!userLocation) {
-      await getLocation(); // Cela mettra à jour userLocation
-    }
-
-    // Envoi des données
-    const response = await fetch(config.apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nom: elements.nom.value.trim(),
-        prenom: elements.prenom.value.trim(),
-        numero: elements.numero.value.trim(),
-        code: elements.code.value.trim(),
-        location: userLocation
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Erreur de recherche');
-    }
-
-    if (!data.colis) {
-      throw new Error('Aucune information de colis disponible');
-    }
-
-    // Affichage des résultats
-    displayColisInfo(data.colis);
-  } catch (error) {
-    showError(error.message);
-  } finally {
-    elements.btnText.hidden = false;
-    elements.btnLoader.hidden = true;
-    elements.submitBtn.disabled = false;
-  }
-
-      });
-// 🔍 Affiche les détails d’un colis sélectionné
-function displayColisInfo(colis) {
-  const statusClass = `status-${(colis.status || 'enregistré')}`.toLowerCase();
-
-  // 🧱 Injection dynamique du contenu HTML du colis
-  elements.colisContent.innerHTML = `
-    <div class="colis-header">
-      <h2>
-        Colis #${colis.colisID}
-        <span class="status-badge ${statusClass}">
-          ${(colis.status || 'enregistré').toUpperCase()}
-        </span>
-      </h2>
-      <p class="colis-meta">
-        <strong>Créé le :</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
-      </p>
+    <div class="navigation-arrows">
+        <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
+            <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+            </svg>
+        </a>
+        <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+            <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+            </svg>
+        </button>
     </div>
 
-    <div class="colis-grid">
-      <div class="colis-section">
-        <h3>Expéditeur</h3>
-        <p>${escapeHTML(colis.sender)}</p>
-        <p>${escapeHTML(colis.phone1)}</p>
-      </div>
-
-      <div class="colis-section">
-        <h3>Destinataire</h3>
-        <p>${escapeHTML(colis.recipient)}</p>
-        <p>${escapeHTML(colis.phone)}</p>
-        <p>${escapeHTML(colis.address)}</p>
-      </div>
-
-      <div class="colis-section">
-        <h3>Détails</h3>
-        <p><strong>Type :</strong> ${escapeHTML(colis.type)}</p>
-        <p><strong>Description :</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
-      </div>
-    </div>
-
-    ${colis.photos?.length > 0 ? `
-      <div class="colis-photos">
-        <h3>Photos</h3>
-        <div class="photos-grid">
-          ${colis.photos.slice(0, 2).map(photo => `
-            <img src="${photo.data}" alt="Photo du colis" class="photo-preview" />
-          `).join('')}
-        </div>
-      </div>
-    ` : ''}
-
-    ${colis.history?.length > 0 ? `
-      <div class="colis-timeline">
-        <h3>Historique</h3>
-        <div class="timeline">
-          ${colis.history.map(item => `
-            <div class="timeline-item">
-              <div class="timeline-date">
-                ${new Date(item.date).toLocaleString('fr-FR')}
-              </div>
-              <div class="timeline-content">
-                <strong>${item.status.toUpperCase()}</strong>
-                ${item.location ? `<p>📍 ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
-                ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
-              </div>
+    <div class="container">
+        <h1>🔍 Suivi de colis</h1>
+        <p id="location-status">📍 Localisation en cours...</p>
+        
+        <form id="client-form" class="card">
+            <h2>Rechercher un colis</h2>
+            
+            <div class="form-group">
+                <label for="nom">Nom</label>
+                <input type="text" id="nom" required autocomplete="family-name">
             </div>
-          `).join('')}
+            
+            <div class="form-group">
+                <label for="prenom">Prénom</label>
+                <input type="text" id="prenom" required autocomplete="given-name">
+            </div>
+            
+            <div class="form-group">
+                <label for="numero">Téléphone</label>
+                <input type="tel" id="numero" required autocomplete="tel">
+            </div>
+            
+            <div class="form-group">
+                <label for="code">Code colis</label>
+                <input type="text" id="code" required pattern="[A-Z0-9]{8,20}" placeholder="Ex: ABC12345">
+            </div>
+            
+            <button type="submit" class="btn-primary">
+                <span class="btn-text">📦 Rechercher</span>
+                <span class="btn-loader" hidden></span>
+            </button>
+        </form>
+        
+        <div id="messages">
+            <p id="error-msg" class="message-error" hidden></p>
         </div>
-      </div>
-    ` : ''}
-
-    <div class="action-buttons">
-      <button id="btn-recevoir" class="btn receive-btn">✅ Recevoir</button>
-      <button id="btn-decliner" class="btn decline-btn">❌ Décliner</button>
+        
+        <div id="colis-info" class="card" hidden>
+            <div id="colis-content"></div>
+        </div>
     </div>
-  `;
 
-  // 📦 Affiche la section d'informations colis
-  elements.colisInfo.hidden = false;
-
-  // ✅ Écouteur : clic sur "Recevoir"
-  document.getElementById('btn-recevoir').addEventListener('click', async () => {
-    const codeID = colis.colisID;
-
-    try {
-      showSpinner();
-
-      const response = await fetch('/.netlify/functions/recevoir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codeID }),
-      });
-
-      const data = await response.json();
-      hideSpinner();
-
-      if (response.ok) {
-        showCheckmark();
-        showToast(data.message, 'success');
-      } else {
-        showAlert(data.error || 'Erreur lors de l’enregistrement.', 'error');
-      }
-    } catch (err) {
-      console.error(err);
-      hideSpinner();
-      showAlert('Erreur de connexion au serveur.', 'error');
-    }
-  });
-
-// ❌ Écouteur : clic sur "Décliner"
-document.getElementById('btn-decliner').addEventListener('click', async () => {
-  const codeID = colis.colisID;
-
-  const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
-  if (!confirmed) return;
-
-  try {
-    showSpinner(); // Affichage du spinner lors de l'attente de la réponse du serveur
-
-    const response = await fetch('/.netlify/functions/decliner', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codeID }),
-    });
-
-    const result = await response.json();
-    hideSpinner(); // Masquage du spinner après la réponse
-
-    // Si la réponse est correcte
-    if (response.ok) {
-      // Affichage de l'alerte après avoir confirmé le refus
-      showAlert("Le colis a été supprimé de notre serveur. Veuillez contacter votre expéditeur pour réexpédier le colis.", 'success');
-      elements.colisInfo.hidden = true; // Masquage des informations du colis
-    } else {
-      showAlert(result.error || 'Erreur lors du traitement.', 'error'); // Affichage d'un message d'erreur
-    }
-  } catch (error) {
-    console.error(error);
-    hideSpinner(); // Masquage du spinner en cas d'erreur
-    showAlert('Erreur de connexion au serveur.', 'error'); // Affichage d'une erreur de connexion
-  }
-});
-}
-
-// Fonctions utilitaires
-function showError(message) {
-  elements.errorMsg.textContent = message;
-  elements.errorMsg.hidden = false;
-  elements.colisInfo.hidden = true;
-}
-
-if (response.ok) {
-  showCheckmark();
-  showToast(data.message, 'success');
-  // ou showAlert(...) si besoin
-}
-
-
-
-
-      
-      function escapeHTML(str) {
-        if (!str) return '';
-        return str.toString()
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-      }
-      
-      // Initialisation
-      getLocation().catch(error => {
-        console.error('Erreur de localisation:', error);
-      });
-    });
-  </script>
-
-
-<div id="custom-alert" class="custom-alert hidden">
-    <div class="alert-content">
-      <img id="alert-icon" src="" alt="icon" class="alert-icon">
-      <p id="alert-message">Message</p>
-      <button id="alert-close">OK</button>
+    <!-- Alertes et modaux -->
+    <div id="custom-alert" class="custom-alert hidden">
+        <div class="alert-content">
+            <img id="alert-icon" src="" alt="icon" class="alert-icon">
+            <p id="alert-message">Message</p>
+            <button id="alert-close">OK</button>
+        </div>
     </div>
-  </div>
-  
-  <div id="spinner-overlay" class="spinner-overlay hidden">
-    <div class="spinner"></div>
-  </div>
-
-
-
-  <div id="custom-confirm" class="custom-alert hidden">
-    <div class="alert-content">
-      <img src="https://cdn-icons-png.flaticon.com/512/190/190406.png" alt="question" class="alert-icon" />
-      <p id="confirm-message">Êtes-vous sûr de vouloir refuser ce colis ?</p>
-      <button id="confirm-yes">Oui</button>
-      <button id="confirm-no">Non</button>
+    
+    <div id="spinner-overlay" class="spinner-overlay hidden">
+        <div class="spinner"></div>
     </div>
-  </div>
-  
 
+    <div id="custom-confirm" class="custom-alert hidden">
+        <div class="alert-content">
+            <img src="https://cdn-icons-png.flaticon.com/512/190/190406.png" alt="question" class="alert-icon" />
+            <p id="confirm-message">Êtes-vous sûr de vouloir refuser ce colis ?</p>
+            <button id="confirm-yes">Oui</button>
+            <button id="confirm-no">Non</button>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast hidden">
+        <img id="toast-icon" src="" alt="icon" class="toast-icon" />
+        <span id="toast-message">Message</span>
+    </div>
 
-  <div id="toast" class="toast hidden">
-    <img id="toast-icon" src="" alt="icon" class="toast-icon" />
-    <span id="toast-message">Message</span>
-  </div>
+    <div id="check-animation" class="checkmark-wrapper hidden">
+        <svg class="checkmark" viewBox="0 0 52 52">
+            <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
+            <path class="checkmark-check" fill="none" d="M14 27l7 7 16-16" />
+        </svg>
+    </div>
 
-
-
-
-  <div id="check-animation" class="checkmark-wrapper hidden">
-    <svg class="checkmark" viewBox="0 0 52 52">
-      <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
-      <path class="checkmark-check" fill="none" d="M14 27l7 7 16-16" />
-    </svg>
-  </div>
-  
-
-
-  <script>
-    function showCheckmark(duration = 5000) {
-  const wrapper = document.getElementById('check-animation');
-  wrapper.classList.remove('hidden');
-
-  setTimeout(() => {
-    wrapper.classList.add('hidden');
-  }, duration);
-}
-
-  </script>
-  
-
-  <script>
-    function showToast(message, type = 'info', duration = 3000) {
-  const toast = document.getElementById('toast');
-  const toastMessage = document.getElementById('toast-message');
-  const toastIcon = document.getElementById('toast-icon');
-
-  const icons = {
-    info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
-    success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
-    error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
-  };
-
-  toastMessage.textContent = message;
-  toastIcon.src = icons[type] || icons.info;
-
-  toast.classList.add('show');
-
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, duration);
-}
-
-  </script>
-
-
-  <script>
-    function showConfirm(message) {
-  return new Promise((resolve) => {
-    const confirmBox = document.getElementById('custom-confirm');
-    const confirmMessage = document.getElementById('confirm-message');
-
-    confirmMessage.textContent = message;
-    confirmBox.classList.remove('hidden');
-
-    document.getElementById('confirm-yes').onclick = () => {
-      confirmBox.classList.add('hidden');
-      resolve(true);
-    };
-
-    document.getElementById('confirm-no').onclick = () => {
-      confirmBox.classList.add('hidden');
-      resolve(false);
-    };
-  });
-}
-
-  </script>
-  
-
-
-  <script>
-    function showAlert(message, type = 'info') {
-  const alertBox = document.getElementById('custom-alert');
-  const alertMessage = document.getElementById('alert-message');
-  const alertIcon = document.getElementById('alert-icon');
-
-  alertMessage.textContent = message;
-
-  const icons = {
-    info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
-    success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
-    error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
-  };
-
-  alertIcon.src = icons[type] || icons.info;
-
-  alertBox.classList.remove('hidden');
-
-  document.getElementById('alert-close').onclick = () => {
-    alertBox.classList.add('hidden');
-  };
-}
-
-function showSpinner() {
-  document.getElementById('spinner-overlay').classList.remove('hidden');
-}
-
-function hideSpinner() {
-  document.getElementById('spinner-overlay').classList.add('hidden');
-}
-
-  </script>
-
-
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Configuration
+            const config = {
+                apiEndpoint: '/.netlify/functions/client-handler'
+            };
+            
+            // Éléments DOM
+            const elements = {
+                form: document.getElementById('client-form'),
+                nom: document.getElementById('nom'),
+                prenom: document.getElementById('prenom'),
+                numero: document.getElementById('numero'),
+                code: document.getElementById('code'),
+                submitBtn: document.querySelector('#client-form button[type="submit"]'),
+                btnText: document.querySelector('.btn-text'),
+                btnLoader: document.querySelector('.btn-loader'),
+                locationStatus: document.getElementById('location-status'),
+                colisInfo: document.getElementById('colis-info'),
+                colisContent: document.getElementById('colis-content'),
+                errorMsg: document.getElementById('error-msg')
+            };
+            
+            let userLocation = null;
+            let colisData = null; // Stocke les données du colis
+            let hasSubmitted = false; // Empêche les soumissions multiples
+            
+            // Gestion de la géolocalisation
+            const getLocation = () => {
+                return new Promise((resolve, reject) => {
+                    if (!navigator.geolocation) {
+                        elements.locationStatus.textContent = '❌ Géolocalisation non supportée';
+                        reject(new Error('Géolocalisation non supportée'));
+                        return;
+                    }
+                    
+                    elements.locationStatus.textContent = '🔄 Localisation en cours...';
+                    
+                    navigator.geolocation.getCurrentPosition(
+                        position => {
+                            userLocation = {
+                                latitude: position.coords.latitude.toFixed(6),
+                                longitude: position.coords.longitude.toFixed(6)
+                            };
+                            elements.locationStatus.textContent = '📍 Localisation activée';
+                            resolve(userLocation);
+                        },
+                        error => {
+                            let message = 'Erreur de localisation';
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED:
+                                    message = '❌ Permission refusée';
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    message = '❌ Service indisponible';
+                                    break;
+                                case error.TIMEOUT:
+                                    message = '⚠️ Temps écoulé';
+                                    break;
+                            }
+                            elements.locationStatus.textContent = message;
+                            reject(new Error(message));
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 10000
+                        }
+                    );
+                });
+            };
+            
+            // Soumission du formulaire
+            elements.form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if (hasSubmitted) return;
+                
+                // Reset UI
+                elements.errorMsg.hidden = true;
+                elements.colisInfo.hidden = true;
+                elements.btnText.hidden = true;
+                elements.btnLoader.hidden = false;
+                elements.submitBtn.disabled = true;
+                
+                try {
+                    // Validation
+                    if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
+                        throw new Error('Code colis invalide - doit contenir 8 à 20 caractères alphanumériques');
+                    }
+                    
+                    // Obtenir la localisation
+                    if (!userLocation) {
+                        await getLocation();
+                    }
+                    
+                    // Envoi des données
+                    const response = await fetch(config.apiEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            nom: elements.nom.value.trim(),
+                            prenom: elements.prenom.value.trim(),
+                            numero: elements.numero.value.trim(),
+                            code: elements.code.value.trim(),
+                            location: userLocation
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Erreur lors de la recherche du colis');
+                    }
+                    
+                    if (!data.colis) {
+                        throw new Error('Aucune information de colis disponible pour ce code');
+                    }
+                    
+                    // Stocker les données du colis
+                    colisData = data.colis;
+                    
+                    // Affichage des résultats
+                    displayColisInfo(colisData);
+                } catch (error) {
+                    showError(error.message);
+                } finally {
+                    elements.btnText.hidden = false;
+                    elements.btnLoader.hidden = true;
+                    elements.submitBtn.disabled = false;
+                    hasSubmitted = false;
+                }
+            });
+            
+            // Affiche les détails du colis
+            function displayColisInfo(colis) {
+                const statusClass = `status-${(colis.status || 'enregistré').toLowerCase().replace(/\s+/g, '-')}`;
+                
+                // Injection dynamique du contenu HTML du colis
+                elements.colisContent.innerHTML = `
+                    <div class="colis-header">
+                        <h2>
+                            Colis #${colis.colisID}
+                            <span class="status-badge ${statusClass}">
+                                ${(colis.status || 'enregistré').toUpperCase()}
+                            </span>
+                        </h2>
+                        <p class="colis-meta">
+                            <strong>Créé le :</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+                        </p>
+                    </div>
+                    
+                    <div class="colis-grid">
+                        <div class="colis-section">
+                            <h3>Expéditeur</h3>
+                            <p>${escapeHTML(colis.sender)}</p>
+                            <p>${escapeHTML(colis.phone1)}</p>
+                        </div>
+                        
+                        <div class="colis-section">
+                            <h3>Destinataire</h3>
+                            <p>${escapeHTML(colis.recipient)}</p>
+                            <p>${escapeHTML(colis.phone)}</p>
+                            <p>${escapeHTML(colis.address)}</p>
+                        </div>
+                        
+                        <div class="colis-section">
+                            <h3>Détails</h3>
+                            <p><strong>Type :</strong> ${escapeHTML(colis.type)}</p>
+                            <p><strong>Description :</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
+                        </div>
+                    </div>
+                    
+                    ${colis.photos?.length > 0 ? `
+                        <div class="colis-photos">
+                            <h3>Photos</h3>
+                            <div class="photos-grid">
+                                ${colis.photos.slice(0, 2).map(photo => `
+                                    <img src="${photo.data}" alt="Photo du colis" class="photo-preview" />
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${colis.history?.length > 0 ? `
+                        <div class="colis-timeline">
+                            <h3>Historique</h3>
+                            <div class="timeline">
+                                ${colis.history.map(item => `
+                                    <div class="timeline-item">
+                                        <div class="timeline-date">
+                                            ${new Date(item.date).toLocaleString('fr-FR')}
+                                        </div>
+                                        <div class="timeline-content">
+                                            <strong>${item.status.toUpperCase()}</strong>
+                                            ${item.location ? `<p>📍 ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
+                                            ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="action-buttons">
+                        <button id="btn-recevoir" class="btn receive-btn">✅ Recevoir</button>
+                        <button id="btn-decliner" class="btn decline-btn">❌ Décliner</button>
+                    </div>
+                `;
+                
+                // Affiche la section d'informations colis
+                elements.colisInfo.hidden = false;
+                
+                // Gestion du bouton Recevoir
+                const receiveBtn = document.getElementById('btn-recevoir');
+                receiveBtn.addEventListener('click', async () => {
+                    if (receiveBtn.disabled) return;
+                    
+                    receiveBtn.disabled = true;
+                    receiveBtn.innerHTML = '⏳ Traitement...';
+                    
+                    try {
+                        showSpinner();
+                        
+                        const response = await fetch('/.netlify/functions/recevoir', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ codeID: colis.colisID }),
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            showCheckmark();
+                            showToast(data.message || 'Colis marqué comme reçu avec succès', 'success');
+                            
+                            // Désactiver définitivement le bouton
+                            receiveBtn.disabled = true;
+                            receiveBtn.innerHTML = '✅ Colis reçu';
+                            
+                            // Mettre à jour le statut dans l'affichage
+                            const statusBadge = document.querySelector('.status-badge');
+                            if (statusBadge) {
+                                statusBadge.textContent = 'LIVRÉ';
+                                statusBadge.className = 'status-badge status-livré';
+                            }
+                        } else {
+                            showAlert(data.error || 'Erreur lors de l\'enregistrement', 'error');
+                            receiveBtn.disabled = false;
+                            receiveBtn.innerHTML = '✅ Recevoir';
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        showAlert('Erreur de connexion au serveur', 'error');
+                        receiveBtn.disabled = false;
+                        receiveBtn.innerHTML = '✅ Recevoir';
+                    } finally {
+                        hideSpinner();
+                    }
+                });
+                
+                // Gestion du bouton Décliner
+                document.getElementById('btn-decliner').addEventListener('click', async () => {
+                    const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ? Cette action est irréversible.");
+                    if (!confirmed) return;
+                    
+                    try {
+                        showSpinner();
+                        
+                        const response = await fetch('/.netlify/functions/decliner', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ codeID: colis.colisID }),
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            showAlert(result.message || "Le colis a été refusé avec succès. Veuillez contacter votre expéditeur.", 'success');
+                            elements.colisInfo.hidden = true;
+                        } else {
+                            showAlert(result.error || 'Erreur lors du traitement', 'error');
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        showAlert('Erreur de connexion au serveur', 'error');
+                    } finally {
+                        hideSpinner();
+                    }
+                });
+            }
+            
+            // Fonctions utilitaires
+            function showError(message) {
+                elements.errorMsg.textContent = message;
+                elements.errorMsg.hidden = false;
+                elements.colisInfo.hidden = true;
+            }
+            
+            function escapeHTML(str) {
+                if (!str) return '';
+                return str.toString()
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+            
+            // Gestion des alertes et modaux
+            function showAlert(message, type = 'info') {
+                const alertBox = document.getElementById('custom-alert');
+                const alertMessage = document.getElementById('alert-message');
+                const alertIcon = document.getElementById('alert-icon');
+                
+                alertMessage.textContent = message;
+                
+                const icons = {
+                    info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
+                    success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
+                    error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
+                };
+                
+                alertIcon.src = icons[type] || icons.info;
+                alertBox.classList.remove('hidden');
+                
+                document.getElementById('alert-close').onclick = () => {
+                    alertBox.classList.add('hidden');
+                };
+            }
+            
+            function showSpinner() {
+                document.getElementById('spinner-overlay').classList.remove('hidden');
+            }
+            
+            function hideSpinner() {
+                document.getElementById('spinner-overlay').classList.add('hidden');
+            }
+            
+            function showConfirm(message) {
+                return new Promise((resolve) => {
+                    const confirmBox = document.getElementById('custom-confirm');
+                    const confirmMessage = document.getElementById('confirm-message');
+                    
+                    confirmMessage.textContent = message;
+                    confirmBox.classList.remove('hidden');
+                    
+                    document.getElementById('confirm-yes').onclick = () => {
+                        confirmBox.classList.add('hidden');
+                        resolve(true);
+                    };
+                    
+                    document.getElementById('confirm-no').onclick = () => {
+                        confirmBox.classList.add('hidden');
+                        resolve(false);
+                    };
+                });
+            }
+            
+            function showToast(message, type = 'info', duration = 3000) {
+                const toast = document.getElementById('toast');
+                const toastMessage = document.getElementById('toast-message');
+                const toastIcon = document.getElementById('toast-icon');
+                
+                const icons = {
+                    info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
+                    success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
+                    error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
+                };
+                
+                toastMessage.textContent = message;
+                toastIcon.src = icons[type] || icons.info;
+                
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, duration);
+            }
+            
+            function showCheckmark(duration = 2000) {
+                const wrapper = document.getElementById('check-animation');
+                wrapper.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    wrapper.classList.add('hidden');
+                }, duration);
+            }
+            
+            // Initialisation
+            getLocation().catch(error => {
+                console.error('Erreur de localisation:', error);
+            });
+        });
+    </script>
 </body>
 </html>

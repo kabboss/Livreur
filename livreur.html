@@ -30,6 +30,85 @@
       <p id="location-status" aria-live="polite">📍 Localisation en cours...</p>
     </header>
 
+    
+  <button 
+  id="update-location-global-btn" 
+  class="btn btn-outline-primary btn-sm animate__animated animate__fadeIn" 
+  style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
+  <i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position
+</button>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+  const updateButton = document.getElementById('update-location-global-btn');
+
+  if (updateButton) {
+    updateButton.addEventListener('click', async () => {
+      const codeID = getCurrentCodeID(); // Fonction à définir selon ton contexte
+
+      if (!codeID) {
+        showToast('⚠️ Aucun colis en cours d\'expédition sélectionné.', 'warning');
+        return;
+      }
+
+      updateButton.disabled = true;
+      updateButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mise à jour...';
+
+      if (navigator.geolocation) {
+        showToast('🛰️ Tentative de mise à jour de votre position...', 'info');
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const nouvelleLocalisation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+
+          try {
+            const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ codeID, localisation: nouvelleLocalisation }),
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+              updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2 text-success"></i> Position mise à jour !';
+              showToast('📍 Votre position a été mise à jour avec succès !', 'success');
+              setTimeout(() => {
+                updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+                updateButton.disabled = false;
+              }, 3000);
+            } else {
+              updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
+              updateButton.disabled = false;
+              showToast(`❌ Erreur: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+            }
+
+          } catch (error) {
+            updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
+            updateButton.disabled = false;
+            showToast('⚡ Erreur de connexion lors de la mise à jour', 'error');
+          }
+        }, (error) => {
+          updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+          updateButton.disabled = false;
+          let msg = 'Erreur lors de la récupération de la localisation.';
+          if (error.code === error.PERMISSION_DENIED) msg = '⚠️ Autorisation refusée.';
+          else if (error.code === error.POSITION_UNAVAILABLE) msg = '📍 Position indisponible.';
+          else if (error.code === error.TIMEOUT) msg = '⏳ Délai dépassé.';
+          showToast(msg, 'warning');
+        });
+      } else {
+        updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+        updateButton.disabled = false;
+        showToast('🌐 Géolocalisation non supportée par votre navigateur.', 'error');
+      }
+    });
+  }
+});
+
+</script>
+
     <main>
       <div id="colis-list" class="colis-container"></div>
     </main>
@@ -323,13 +402,10 @@
                       formDiv.classList.remove('animate__fadeIn');
                       formDiv.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
                       setTimeout(() => {
-                        formDiv.remove();
+                        formDiv.style.display = 'none'; // Masquer le formulaire au lieu de le supprimer                        
                         card.querySelector('.button-group').innerHTML = `
                           <p class="info-expedition animate__animated animate__fadeIn"><i class="fas fa-check-double mr-2 text-success"></i> Expédition enregistrée !</p>
                           <p class="instruction-livreur animate__animated animate__fadeIn delay-0-5s"><i class="fas fa-info-circle mr-2 text-info"></i> Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
-                          <button class="update-location-btn btn btn-outline-primary btn-sm mt-2 animate__animated animate__fadeIn delay-1s" data-id="${codeID}">
-                            <i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position
-                          </button>
                         `;
                         card.classList.add('en-cours-expedition');
                         setupLocationUpdateButton(card);
@@ -565,69 +641,7 @@
         });
       }
 
-      function setupLocationUpdateButton(cardElement) {
-        const updateButton = cardElement.querySelector('.update-location-btn');
-        if (updateButton) {
-          updateButton.addEventListener('click', async () => {
-            const codeID = updateButton.dataset.id;
-            updateButton.disabled = true;
-            updateButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mise à jour...';
 
-            if (navigator.geolocation) {
-              showToast('🛰️ Tentative de mise à jour de votre position...', 'info');
-              navigator.geolocation.getCurrentPosition(async (position) => {
-                const nouvelleLocalisation = {
-                  latitude: position.coords.latitude,
-                  longitude: position.coords.longitude,
-                };
-
-                try {
-                  const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ codeID: codeID, localisation: nouvelleLocalisation }),
-                  });
-
-                  const data = await res.json();
-
-                  if (res.ok) {
-                    updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2 text-success"></i> Position mise à jour !';
-                    showToast('📍 Votre position a été mise à jour avec succès !', 'success');
-                    setTimeout(() => {
-                      updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position';
-                      updateButton.disabled = false;
-                    }, 3000);
-                  } else {
-                    updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
-                    updateButton.disabled = false;
-                    showToast(`❌ Erreur lors de la mise à jour: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
-                  }
-                } catch (error) {
-                  updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
-                  updateButton.disabled = false;
-                  showToast('⚡ Erreur de connexion lors de la mise à jour', 'error');
-                }
-              }, (error) => {
-                updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position';
-                updateButton.disabled = false;
-                let errorMessage = 'Erreur lors de la récupération de la localisation.';
-                if (error.code === error.PERMISSION_DENIED) {
-                  errorMessage = '⚠️ Autorisation de localisation refusée.';
-                } else if (error.code === error.POSITION_UNAVAILABLE) {
-                  errorMessage = '📍 Position indisponible.';
-                } else if (error.code === error.TIMEOUT) {
-                  errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
-                }
-                showToast(errorMessage, 'warning');
-              });
-            } else {
-              updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actuliser ma position';
-              updateButton.disabled = false;
-              showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
-            }
-          });
-        }
-      }
 
       function showToast(message, type = 'info') {
         const toast = document.createElement('div');
@@ -657,7 +671,19 @@
 
       // Rafraîchir toutes les 5 minutes
       setInterval(fetchColis, 300000);
+
+
+  
     });
   </script>
+
+<button 
+  id="update-location-global-btn" 
+  class="btn btn-outline-primary btn-sm animate__animated animate__fadeIn" 
+  style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
+  <i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position
+</button>
+
+
 </body>
 </html>
