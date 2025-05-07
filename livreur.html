@@ -390,9 +390,79 @@
             const codeID = btn.dataset.id;
             const card = btn.closest('.card');
 
-            if (!confirm(`Confirmer la livraison du colis #${codeID} ? Cette action est irréversible et nécessitera vos informations.`)) {
-              return;
-            }
+          // Création de la modale d'alerte personnalisée
+      const modalAlert = document.createElement('div');
+      modalAlert.className = 'custom-alert animate__animated animate__fadeIn';
+      modalAlert.innerHTML = `
+        <div class="alert-content">
+          <h3 class="alert-title"><i class="fas fa-question-circle mr-2"></i> Confirmer la livraison ?</h3>
+          <p>Êtes-vous sûr de vouloir marquer le colis <strong>#${codeID}</strong> comme livré ? Cette action est irréversible et nécessitera vos informations.</p>
+          <div class="alert-buttons">
+            <button class="btn btn-secondary cancel-alert-btn"><i class="fas fa-times mr-2"></i> Annuler</button>
+            <button class="btn btn-success confirm-alert-btn" data-id="${codeID}"><i class="fas fa-check mr-2"></i> Confirmer</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modalAlert);
+
+      // Gestion du bouton "Annuler" de l'alerte
+      const cancelAlertBtn = modalAlert.querySelector('.cancel-alert-btn');
+      cancelAlertBtn.addEventListener('click', () => {
+        modalAlert.classList.remove('animate__fadeIn');
+        modalAlert.classList.add('animate__fadeOut');
+        setTimeout(() => modalAlert.remove(), 300);
+      });
+
+      // Gestion du bouton "Confirmer" de l'alerte
+      const confirmAlertBtn = modalAlert.querySelector('.confirm-alert-btn');
+      confirmAlertBtn.addEventListener('click', async () => {
+        const nomLivreur = prompt("Nom du livreur :", "");
+        const prenomLivreur = prompt("Prénom du livreur :", "");
+        const idLivreur = prompt("Identifiant du livreur :", "");
+
+        if (!nomLivreur || !prenomLivreur || !idLivreur) {
+          showToast('Veuillez fournir le nom, le prénom et l\'identifiant du livreur.', 'warning');
+          return;
+        }
+
+        // Fermer l'alerte
+        modalAlert.classList.remove('animate__fadeIn');
+        modalAlert.classList.add('animate__fadeOut');
+        setTimeout(() => modalAlert.remove(), 300);
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Finalisation...';
+
+        try {
+          const res = await fetch('/.netlify/functions/deleteLivraison', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codeID, nomLivreur, prenomLivreur, idLivreur }),
+          });
+
+          const data = await res.json();
+
+          if (res.ok) {
+            showToast('Livraison terminée et colis supprimé avec succès', 'success');
+            card.classList.add('animate__animated', 'animate__fadeOut');
+            setTimeout(() => {
+              card.remove();
+              if (!document.querySelectorAll('.card').length) {
+                colisList.innerHTML = '<div class="empty-state">🎉 Tous les colis ont été livrés !</div>';
+              }
+            }, 300);
+          } else {
+            btn.innerHTML = '✅ Terminer';
+            btn.disabled = false;
+            showToast(data.error || 'Erreur lors de la finalisation', 'error');
+          }
+        } catch (e) {
+          btn.innerHTML = '✅ Terminer';
+          btn.disabled = false;
+          showToast('Erreur de connexion au serveur', 'error');
+        }
+      });
+
 
             // Création d'un formulaire modale pour la confirmation de livraison
             const formHTML = `

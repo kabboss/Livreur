@@ -507,8 +507,8 @@ main {
 /* Styles pour les boutons */
 .btn {
   display: inline-block;
-  font-weight: 400;
-  color: #fff;
+  font-weight: 800;
+  color: #3b06fd;
   text-align: center;
   vertical-align: middle;
   user-select: none;
@@ -801,4 +801,75 @@ main {
 .fade-out {
   opacity: 0;
   transition: opacity 0.3s ease;
+}
+
+
+
+/* Styles pour l'alerte personnalisée */
+.custom-alert {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* Fond semi-transparent */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* S'assurer qu'elle est au-dessus des autres éléments */
+}
+
+.custom-alert .alert-content {
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  width: 90%;
+  max-width: 400px;
+}
+
+.custom-alert .alert-title {
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.custom-alert .alert-buttons {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.custom-alert .alert-buttons button {
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.custom-alert .alert-buttons .confirm-alert-btn {
+  background-color: #28a745;
+  color: white;
+  border: 1px solid #28a745;
+}
+
+.custom-alert .alert-buttons .confirm-alert-btn:hover {
+  background-color: #218838;
+}
+
+.custom-alert .alert-buttons .cancel-alert-btn {
+  background-color: #6c757d;
+  color: white;
+  border: 1px solid #6c757d;
+}
+
+.custom-alert .alert-buttons .cancel-alert-btn:hover {
+  background-color: #5a6268;
+}
+
+.custom-alert .alert-content p {
+  color: #555;
+  margin-bottom: 20px;
 }
