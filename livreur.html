@@ -172,9 +172,9 @@
          </div>
 
          <div class="button-group">
-           ${colis.estExpedie
-            ? '<p class="text-muted"><i class="fas fa-lock mr-2"></i> Ce colis est en cours d\'expédition.</p>'
-            : `<button class="expedier-btn" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
+          ${colis.estExpedie
+            ? `<p class="text-muted"><i class="fas fa-truck mr-2"></i> En cours de livraison par le livreur #${colis.idLivreurEnCharge || 'Non spécifié'}.</p>`
+            : `<button class="expedier-btn btn btn-primary" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
                 <i class="fas fa-truck-loading mr-2"></i> Expédier
               </button>`
           }
