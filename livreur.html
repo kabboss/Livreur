@@ -309,15 +309,15 @@ function displayColis(colisArray) {
         const photos = colis.colis?.photos || [];
         const mainPhoto = photos[0]?.data ? photos[0].data : null;
 
-        // Calcul des distances (s'assure que livreurLocation est défini dans la portée)
-        const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude
+// Calcul des distances (s'assure que livreurLocation est défini dans la portée)
+const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude
             ? calculerDistance(
                 livreurLocation.latitude,
                 livreurLocation.longitude,
                 colis.expediteur.localisation.latitude,
                 colis.expediteur.localisation.longitude
             )
-            : 'N/A';
+            : null; // Correction : Utilisation de null
 
         const distanceDestinataire = livreurLocation && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude
             ? calculerDistance(
@@ -326,7 +326,7 @@ function displayColis(colisArray) {
                 colis.destinataire.localisation.latitude,
                 colis.destinataire.localisation.longitude
             )
-            : 'N/A';
+            : null; // Correction : Utilisation de null
 
         const distanceExpediteurDestinataire = colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude
             ? calculerDistance(
@@ -335,12 +335,12 @@ function displayColis(colisArray) {
                 colis.destinataire.localisation.latitude,
                 colis.destinataire.localisation.longitude
             )
-            : 'N/A';
+            : null; // Correction : Utilisation de null
 
-        const prixLivraison = distanceExpediteurDestinataire !== 'N/A'
-            ? calculerPrixLivraison(parseFloat(distanceExpediteurDestinataire))
-            : 'N/A';
-
+        const prixLivraison = distanceExpediteurDestinataire !== null // Correction : Vérification avec null
+            ? calculerPrixLivraison(distanceExpediteurDestinataire) // Correction : Pas besoin de parseFloat si calculerDistance renvoie un nombre
+            : null; // Correction : Utilisation de null
+            
         card.innerHTML = `
             <div class="colis-image-container">
                 ${mainPhoto ? `

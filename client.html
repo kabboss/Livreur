@@ -211,29 +211,7 @@
             elements.errorMsg.textContent = message;
             elements.errorMsg.hidden = false;
             elements.colisInfo.hidden = true;
-        };
-
-        const displayColisInfo = (colis) => {
-            elements.colisContent.innerHTML = `
-                <p><strong>Nom:</strong> ${colis.nom}</p>
-                <p><strong>Prénom:</strong> ${colis.prenom}</p>
-                <p><strong>Numéro:</strong> ${colis.numero}</p>
-                <p><strong>Code Colis:</strong> ${colis.code}</p>
-                ${colis.localisation ? `<p><strong>Localisation (approx.):</strong> Latitude: ${colis.localisation.latitude}, Longitude: ${colis.localisation.longitude}</p>` : '<p><strong>Localisation:</strong> Non disponible</p>'}
-                <p><strong>Date de création:</strong> ${new Date(colis.dateCreation).toLocaleString()}</p>
-                ${colis.details ? `<p><strong>Détails:</strong> ${colis.details}</p>` : ''}
-                ${colis.type ? `<p><strong>Type de colis:</strong> ${colis.type}</p>` : ''}
-                ${colis.photos && colis.photos.length > 0 ? `
-                    <p><strong>Photos:</strong></p>
-                    <div>
-                        ${colis.photos.map(photo => `<img src="${photo.data}" alt="${photo.name}" style="max-width: 100px; margin-right: 5px;">`).join('')}
-                    </div>
-                ` : ''}
-                `;
-            elements.colisInfo.hidden = false;
-            elements.errorMsg.hidden = true;
-        };
-
+        }; 
         // Obtenir la localisation au chargement de la page
         getLocation();
 
@@ -297,7 +275,7 @@
             }
         });
   
-        
+
 // 🔍 Affiche les détails d’un colis sélectionné
 function displayColisInfo(colis) {
   const statusClass = `status-${(colis.status || 'enregistré')}`.toLowerCase();

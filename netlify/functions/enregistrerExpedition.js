@@ -21,7 +21,7 @@ exports.handler = async function(event, context) {
             telephoneLivreur2: telephoneLivreur2,
             idLivreur: idLivreur,
             dateDebut: new Date(),
-            statut: 'en cours de récupération', // Statut initial dans la nouvelle collection
+            statut: 'En cours', // Statut initial dans la nouvelle collection
             distanceExpediteur: distanceExpediteur,
             distanceDestinataire: distanceDestinataire,
             distanceExpediteurDestinataire: distanceExpediteurDestinataire,
