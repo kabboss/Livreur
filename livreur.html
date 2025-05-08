@@ -253,7 +253,7 @@ function displayColis(colisArray) {
                 livreurLocation.longitude,
                 colis.expediteur.localisation.latitude,
                 colis.expediteur.localisation.longitude
-            ).toFixed(2)
+            )
             : 'N/A';
 
         const distanceDestinataire = livreurLocation && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude
@@ -262,7 +262,7 @@ function displayColis(colisArray) {
                 livreurLocation.longitude,
                 colis.destinataire.localisation.latitude,
                 colis.destinataire.localisation.longitude
-            ).toFixed(2)
+            )
             : 'N/A';
 
         const distanceExpediteurDestinataire = colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude
@@ -271,7 +271,7 @@ function displayColis(colisArray) {
                 colis.expediteur.localisation.longitude,
                 colis.destinataire.localisation.latitude,
                 colis.destinataire.localisation.longitude
-            ).toFixed(2)
+            )
             : 'N/A';
 
         const prixLivraison = distanceExpediteurDestinataire !== 'N/A'
