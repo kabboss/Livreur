@@ -275,7 +275,7 @@ function displayColis(colisArray) {
             : 'N/A';
 
         const prixLivraison = distanceExpediteurDestinataire !== 'N/A'
-            ? calculerPrixLivraison(parseFloat(distanceExpediteurDestinataire)).toFixed(2)
+            ? calculerPrixLivraison(parseFloat(distanceExpediteurDestinataire))
             : 'N/A';
 
         card.innerHTML = `
