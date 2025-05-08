@@ -941,3 +941,65 @@ main {
 .update-position-btn i {
   font-size: 16px;
 }
+
+
+
+.material-icons.animated-location {
+  font-size: 28px;
+  color: #007bff;
+  transition: transform 0.3s ease, color 0.3s ease;
+  cursor: pointer;
+}
+
+/* Hover = couleur et légère élévation */
+.material-icons.animated-location:hover {
+  color: #0056b3;
+  transform: translateY(-2px) scale(1.1);
+}
+
+/* Clic = effet de pression */
+.material-icons.animated-location:active {
+  transform: scale(0.95);
+}
+
+
+
+
+
+/* Style général du bouton */
+.terminer-btn {
+  display: inline-flex;
+  align-items: center;
+  background-color: #28a745; /* Vert pour le succès */
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  font-family: Arial, sans-serif;
+}
+
+/* Animation de l'icône check_circle */
+.material-icons.animated-check {
+  font-size: 20px;
+  margin-right: 8px; /* Espacement entre l'icône et le texte */
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+
+/* Effet hover pour le bouton */
+.terminer-btn:hover {
+  background-color: #218838; /* Vert plus foncé */
+  transform: scale(1.05); /* Légère élévation */
+}
+
+/* Effet lors du clic */
+.terminer-btn:active {
+  transform: scale(0.95); /* Effet de pression */
+}
+
+/* Optionnel : Animation pour l'icône au survol */
+.terminer-btn:hover .material-icons.animated-check {
+  transform: rotate(360deg); /* Rotation au survol */
+}

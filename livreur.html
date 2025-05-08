@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Interface livreur pour la gestion des colis">
+  <!-- Font Awesome CDN -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <title>📦 Interface Livreur | Gestion des Colis</title>
   <link rel="stylesheet" href="livreur.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -344,8 +347,10 @@ function displayColis(colisArray) {
                             </button>`
                     }
                     <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Livraison Terminer ${colis.codeID}">
-                        ✅ Terminer
-                    </button>
+    <span class="material-icons animated-check">check_circle</span>
+
+</button>
+
                 </div>
             </div>
         `;
@@ -398,7 +403,7 @@ function displayColis(colisArray) {
     const buttonGroup = card.querySelector('.button-group');
     const updateBtn = document.createElement('button');
     updateBtn.className = 'update-position-btn btn btn-info';
-    updateBtn.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+    updateBtn.innerHTML = '<span class="material-icons animated-location">location_on</span>';
 
     updateBtn.onclick = () => {
         const codeID = card.dataset.id;
