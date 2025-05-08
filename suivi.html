@@ -135,59 +135,58 @@
 
         // Écouteur d'événement pour le bouton de suivi
         trackElements.trackButton.addEventListener('click', async () => {
-            const trackingCode = trackElements.trackingCodeInput.value.trim();
+    const trackingCode = trackElements.trackingCodeInput.value.trim();
 
-            if (!/^[A-Z0-9]{8,20}$/.test(trackingCode)) {
-                showTrackingError('Code de suivi invalide.');
-                return;
-            }
+    if (!/^[A-Z0-9]{8,20}$/.test(trackingCode)) {
+        showTrackingError('Code de suivi invalide.');
+        return;
+    }
 
-            // Reset UI
-            trackElements.trackingInfoDiv.classList.add('hidden');
-            trackElements.trackingErrorMsgDiv.classList.add('hidden');
-            trackElements.trackButton.querySelector('.btn-text').hidden = true;
-            trackElements.trackButton.querySelector('.btn-loader').hidden = false;
-            trackElements.trackButton.querySelector('.btn-loader').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            trackElements.trackButton.disabled = true;
+    // Reset UI
+    trackElements.trackingInfoDiv.classList.add('hidden');
+    trackElements.trackingErrorMsgDiv.classList.add('hidden');
+    trackElements.trackButton.querySelector('.btn-text').hidden = true;
+    trackElements.trackButton.querySelector('.btn-loader').hidden = false;
+    trackElements.trackButton.querySelector('.btn-loader').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    trackElements.trackButton.disabled = true;
 
-            try {
-                const response = await fetch('/.netlify/functions/suivre-expedition', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ codeID: trackingCode })
-                });
-
-                const data = await response.json();
-
-                trackElements.trackButton.querySelector('.btn-text').hidden = false;
-                trackElements.trackButton.querySelector('.btn-loader').hidden = true;
-                trackElements.trackButton.querySelector('.btn-loader').innerHTML = '';
-                trackElements.trackButton.disabled = false;
-
-                if (response.ok) {
-                    if (data.expedition) {
-                        displayTrackingInfo(data.expedition);
-                    } else if (data.message) {
-                        showToast(data.message, 'info'); // Afficher le message de patience en toast
-                    } else {
-                        // Modification ici pour afficher l'alerte spécifique
-                        showTrackingError('Le processus d\'expédition pour ce colis n\'a pas encore commencé. Veuillez réessayer de suivre son statut ultérieurement.');
-                    }
-                } else {
-                    // Conserver l'affichage de l'erreur serveur générique
-                    showTrackingError(data.error || 'Erreur lors de la récupération des informations de suivi.');
-                }
-
-            } catch (error) {
-                console.error('Erreur lors de la requête de suivi :', error);
-                showToast('Erreur de connexion au serveur.', 'error'); // Afficher l'erreur en toast
-                trackElements.trackButton.querySelector('.btn-text').hidden = false;
-                trackElements.trackButton.querySelector('.btn-loader').hidden = true;
-                trackElements.trackButton.querySelector('.btn-loader').innerHTML = '';
-                trackElements.trackButton.disabled = false;
-            }
+    try {
+        const response = await fetch('/.netlify/functions/suivre-expedition', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codeID: trackingCode })
         });
 
+        const data = await response.json();
+
+        trackElements.trackButton.querySelector('.btn-text').hidden = false;
+        trackElements.trackButton.querySelector('.btn-loader').hidden = true;
+        trackElements.trackButton.querySelector('.btn-loader').innerHTML = '';
+        trackElements.trackButton.disabled = false;
+
+        if (response.ok) {
+            if (data.expedition) {
+                displayTrackingInfo(data.expedition);
+            } else if (data.message) {
+                // Afficher le message spécifique renvoyé par le serveur (code trouvé dans livraisons)
+                showTrackingError(data.message);
+            } else {
+                showTrackingError('Réponse inattendue du serveur.');
+            }
+        } else {
+            // Afficher l'erreur "Code de colis invalide ou inexistant" pour les statuts non-200
+            showTrackingError(data.error || 'Erreur lors de la récupération des informations de suivi.');
+        }
+
+    } catch (error) {
+        console.error('Erreur lors de la requête de suivi :', error);
+        showToast('Erreur de connexion au serveur.', 'error');
+        trackElements.trackButton.querySelector('.btn-text').hidden = false;
+        trackElements.trackButton.querySelector('.btn-loader').hidden = true;
+        trackElements.trackButton.querySelector('.btn-loader').innerHTML = '';
+        trackElements.trackButton.disabled = false;
+    }
+});
         function showToast(message, type = 'default') {
             const toastContainer = document.getElementById('toast-container');
             const toast = document.createElement('div');

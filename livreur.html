@@ -224,23 +224,23 @@ function calculerDistance(lat1, lon1, lat2, lon2) {
     do {
         sinλ = Math.sin(λ);
         cosλ = Math.cos(λ);
-        sinσ = Math.sqrt((cosU2 * sinλ) * (cosU2 * sinλ) + 
-                (cosU1 * sinU2 - sinU1 * cosU2 * cosλ) * 
-                (cosU1 * sinU2 - sinU1 * cosU2 * cosλ));
-        
+        sinσ = Math.sqrt((cosU2 * sinλ) * (cosU2 * sinλ) +
+                        (cosU1 * sinU2 - sinU1 * cosU2 * cosλ) *
+                        (cosU1 * sinU2 - sinU1 * cosU2 * cosλ));
+
         if (sinσ === 0) return 0; // points coïncidents
-        
+
         cosσ = sinU1 * sinU2 + cosU1 * cosU2 * cosλ;
         σ = Math.atan2(sinσ, cosσ);
         const sinα = cosU1 * cosU2 * sinλ / sinσ;
         cosSqα = 1 - sinα * sinα;
         cos2σM = cosσ - 2 * sinU1 * sinU2 / cosSqα;
-        
+
         if (isNaN(cos2σM)) cos2σM = 0; // ligne équatoriale
         const C = f / 16 * cosSqα * (4 + f * (4 - 3 * cosSqα));
         λʹ = λ;
-        λ = L + (1 - C) * f * sinα * 
-            (σ + C * sinσ * (cos2σM + C * cosσ * (-1 + 2 * cos2σM * cos2σM)));
+        λ = L + (1 - C) * f * sinα *
+                (σ + C * sinσ * (cos2σM + C * cosσ * (-1 + 2 * cos2σM * cos2σM)));
     } while (Math.abs(λ - λʹ) > 1e-12 && --iterLimit > 0);
 
     if (iterLimit === 0) {
@@ -250,13 +250,13 @@ function calculerDistance(lat1, lon1, lat2, lon2) {
     const uSq = cosSqα * (a * a - b * b) / (b * b);
     const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
     const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-    const Δσ = B * sinσ * (cos2σM + B / 4 * 
-            (cosσ * (-1 + 2 * cos2σM * cos2σM) - 
-             B / 6 * cos2σM * (-3 + 4 * sinσ * sinσ) * 
-             (-3 + 4 * cos2σM * cos2σM)));
+    const Δσ = B * sinσ * (cos2σM + B / 4 *
+                        (cosσ * (-1 + 2 * cos2σM * cos2σM) -
+                         B / 6 * cos2σM * (-3 + 4 * sinσ * sinσ) *
+                         (-3 + 4 * cos2σM * cos2σM)));
 
     const s = b * A * (σ - Δσ); // Distance en mètres
-    return (s / 1000).toFixed(3); // Conversion en kilomètres avec 3 décimales
+    return s / 1000; // Conversion en kilomètres (retourne un nombre)
 }
 
 // Fonction de fallback (Haversine)
@@ -268,11 +268,11 @@ function distanceHaversine(lat1, lon1, lat2, lon2) {
     const Δλ = (lon2 - lon1) * Math.PI / 180;
 
     const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return (R * c / 1000).toFixed(3); // Distance en kilomètres avec 3 décimales
+    return R * c / 1000; // Distance en kilomètres (retourne un nombre)
 }
 
 
@@ -340,7 +340,7 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
         const prixLivraison = distanceExpediteurDestinataire !== null // Correction : Vérification avec null
             ? calculerPrixLivraison(distanceExpediteurDestinataire) // Correction : Pas besoin de parseFloat si calculerDistance renvoie un nombre
             : null; // Correction : Utilisation de null
-            
+
         card.innerHTML = `
             <div class="colis-image-container">
                 ${mainPhoto ? `
@@ -683,10 +683,18 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
 
 
 
-const distanceExpediteur = card.querySelector('.coordonnees.expediteur .distance')?.textContent.split(': ')[1]?.split(' ')[0];
-const distanceDestinataire = card.querySelector('.coordonnees.destinataire .distance')?.textContent.split(': ')[1]?.split(' ')[0];
-const distanceExpediteurDestinataire = card.querySelector('.informations-livraison p:nth-child(1)')?.textContent.split(': ')[1]?.split(' ')[0];
+const distanceExpediteurText = card.querySelector('.coordonnees.expediteur .distance')?.textContent.split(': ')[1];
+const distanceExpediteur = distanceExpediteurText ? parseFloat(distanceExpediteurText) : null;
+
+const distanceDestinataireText = card.querySelector('.coordonnees.destinataire .distance')?.textContent.split(': ')[1];
+const distanceDestinataire = distanceDestinataireText ? parseFloat(distanceDestinataireText) : null;
+
+const distanceExpediteurDestinataireText = card.querySelector('.informations-livraison p:nth-child(1)')?.textContent.split(': ')[1];
+const distanceExpediteurDestinataire = distanceExpediteurDestinataireText ? parseFloat(distanceExpediteurDestinataireText) : null;
+
 const prixLivraison = card.querySelector('.informations-livraison p:nth-child(2)')?.textContent.split(': ')[1];
+
+
 
 const res = await fetch('/.netlify/functions/enregistrerExpedition', {
     method: 'POST',
