@@ -10,45 +10,47 @@ exports.handler = async (event, context) => {
         await client.connect();
         const db = client.db(dbName);
         const expeditionCollection = db.collection('cour_expedition');
-        const livraisonsCollection = db.collection('livraisons'); // Assurez-vous du nom de votre collection de livraisons
+        const livraisonCollection = db.collection('Livraison'); // Utilisation du nom exact de la collection "Livraison"
 
         const { codeID } = JSON.parse(event.body);
 
-        const expedition = await expeditionCollection.findOne({ codeID: codeID });
+        // Rechercher le colis dans la collection "cour_expedition" (processus d'expédition démarré)
+        const expeditionInfo = await expeditionCollection.findOne({ codeID: codeID });
 
-        if (expedition) {
+        if (expeditionInfo) {
             return {
                 statusCode: 200,
-                body: JSON.stringify({ expedition: expedition }),
+                body: JSON.stringify({ expedition: expeditionInfo }),
                 headers: {
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
                 }
             };
-        } else {
-            // Vérifier si le colis existe dans la collection principale des livraisons
-            const colisExistant = await livraisonsCollection.findOne({ colisID: codeID }); // Assurez-vous du bon champ d'identification
-
-            if (colisExistant) {
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({ message: 'Le processus d\'expédition pour ce colis n\'a pas encore commencé. Veuillez réessayer de suivre son statut ultérieurement.' }),
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                };
-            } else {
-                return {
-                    statusCode: 404,
-                    body: JSON.stringify({ error: 'Code de colis invalide ou inexistant.' }),
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                };
-            }
         }
+
+        // Si non trouvé dans "cour_expedition", rechercher dans la collection "Livraison" (colis enregistré mais pas encore expédié)
+        const colisEnregistre = await livraisonCollection.findOne({ codeID: codeID }); // Assurez-vous que le champ est bien "codeID"
+
+        if (colisEnregistre) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ message: 'Le processus d\'expédition pour ce colis n\'a pas encore démarré. Veuillez réessayer de suivre son statut ultérieurement.' }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            };
+        }
+
+        // Si non trouvé dans aucune des collections
+        return {
+            statusCode: 404,
+            body: JSON.stringify({ error: 'Code de colis invalide ou inexistant.' }),
+            headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            }
+        };
 
     } catch (error) {
         console.error('Erreur lors de la récupération des informations d\'expédition :', error);

@@ -647,52 +647,71 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
             });
 
             confirmBtn.addEventListener('click', async () => {
-              const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
-              const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
-              const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
+    const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
+    const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
+    const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
 
-              if (!livreurID || !livreurTel1) {
-                showToast('⚠️ L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'warning');
-                const idInput = document.getElementById(`livreur-id-${codeID}`);
-                const tel1Input = document.getElementById(`livreur-tel1-${codeID}`);
-                if (!livreurID) idInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
-                if (!livreurTel1) tel1Input.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
-                setTimeout(() => {
-                  idInput.classList.remove('is-invalid', 'animate__shakeX');
-                  tel1Input.classList.remove('is-invalid', 'animate__shakeX');
-                }, 1000);
-                return;
-              }
+    if (!livreurID || !livreurTel1) {
+        showToast('⚠️ L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'warning');
+        const idInput = document.getElementById(`livreur-id-${codeID}`);
+        const tel1Input = document.getElementById(`livreur-tel1-${codeID}`);
+        if (!livreurID) idInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+        if (!livreurTel1) tel1Input.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+        setTimeout(() => {
+            idInput.classList.remove('is-invalid', 'animate__shakeX');
+            tel1Input.classList.remove('is-invalid', 'animate__shakeX');
+        }, 1000);
+        return;
+    }
 
-              confirmBtn.disabled = true;
-              confirmBtn.querySelector('.btn-inner').style.display = 'none';
-              confirmBtn.querySelector('.btn-loading').style.display = 'inline-block';
-              cancelBtn.disabled = true;
-              cancelBtn.classList.add('disabled');
+    confirmBtn.disabled = true;
+    confirmBtn.querySelector('.btn-inner').style.display = 'none';
+    confirmBtn.querySelector('.btn-loading').style.display = 'inline-block';
+    cancelBtn.disabled = true;
+    cancelBtn.classList.add('disabled');
 
-              try {
-                if (navigator.geolocation) {
-                  showToast('🛰️ Récupération de votre position...', 'info');
-                  navigator.geolocation.getCurrentPosition(async (position) => {
-                    const localisationLivreur = {
-                      latitude: position.coords.latitude,
-                      longitude: position.coords.longitude,
-                    };
+    try {
+        if (navigator.geolocation) {
+            showToast('🛰️ Récupération de votre position...', 'info');
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const localisationLivreur = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                };
 
+                let distanceExpediteur = null;
+                if (colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude) {
+                    distanceExpediteur = calculerDistance(
+                        localisationLivreur.latitude,
+                        localisationLivreur.longitude,
+                        colis.expediteur.localisation.latitude,
+                        colis.expediteur.localisation.longitude
+                    );
+                }
 
+                let distanceDestinataire = null;
+                if (colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude) {
+                    distanceDestinataire = calculerDistance(
+                        localisationLivreur.latitude,
+                        localisationLivreur.longitude,
+                        colis.destinataire.localisation.latitude,
+                        colis.destinataire.localisation.longitude
+                    );
+                }
 
+                let distanceExpediteurDestinataire = null;
+                if (colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude) {
+                    distanceExpediteurDestinataire = calculerDistance(
+                        colis.expediteur.localisation.latitude,
+                        colis.expediteur.localisation.longitude,
+                        colis.destinataire.localisation.latitude,
+                        colis.destinataire.localisation.longitude
+                    );
+                }
 
-                    const distanceExpediteurText = card.querySelector('.coordonnees.expediteur .distance')?.textContent.split(': ')[1];
-                const distanceExpediteur = distanceExpediteurText ? parseFloat(distanceExpediteurText) : null;
-
-                const distanceDestinataireText = card.querySelector('.coordonnees.destinataire .distance')?.textContent.split(': ')[1];
-                const distanceDestinataire = distanceDestinataireText ? parseFloat(distanceDestinataireText) : null;
-
-                const distanceExpediteurDestinataireText = card.querySelector('.informations-livraison p:nth-child(1)')?.textContent.split(': ')[1];
-                const distanceExpediteurDestinataire = distanceExpediteurDestinataireText ? parseFloat(distanceExpediteurDestinataireText) : null;
-
-                const prixLivraisonElement = card.querySelector('.informations-livraison p:nth-child(2)')?.textContent.split(': ')[1]?.trim();
-                const prixLivraisonToSend = prixLivraisonElement !== 'N/A' ? prixLivraisonElement : null;
+                const prixLivraison = distanceExpediteurDestinataire !== null
+                    ? calculerPrixLivraison(distanceExpediteurDestinataire)
+                    : null;
 
                 const res = await fetch('/.netlify/functions/enregistrerExpedition', {
                     method: 'POST',
@@ -706,72 +725,71 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
                         distanceExpediteur: distanceExpediteur,
                         distanceDestinataire: distanceDestinataire,
                         distanceExpediteurDestinataire: distanceExpediteurDestinataire,
-                        prixLivraison: prixLivraisonToSend, // Utilisation de prixLivraisonToSend
+                        prixLivraison: prixLivraison,
                     }),
                 });
 
+                const data = await res.json();
 
-                    const data = await res.json();
-
-                    if (res.ok) {
-                      formDiv.classList.remove('animate__fadeIn');
-                      formDiv.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
-                      setTimeout(() => {
-                        formDiv.style.display = 'none'; // Masquer le formulaire au lieu de le supprimer                        
+                if (res.ok) {
+                    formDiv.classList.remove('animate__fadeIn');
+                    formDiv.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+                    setTimeout(() => {
+                        formDiv.style.display = 'none';
                         card.querySelector('.button-group').innerHTML = `
                           <p class="info-expedition animate__animated animate__fadeIn"><i class="fas fa-check-double mr-2 text-success"></i> Expédition enregistrée !</p>
                           <p class="instruction-livreur animate__animated animate__fadeIn delay-0-5s"><i class="fas fa-info-circle mr-2 text-info"></i> Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
                         `;
                         card.classList.add('en-cours-expedition');
                         setupLocationUpdateButton(card);
-                      }, 300);
-                      showToast('✅ Informations d\'expédition enregistrées avec succès !', 'success');
-                    } else {
-                      confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
-                      confirmBtn.disabled = false;
-                      confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
-                      confirmBtn.querySelector('.btn-loading').style.display = 'none';
-                      cancelBtn.disabled = false;
-                      cancelBtn.classList.remove('disabled');
-                      showToast(`❌ Erreur lors de l'enregistrement: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
-                    }
-
-                  }, (error) => {
+                    }, 300);
+                    showToast('✅ Informations d\'expédition enregistrées avec succès !', 'success');
+                } else {
                     confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
                     confirmBtn.disabled = false;
                     confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
                     confirmBtn.querySelector('.btn-loading').style.display = 'none';
                     cancelBtn.disabled = false;
                     cancelBtn.classList.remove('disabled');
-                    let errorMessage = 'Erreur lors de la récupération de la localisation.';
-                    if (error.code === error.PERMISSION_DENIED) {
-                      errorMessage = '⚠️ Autorisation de localisation refusée.';
-                    } else if (error.code === error.POSITION_UNAVAILABLE) {
-                      errorMessage = '📍 Position indisponible.';
-                    } else if (error.code === error.TIMEOUT) {
-                      errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
-                    }
-                    showToast(errorMessage, 'warning');
-                  });
-                } else {
-                  confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
-                  confirmBtn.disabled = false;
-                  confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
-                  confirmBtn.querySelector('.btn-loading').style.display = 'none';
-                  cancelBtn.disabled = false;
-                  cancelBtn.classList.remove('disabled');
-                  showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+                    showToast(`❌ Erreur lors de l'enregistrement: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
                 }
-              } catch (e) {
+
+            }, (error) => {
                 confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
                 confirmBtn.disabled = false;
                 confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
                 confirmBtn.querySelector('.btn-loading').style.display = 'none';
                 cancelBtn.disabled = false;
                 cancelBtn.classList.remove('disabled');
-                showToast('⚡ Erreur de connexion au serveur.', 'error');
-              }
+                let errorMessage = 'Erreur lors de la récupération de la localisation.';
+                if (error.code === error.PERMISSION_DENIED) {
+                    errorMessage = '⚠️ Autorisation de localisation refusée.';
+                } else if (error.code === error.POSITION_UNAVAILABLE) {
+                    errorMessage = '📍 Position indisponible.';
+                } else if (error.code === error.TIMEOUT) {
+                    errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
+                }
+                showToast(errorMessage, 'warning');
             });
+        } else {
+            confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+            confirmBtn.disabled = false;
+            confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+            confirmBtn.querySelector('.btn-loading').style.display = 'none';
+            cancelBtn.disabled = false;
+            cancelBtn.classList.remove('disabled');
+            showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+        }
+    } catch (e) {
+        confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+        confirmBtn.disabled = false;
+        confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+        confirmBtn.querySelector('.btn-loading').style.display = 'none';
+        cancelBtn.disabled = false;
+        cancelBtn.classList.remove('disabled');
+        showToast('⚡ Erreur de connexion au serveur.', 'error');
+    }
+});
           });
         });
 
