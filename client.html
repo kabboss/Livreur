@@ -212,6 +212,13 @@
             elements.errorMsg.hidden = false;
             elements.colisInfo.hidden = true;
         }; 
+
+      if (response.ok) {
+  showCheckmark();
+  showToast(data.message, 'success');
+  // ou showAlert(...) si besoin
+}
+
         // Obtenir la localisation au chargement de la page
         getLocation();
 
@@ -440,18 +447,8 @@ document.getElementById('btn-decliner').addEventListener('click', async () => {
 });
 }
 
-// Fonctions utilitaires
-function showError(message) {
-  elements.errorMsg.textContent = message;
-  elements.errorMsg.hidden = false;
-  elements.colisInfo.hidden = true;
-}
 
-if (response.ok) {
-  showCheckmark();
-  showToast(data.message, 'success');
-  // ou showAlert(...) si besoin
-}
+
 
 
 
