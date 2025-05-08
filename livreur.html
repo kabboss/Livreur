@@ -10,6 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
+<br>
+<br>
 
   <div class="navigation-arrows">
     <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
@@ -31,85 +33,121 @@
     </header>
 
     
-  <button 
-  id="update-location-global-btn" 
-  class="btn btn-outline-primary btn-sm animate__animated animate__fadeIn" 
-  style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
-  <i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position
+  <button
+    id="update-location-global-btn"
+    class="btn btn-outline-primary btn-sm animate__animated animate__fadeIn"
+    style="position: fixed; top: 20px; left: 20px; z-index: 9999;">
+    <i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position
 </button>
 
 <script>
+
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast-bar ${type}`;
+  toast.innerHTML = `
+    <span>${message}</span>
+    <span class="close-btn">&times;</span>
+  `;
+
+  // Ajout du toast à la page
+  document.body.appendChild(toast);
+
+  // Fermeture manuelle
+  toast.querySelector('.close-btn').onclick = () => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 500);
+  };
+
+  // Animation d’apparition
+  setTimeout(() => toast.classList.add('show'), 50);
+
+  // Fermeture automatique après 4 secondes
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 500);
+  }, 4000);
+}
+
+
   document.addEventListener('DOMContentLoaded', () => {
-  const updateButton = document.getElementById('update-location-global-btn');
+    const updateButton = document.getElementById('update-location-global-btn');
 
-  if (updateButton) {
-    updateButton.addEventListener('click', async () => {
-      const codeID = getCurrentCodeID(); // Fonction à définir selon ton contexte
+    // Définition de la fonction getCurrentCodeID()
+    function getCurrentCodeID() {
+      // Exemple : on récupère l'ID depuis un input caché
+      const input = document.getElementById('current-code-id');
+      return input ? input.value : null;
+    }
 
-      if (!codeID) {
-        showToast('⚠️ Aucun colis en cours d\'expédition sélectionné.', 'warning');
-        return;
-      }
+    if (updateButton) {
+      updateButton.addEventListener('click', async () => {
+        const codeID = getCurrentCodeID();
 
-      updateButton.disabled = true;
-      updateButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mise à jour...';
+        if (!codeID) {
+          showToast('⚠️ Aucun colis en cours d\'expédition sélectionné.', 'warning');
+          return;
+        }
 
-      if (navigator.geolocation) {
-        showToast('🛰️ Tentative de mise à jour de votre position...', 'info');
-        navigator.geolocation.getCurrentPosition(async (position) => {
-          const nouvelleLocalisation = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          };
+        updateButton.disabled = true;
+        updateButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mise à jour...';
 
-          try {
-            const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ codeID, localisation: nouvelleLocalisation }),
-            });
+        if (navigator.geolocation) {
+          showToast('🛰️ Tentative de mise à jour de votre position...', 'info');
+          navigator.geolocation.getCurrentPosition(async (position) => {
+            const nouvelleLocalisation = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            };
 
-            const data = await res.json();
+            try {
+              const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ codeID, localisation: nouvelleLocalisation }),
+              });
 
-            if (res.ok) {
-              updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2 text-success"></i> Position mise à jour !';
-              showToast('📍 Votre position a été mise à jour avec succès !', 'success');
-              setTimeout(() => {
-                updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+              const data = await res.json();
+
+              if (res.ok) {
+                updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2 text-success"></i> Position mise à jour !';
+                showToast('📍 Votre position a été mise à jour avec succès !', 'success');
+                setTimeout(() => {
+                  updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+                  updateButton.disabled = false;
+                }, 3000);
+              } else {
+                updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
                 updateButton.disabled = false;
-              }, 3000);
-            } else {
+                showToast(`❌ Erreur: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+              }
+
+            } catch (error) {
               updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
               updateButton.disabled = false;
-              showToast(`❌ Erreur: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+              showToast('⚡ Erreur de connexion lors de la mise à jour', 'error');
             }
-
-          } catch (error) {
-            updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
+          }, (error) => {
+            updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
             updateButton.disabled = false;
-            showToast('⚡ Erreur de connexion lors de la mise à jour', 'error');
-          }
-        }, (error) => {
+            let msg = 'Erreur lors de la récupération de la localisation.';
+            if (error.code === error.PERMISSION_DENIED) msg = '⚠️ Autorisation refusée.';
+            else if (error.code === error.POSITION_UNAVAILABLE) msg = '📍 Position indisponible.';
+            else if (error.code === error.TIMEOUT) msg = '⏳ Délai dépassé.';
+            showToast(msg, 'warning');
+          });
+        } else {
           updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
           updateButton.disabled = false;
-          let msg = 'Erreur lors de la récupération de la localisation.';
-          if (error.code === error.PERMISSION_DENIED) msg = '⚠️ Autorisation refusée.';
-          else if (error.code === error.POSITION_UNAVAILABLE) msg = '📍 Position indisponible.';
-          else if (error.code === error.TIMEOUT) msg = '⏳ Délai dépassé.';
-          showToast(msg, 'warning');
-        });
-      } else {
-        updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
-        updateButton.disabled = false;
-        showToast('🌐 Géolocalisation non supportée par votre navigateur.', 'error');
-      }
-    });
-  }
-});
-
+          showToast('🌐 Géolocalisation non supportée par votre navigateur.', 'error');
+        }
+      });
+    }
+  });
 </script>
 
-    <main>
+
+<main>
       <div id="colis-list" class="colis-container"></div>
     </main>
   </div>
@@ -677,12 +715,18 @@
     });
   </script>
 
-<button 
-  id="update-location-global-btn" 
-  class="btn btn-outline-primary btn-sm animate__animated animate__fadeIn" 
-  style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
-  <i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position
-</button>
+<div class="navigation-arrows">
+  <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
+    <svg viewBox="0 0 24 24">
+      <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+    </svg>
+  </a>
+  <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+    <svg viewBox="0 0 24 24">
+      <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+    </svg>
+  </button>
+</div>
 
 
 </body>

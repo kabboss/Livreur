@@ -873,3 +873,43 @@ main {
   color: #555;
   margin-bottom: 20px;
 }
+
+
+
+
+/* Styles pour la barre de toast */
+.toast-bar {
+  position: fixed;
+  top: -100px;
+  left: 0;
+  width: 100%;
+  padding: 16px 24px;
+  box-sizing: border-box;
+  color: white;
+  font-weight: bold;
+  font-family: sans-serif;
+  z-index: 9999;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: top 0.5s ease;
+}
+
+/* Types de messages */
+.toast-bar.info { background-color: #3498db; }
+.toast-bar.success { background-color: #2ecc71; }
+.toast-bar.error { background-color: #e74c3c; }
+.toast-bar.warning { background-color: #fcc56e; }
+
+/* Animation d’apparition */
+.toast-bar.show {
+  top: 0;
+}
+
+/* Bouton de fermeture */
+.toast-bar .close-btn {
+  cursor: pointer;
+  margin-left: 20px;
+  font-size: 20px;
+  line-height: 20px;
+}

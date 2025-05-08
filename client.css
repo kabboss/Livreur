@@ -1,3 +1,5 @@
+
+
 /* ===== Conteneur principal ===== */
 .container {
     max-width: 600px;
@@ -753,3 +755,38 @@
    transform: scale(1.05);
   }
  }
+
+
+
+
+
+
+
+
+ /* Styles pour le conteneur du logo */
+.logo-container {
+  display: flex;
+  justify-content: center; /* Centre le logo horizontalement */
+  margin-bottom: 2rem; /* Espace sous le logo */
+  width: 100%; /* Prend toute la largeur pour centrer correctement */
+}
+
+/* Styles pour le logo */
+.logo-img {
+  max-width: 150px; /* Ajustez la taille selon vos besoins */
+  height: auto;
+  border-radius: 40%;
+
+}
+
+/* Animation pour l'apparition du logo (vous devrez peut-être inclure animate.css) */
+@keyframes fadeInDown {
+  from {
+      opacity: 0;
+      transform: translateY(-20px);
+  }
+  to {
+      opacity: 1;
+      transform: translateY(0);
+  }
+}

@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Plateforme d'expédition de colis">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+
   <link rel="stylesheet" href="expedi.css" />
   <title>Expéditeur | Plateforme Colis</title>
   <style>
@@ -465,6 +468,7 @@
 </head>
 <body>
 
+
   <div class="navigation-arrows">
     <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
       <svg viewBox="0 0 24 24">
@@ -477,6 +481,11 @@
       </svg>
     </button>
   </div>
+
+
+  <div class="logo-container">
+    <img src="img/ChatGPT Image 30 avr. 2025, 20_34_02.png" alt="Logo Livreur 2.0" class="logo-img animate__animated animate__fadeInDown">
+</div>
 
   <div class="container">
     <h1>Bienvenue, Expéditeur</h1>
@@ -611,65 +620,51 @@
         elements.showFormBtn.style.display = 'none';
       });
 
-      // Gestion de la géolocalisation
       const getLocation = () => {
-        return new Promise((resolve, reject) => {
-          if (!navigator.geolocation) {
-            reject(new Error('Géolocalisation non supportée'));
-            return;
-          }
+    return new Promise((resolve, reject) => {
+        // ... votre code de géolocalisation
 
-          elements.locationStatus.textContent = '🔄 Localisation en cours...';
+        elements.locationStatus.textContent = '🔄 Localisation en cours...';
+        elements.locationStatus.classList.add('animate__animated', 'animate__flash'); // Ajout des classes d'animation
 
-          navigator.geolocation.getCurrentPosition(
+        navigator.geolocation.getCurrentPosition(
             position => {
-              userLocation = {
-                latitude: position.coords.latitude.toFixed(6),
-                longitude: position.coords.longitude.toFixed(6),
-                accuracy: position.coords.accuracy.toFixed(2)
-              };
-
-              elements.locationInput.value =
-                `${userLocation.latitude}, ${userLocation.longitude} (±${userLocation.accuracy}m)`;
-              elements.locationStatus.textContent = '📍 Position enregistrée';
-              resolve(userLocation);
+                // ... votre code de succès de géolocalisation
+                elements.locationStatus.textContent = '📍 Position enregistrée';
+                elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
+                resolve(userLocation);
             },
             error => {
-              let message = '';
-              switch (error.code) {
-                case error.PERMISSION_DENIED:
-                  message = '❌ Permission refusée';
-                  break;
-                case error.POSITION_UNAVAILABLE:
-                  message = '❌ Position indisponible';
-                  break;
-                case error.TIMEOUT:
-                  message = '⚠️ Temps de réponse dépassé';
-                  break;
-                default:
-                  message = '❌ Erreur de localisation';
-              }
-              elements.locationStatus.textContent = message;
-              reject(new Error(message));
+                // ... votre code d'erreur de géolocalisation
+                elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
+                elements.locationStatus.classList.add('error', 'animate__animated', 'animate__shakeX'); // Ajout d'une animation d'erreur
+                elements.locationStatus.textContent = message;
+                reject(new Error(message));
+                setTimeout(() => {
+                    elements.locationStatus.classList.remove('animate__shakeX');
+                    elements.locationStatus.classList.remove('error');
+                }, 1000);
             },
-            {
-              enableHighAccuracy: true,
-              timeout: 10000,
-              maximumAge: 0
-            }
-          );
-        });
-      };
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    });
+};
 
-      // Actualiser la localisation
-      elements.refreshLocationBtn.addEventListener('click', async () => {
-        try {
-          await getLocation();
-        } catch (error) {
-          console.error('Erreur de localisation:', error);
-          showToast('Erreur lors de la récupération de la localisation', 'error');
-        }
-      });
+elements.refreshLocationBtn.addEventListener('click', async () => {
+    elements.locationStatus.textContent = '🔄 Tentative de relocalisation...';
+    elements.locationStatus.classList.add('animate__animated', 'animate__pulse');
+    try {
+        await getLocation();
+        elements.locationStatus.classList.remove('animate__pulse');
+    } catch (error) {
+        console.error('Erreur de localisation:', error);
+        showToast('Erreur lors de la récupération de la localisation', 'error');
+        elements.locationStatus.classList.remove('animate__pulse');
+    }
+});
+
+
+
 
       // Prévisualisation des photos
       elements.photosInput.addEventListener('change', () => {
@@ -748,19 +743,26 @@
         window.getSelection().removeAllRanges();
       });
 
-      // Fonction pour afficher un toast
       function showToast(message, type = 'default') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        elements.toastContainer.appendChild(toast);
+    const toast = document.createElement('div');
+    toast.className = `toast ${type} animate__animated animate__fadeInDown`; // Ajout des classes animate.css
+    toast.textContent = message;
+    elements.toastContainer.appendChild(toast);
 
+    setTimeout(() => {
+        toast.classList.remove('animate__fadeInDown');
+        toast.classList.add('animate__fadeOutUp'); // Animation de disparition
         setTimeout(() => {
-          toast.remove();
-        }, 3000);
-      }
+            toast.remove();
+        }, 500); // Durée de l'animation de disparition
+    }, 3000);
+}
 
-      // Soumission du formulaire
+
+
+
+
+// Soumission du formulaire
       elements.form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -769,6 +771,13 @@
           showToast(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`, 'error');
           return;
         }
+
+
+    const submitButton = elements.form.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span class="animate-spin"><i class="fas fa-spinner"></i></span> Envoi en cours...'; // Ajout d'un spinner
+
 
         const formData = {
           sender: document.getElementById('sender').value.trim(),
@@ -804,14 +813,17 @@
             showExpeditionIdModal(formData.colisID);
             elements.form.reset();
             elements.previewContainer.innerHTML = '';
-          } else {
+        } else {
             showToast(response.message || 'Erreur lors de l\'envoi', 'error');
-          }
-        } catch (error) {
-          console.error('Erreur:', error);
-          showToast('Une erreur est survenue', 'error');
         }
-      });
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('Une erreur est survenue', 'error');
+    } finally {
+        submitButton.innerHTML = originalText; // Restaurer le texte original
+        submitButton.disabled = false;
+    }
+});
 
       // Fonctions utilitaires
       function generateID() {
@@ -854,5 +866,19 @@
       }
     });
   </script>
+
+  
+<div class="navigation-arrows">
+  <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
+    <svg viewBox="0 0 24 24">
+      <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+    </svg>
+  </a>
+  <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+    <svg viewBox="0 0 24 24">
+      <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+    </svg>
+  </button>
+</div>
 </body>
 </html>

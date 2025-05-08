@@ -1,98 +1,358 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Connexion - Livreur 2.0</title>
-  <link rel="stylesheet" href="Connection.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion - Livreur 2.0</title>
+    <link rel="stylesheet" href="Connection.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <style>
+        /* Styles pour le conteneur principal */
+        .container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f4f6f8;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 2rem;
+        }
+
+        /* Styles pour la flèche de retour */
+        .navigation-arrows {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+
+        .arrow {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            text-decoration: none;
+            color: #555;
+            font-size: 1.2rem;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .arrow:hover {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .left-arrow svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .left-arrow svg path {
+            fill: currentColor;
+        }
+
+        /* Styles pour le logo */
+        .logo-img {
+            max-width: 150px;
+            height: auto;
+            margin-bottom: 1.5rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        /* Styles pour le formulaire */
+        .form {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 400px;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .form label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form input, .form select {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        .form input:focus, .form select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        /* Styles pour le bouton */
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Styles pour le message de chargement */
+        #loading-message {
+            display: none;
+            margin-top: 1rem;
+            color: #555;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Styles pour le message d'erreur */
+        #error-message {
+            display: none;
+            color: #dc3545;
+            margin-top: 1rem;
+            text-align: center;
+        }
+
+        /* Styles pour le message de succès */
+        #message {
+            margin-top: 1rem;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Styles pour les toasts */
+        .toast {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: white;
+            border-left: 5px solid;
+            padding: 1rem 1.5rem;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            color: #333;
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.320, 1.275);
+            transform: translateY(-20px);
+            z-index: 1000;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            border-left-color: #28a745;
+        }
+
+        .toast.error {
+            border-left-color: #dc3545;
+        }
+
+        .toast.warning {
+            border-left-color: #ffc107;
+        }
+
+        .toast .close-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: #aaa;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <form class="form" id="login-form">
-      <label for="whatsapp">Numéro WhatsApp :</label>
-      <input type="tel" id="whatsapp" name="whatsapp" required />
+    <div class="navigation-arrows">
+        <a href="index.html" class="arrow left-arrow" aria-label="Retour à la page d'accueil">
+            <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+            </svg>
+        </a>
+    </div>
+    <div class="container">
+        <img src="img/ChatGPT Image 30 avr. 2025, 20_34_02.png" alt="Logo Livreur 2.0" class="logo-img">
+        <form class="form" id="login-form">
+            <label for="whatsapp">Numéro WhatsApp :</label>
+            <input type="tel" id="whatsapp" name="whatsapp" required>
 
-      <label for="type">Type de compte :</label>
-      <select id="type" name="type" required>
-        <option value="">-- Choisir un type --</option>
-        <option value="expediteur">Expéditeur (Commerçant ou Particulier)</option>
-        <option value="client">Client</option>
-        <option value="livreur">Livreur</option>
-        <option value="admin">Admin</option>
-      </select>
+            <label for="type">Type de compte :</label>
+            <select id="type" name="type" required>
+                <option value="">-- Choisir un type --</option>
+                <option value="expediteur">Expéditeur (Commerçant ou Particulier)</option>
+                <option value="client">Client</option>
+                <option value="livreur">Livreur</option>
+                <option value="admin">Admin</option>
+            </select>
 
-      <label for="password">Mot de passe :</label>
-      <input type="password" id="password" name="password" required />
+            <label for="password">Mot de passe :</label>
+            <input type="password" id="password" name="password" required>
 
-      <button type="submit" class="btn">Se connecter</button>
+            <button type="submit" class="btn">
+                <span class="btn-text">Se connecter</span>
+                <span class="spinner" style="display: none;"></span>
+            </button>
 
-      <div id="loading-message" style="display:none;">
-        <p>Connexion en cours...</p>
-        <div class="spinner"></div>
-      </div>
+            <div id="loading-message" style="display:none;">
+                <p>Connexion en cours...</p>
+                <div class="spinner"></div>
+            </div>
 
-      <div id="error-message" style="display:none;"></div>
-    </form>
+            <div id="error-message" style="display:none;"></div>
+        </form>
 
-    <div id="message"></div>
-  </div>
+        <div id="message"></div>
+    </div>
 
-  <script>
-    document.getElementById('login-form').addEventListener('submit', async function (event) {
-      event.preventDefault();
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function (event) {
+            event.preventDefault();
 
-      const whatsapp = document.getElementById('whatsapp').value;
-      const password = document.getElementById('password').value;
-      const type = document.getElementById('type').value;
+            const whatsapp = document.getElementById('whatsapp').value;
+            const password = document.getElementById('password').value;
+            const type = document.getElementById('type').value;
 
-      const btn = document.querySelector(".btn");
-      btn.disabled = true;
-      document.getElementById('loading-message').style.display = 'block';
-      document.getElementById('error-message').style.display = 'none';
+            const btn = document.querySelector(".btn");
+            const btnText = document.querySelector(".btn-text");
+            const spinner = document.querySelector(".spinner");
 
-      try {
-        const response = await fetch('/.netlify/functions/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ whatsapp, password, type })
+            btn.disabled = true;
+            btnText.style.display = 'none';
+            spinner.style.display = 'inline-block';
+            document.getElementById('error-message').style.display = 'none';
+
+            try {
+                const response = await fetch('/.netlify/functions/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ whatsapp, password, type })
+                });
+
+                const result = await response.json();
+                btn.disabled = false;
+                btnText.style.display = 'inline-block';
+                spinner.style.display = 'none';
+
+                if (response.ok) {
+                    showToast(`✅ ${result.message}`, 'success');
+                    // Redirection conditionnelle selon le type de compte
+                    setTimeout(() => {
+                        if (type === 'expediteur') {
+                            window.location.href = '/expediteur.html';
+                        } else if (type === 'client') {
+                            window.location.href = '/client.html';
+                        } else if (type === 'livreur') {
+                            window.location.href = '/livreur.html';
+                        } else if (type === 'admin') {
+                            window.location.href = '/admin.html';
+                        } else {
+                            window.location.href = '/';
+                        }
+                    }, 1500);
+                } else {
+                    showToast(result.message || '❌ Informations incorrectes.', 'error');
+                    document.getElementById('error-message').style.display = 'block';
+                    document.getElementById('error-message').textContent = result.message || '❌ Informations incorrectes.';
+                }
+            } catch (error) {
+                btn.disabled = false;
+                btnText.style.display = 'inline-block';
+                spinner.style.display = 'none';
+                showToast('Erreur de connexion. Veuillez réessayer.', 'error');
+                document.getElementById('error-message').style.display = 'block';
+                document.getElementById('error-message').textContent = 'Erreur de connexion. Veuillez réessayer.';
+                console.error(error);
+            }
         });
 
-        const result = await response.json();
-        document.getElementById('loading-message').style.display = 'none';
-        btn.disabled = false;
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type} animate__animated animate__fadeInRight`;
+            toast.innerHTML = message + '<span class="close-btn">&times;</span>';
 
-        if (response.ok) {
-  document.getElementById('message').innerText = `✅ ${result.message}`;
-  document.getElementById('message').style.color = 'green';
+            document.body.appendChild(toast);
 
-  // Redirection conditionnelle selon le type de compte
-  setTimeout(() => {
-    if (type === 'expediteur') {
-      window.location.href = '/expediteur.html'; // ✅ page des expéditeurs
-    } else if (type === 'client') {
-      window.location.href = '/client.html'; // ✅ page des clients
-    } else if (type === 'livreur') {
-      window.location.href = '/livreur.html'; // ✅ page des livreurs
-    } else if (type === 'admin') {
-      window.location.href = '/admin.html'; // ✅ page admin
-    } else {
-      // Au cas où quelque chose échoue (précaution)
-      window.location.href = '/';
-    }
-  }, 1500);
-}
- else {
-          document.getElementById('error-message').style.display = 'block';
-          document.getElementById('error-message').textContent = result.message || '❌ Informations incorrectes.';
+            toast.querySelector('.close-btn').addEventListener('click', () => {
+                toast.classList.remove('animate__fadeInRight');
+                toast.classList.add('animate__fadeOutRight');
+                setTimeout(() => toast.remove(), 300);
+            });
+
+            setTimeout(() => {
+                toast.classList.remove('animate__fadeInRight');
+                toast.classList.add('animate__fadeOutRight');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
         }
-      } catch (error) {
-        document.getElementById('loading-message').style.display = 'none';
-        btn.disabled = false;
-        document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-message').textContent = 'Erreur de connexion. Veuillez réessayer.';
-        console.error(error);
-      }
-    });
-  </script>
+    </script>
 </body>
 </html>
