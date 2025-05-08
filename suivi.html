@@ -27,7 +27,7 @@
             </svg>
         </button>
     </div>
-    
+
     <style>
         /* Styles pour les flèches de navigation */
         .navigation-arrows {
@@ -39,7 +39,7 @@
             margin-left: auto;
             margin-right: auto;
         }
-    
+
         .arrow {
             display: flex;
             justify-content: center;
@@ -55,25 +55,25 @@
             border: none;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-    
+
         .arrow:hover {
             background-color: #007bff; /* Couleur primaire au survol */
             color: white;
             transform: scale(1.05);
         }
-    
+
         .arrow svg {
             width: 20px;
             height: 20px;
             fill: currentColor;
         }
-    
+
         .refresh-button:hover {
             transform: rotate(180deg);
         }
-    
+
     </style>
-    
+
     <div class="container">
         <div class="track-expedition card">
             <h2><i class="fas fa-box-open mr-2"></i> Suivre l'expédition de mon colis</h2>
@@ -109,7 +109,6 @@
         function displayTrackingInfo(data) {
             trackElements.trackingDetailsDiv.innerHTML = `
                 <div class="tracking-item"><strong><i class="fas fa-fingerprint mr-2"></i> Code Colis :</strong> <span>${data.codeID}</span></div>
-                <div class="tracking-item"><strong><i class="fas fa-truck-moving mr-2"></i> Statut :</strong> <span class="status-${data.statut.toLowerCase().replace(/ /g, '-')}">${data.statut}</span></div>
                 <div class="tracking-item">
                     <strong><i class="fas fa-map-marker-alt mr-2"></i> Localisation du Livreur :</strong>
                     ${data.localisationLivreur ? `<a href="https://www.google.com/maps/place/$${data.localisationLivreur.latitude},${data.localisationLivreur.longitude}" target="_blank"><i class="fas fa-external-link-alt ml-1"></i> Voir sur Google Maps</a>` : '<span class="not-available">Non disponible</span>'}
@@ -171,9 +170,11 @@
                     } else if (data.message) {
                         showToast(data.message, 'info'); // Afficher le message de patience en toast
                     } else {
-                        showTrackingError('Aucune information d\'expédition trouvée pour ce code.');
+                        // Modification ici pour afficher l'alerte spécifique
+                        showTrackingError('Le processus d\'expédition pour ce colis n\'a pas encore commencé. Veuillez réessayer de suivre son statut ultérieurement.');
                     }
                 } else {
+                    // Conserver l'affichage de l'erreur serveur générique
                     showTrackingError(data.error || 'Erreur lors de la récupération des informations de suivi.');
                 }
 

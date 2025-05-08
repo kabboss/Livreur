@@ -636,287 +636,305 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
-      // Configuration
-      const config = {
-        maxPhotos: 2,
-        maxPhotoSize: 2 * 1024 * 1024 // 2MB
-      };
-
-      // Éléments DOM
-      const elements = {
-        showFormBtn: document.getElementById('show-form'),
-        formContainer: document.getElementById('expedition-form'),
-        form: document.getElementById('form'),
-        locationStatus: document.getElementById('location-status'),
-        locationInput: document.getElementById('location'),
-        refreshLocationBtn: document.getElementById('refresh-location'),
-        photosInput: document.getElementById('photos'),
-        previewContainer: document.getElementById('preview-container'),
-        successMsg: document.getElementById('success-msg'),
-        errorMsg: document.getElementById('error-msg'),
-        modalExpeditionId: document.getElementById('expeditionIdModal'),
-        closeExpeditionIdModal: document.getElementById('closeExpeditionIdModal'),
-        expeditionCodeDisplay: document.getElementById('expedition-code'),
-        copyExpeditionIdButton: document.getElementById('copyExpeditionId'),
-        copyMessage: document.getElementById('copy-message'),
-        toastContainer: document.getElementById('toast-container')
-      };
-
-      let userLocation = null;
-
-      // Afficher le formulaire
-      elements.showFormBtn.addEventListener('click', () => {
-        elements.formContainer.style.display = 'block';
-        elements.showFormBtn.style.display = 'none';
-      });
-
-      const getLocation = () => {
-    return new Promise((resolve, reject) => {
-        // ... votre code de géolocalisation
-
-        elements.locationStatus.textContent = '🔄 Localisation en cours...';
-        elements.locationStatus.classList.add('animate__animated', 'animate__flash'); // Ajout des classes d'animation
-
-        navigator.geolocation.getCurrentPosition(
-            position => {
-                // ... votre code de succès de géolocalisation
-                elements.locationStatus.textContent = '📍 Position enregistrée';
-                elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
-                resolve(userLocation);
-            },
-            error => {
-                // ... votre code d'erreur de géolocalisation
-                elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
-                elements.locationStatus.classList.add('error', 'animate__animated', 'animate__shakeX'); // Ajout d'une animation d'erreur
-                elements.locationStatus.textContent = message;
-                reject(new Error(message));
-                setTimeout(() => {
-                    elements.locationStatus.classList.remove('animate__shakeX');
-                    elements.locationStatus.classList.remove('error');
-                }, 1000);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-    });
-};
-
-elements.refreshLocationBtn.addEventListener('click', async () => {
-    elements.locationStatus.textContent = '🔄 Tentative de relocalisation...';
-    elements.locationStatus.classList.add('animate__animated', 'animate__pulse');
-    try {
-        await getLocation();
-        elements.locationStatus.classList.remove('animate__pulse');
-    } catch (error) {
-        console.error('Erreur de localisation:', error);
-        showToast('Erreur lors de la récupération de la localisation', 'error');
-        elements.locationStatus.classList.remove('animate__pulse');
-    }
-});
-
-
-
-
-      // Prévisualisation des photos
-      elements.photosInput.addEventListener('change', () => {
-        elements.previewContainer.innerHTML = '';
-        const files = elements.photosInput.files;
-
-        if (files.length > config.maxPhotos) {
-          showToast(`Maximum ${config.maxPhotos} photos autorisées`, 'error');
-          elements.photosInput.value = '';
-          return;
-        }
-
-        for (const file of files) {
-          if (file.size > config.maxPhotoSize) {
-            showToast(`La photo ${file.name} dépasse 2MB`, 'error');
-            elements.photosInput.value = '';
-            elements.previewContainer.innerHTML = '';
-            return;
-          }
-
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const preview = document.createElement('div');
-            preview.className = 'photo-preview';
-            preview.innerHTML = `
-              <img src="${e.target.result}" alt="Prévisualisation">
-              <span>${file.name}</span>
-              <span>${(file.size / 1024).toFixed(2)} KB</span>
-            `;
-            elements.previewContainer.appendChild(preview);
-          };
-          reader.readAsDataURL(file);
-        }
-      });
-
-      // Fonction pour afficher la modale d'ID d'expédition
-      function showExpeditionIdModal(colisID) {
-        elements.expeditionCodeDisplay.textContent = colisID;
-        elements.modalExpeditionId.classList.add('active');
-      }
-
-      // Fonction pour fermer la modale d'ID d'expédition
-      function hideExpeditionIdModal() {
-        elements.modalExpeditionId.classList.remove('active');
-        elements.copyMessage.style.display = 'none';
-      }
-
-      // Fermer la modale au clic sur la croix
-      elements.closeExpeditionIdModal.addEventListener('click', hideExpeditionIdModal);
-
-      // Fermer la modale en cliquant en dehors
-      window.addEventListener('click', (event) => {
-        if (event.target === elements.modalExpeditionId) {
-          hideExpeditionIdModal();
-        }
-      });
-
-      // Copier l'ID d'expédition au clic
-      elements.copyExpeditionIdButton.addEventListener('click', () => {
-        const range = document.createRange();
-        range.selectNode(elements.expeditionCodeDisplay);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(range);
-
-        try {
-          document.execCommand('copy');
-          elements.copyMessage.style.display = 'inline';
-          setTimeout(() => {
-            elements.copyMessage.style.display = 'none';
-          }, 1500);
-        } catch (err) {
-          console.error('Impossible de copier l\'ID:', err);
-          showToast('Erreur lors de la copie de l\'ID', 'error');
-        }
-
-        window.getSelection().removeAllRanges();
-      });
-
-      function showToast(message, type = 'default') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type} animate__animated animate__fadeInDown`; // Ajout des classes animate.css
-    toast.textContent = message;
-    elements.toastContainer.appendChild(toast);
-
-    setTimeout(() => {
-        toast.classList.remove('animate__fadeInDown');
-        toast.classList.add('animate__fadeOutUp'); // Animation de disparition
-        setTimeout(() => {
-            toast.remove();
-        }, 500); // Durée de l'animation de disparition
-    }, 3000);
-}
-
-
-
-
-
-// Soumission du formulaire
-      elements.form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const files = elements.photosInput.files;
-        if (files.length === 0 || files.length > config.maxPhotos) {
-          showToast(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`, 'error');
-          return;
-        }
-
-
-    const submitButton = elements.form.querySelector('button[type="submit"]');
-    const originalText = submitButton.textContent;
-    submitButton.disabled = true;
-    submitButton.innerHTML = '<span class="animate-spin"><i class="fas fa-spinner"></i></span> Envoi en cours...'; // Ajout d'un spinner
-
-
-        const formData = {
-          sender: document.getElementById('sender').value.trim(),
-          phone1: document.getElementById('phone1').value.trim(),
-          recipient: document.getElementById('recipient').value.trim(),
-          phone: document.getElementById('phone').value.trim(),
-          address: document.getElementById('address').value.trim(),
-          type: document.getElementById('type').value,
-          details: document.getElementById('details').value.trim(),
-          location: userLocation,
-          photos: []
+        // Configuration
+        const config = {
+            maxPhotos: 2,
+            maxPhotoSize: 2 * 1024 * 1024 // 2MB
         };
 
-        try {
-          for (const file of files) {
-            const base64 = await toBase64(file);
-            formData.photos.push({
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              data: base64
-            });
-          }
+        // Éléments DOM
+        const elements = {
+            showFormBtn: document.getElementById('show-form'),
+            formContainer: document.getElementById('expedition-form'),
+            form: document.getElementById('form'),
+            locationStatus: document.getElementById('location-status'),
+            locationInput: document.getElementById('location'),
+            refreshLocationBtn: document.getElementById('refresh-location'),
+            photosInput: document.getElementById('photos'),
+            previewContainer: document.getElementById('preview-container'),
+            successMsg: document.getElementById('success-msg'),
+            errorMsg: document.getElementById('error-msg'),
+            modalExpeditionId: document.getElementById('expeditionIdModal'),
+            closeExpeditionIdModal: document.getElementById('closeExpeditionIdModal'),
+            expeditionCodeDisplay: document.getElementById('expedition-code'),
+            copyExpeditionIdButton: document.getElementById('copyExpeditionId'),
+            copyMessage: document.getElementById('copy-message'),
+            toastContainer: document.getElementById('toast-container'),
+            submitButton: document.querySelector('#form button[type="submit"]') // Sélectionner le bouton de soumission
+        };
 
-          // Génération ID colis
-          formData.colisID = generateID();
+        let userLocation = null;
+        let locationObtained = false; // Variable pour suivre si la localisation a été obtenue
 
-          // Envoi au serveur
-          const response = await sendData(formData);
-
-          if (response.success) {
-            showToast(`Colis créé avec succès! ID: ${formData.colisID}`, 'success');
-            showExpeditionIdModal(formData.colisID);
-            elements.form.reset();
-            elements.previewContainer.innerHTML = '';
-        } else {
-            showToast(response.message || 'Erreur lors de l\'envoi', 'error');
-        }
-    } catch (error) {
-        console.error('Erreur:', error);
-        showToast('Une erreur est survenue', 'error');
-    } finally {
-        submitButton.innerHTML = originalText; // Restaurer le texte original
-        submitButton.disabled = false;
-    }
-});
-
-      // Fonctions utilitaires
-      function generateID() {
-        const datePart = Date.now().toString(36);
-        const randomPart = Math.random().toString(36).substr(2, 6);
-        return (datePart + randomPart).toUpperCase();
-      }
-
-      function toBase64(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = error => reject(error);
+        // Afficher le formulaire
+        elements.showFormBtn.addEventListener('click', () => {
+            elements.formContainer.style.display = 'block';
+            elements.showFormBtn.style.display = 'none';
         });
-      }
 
-      async function sendData(data) {
-        try {
-          elements.form.querySelector('button[type="submit"]').disabled = true;
+        const getLocation = () => {
+            return new Promise((resolve, reject) => {
+                elements.locationStatus.textContent = '🔄 Localisation en cours...';
+                elements.locationStatus.classList.add('animate__animated', 'animate__flash'); // Ajout des classes d'animation
 
-          const response = await fetch('/.netlify/functions/expedi', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userLocation = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        };
+                        locationObtained = true; // Marquer la localisation comme obtenue
+                        elements.locationStatus.textContent = '📍 Position enregistrée';
+                        elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
+                        resolve(userLocation);
+                    },
+                    error => {
+                        let message = '';
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                message = "🚫 L'accès à la localisation a été refusé.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                message = "🛰️ Informations de localisation non disponibles.";
+                                break;
+                            case error.TIMEOUT:
+                                message = "⏳ Délai d'attente pour la localisation dépassé.";
+                                break;
+                            case error.UNKNOWN_ERROR:
+                                message = "❓ Une erreur inconnue est survenue lors de la localisation.";
+                                break;
+                        }
+                        elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
+                        elements.locationStatus.classList.add('error', 'animate__animated', 'animate__shakeX'); // Ajout d'une animation d'erreur
+                        elements.locationStatus.textContent = message;
+                        reject(new Error(message));
+                        setTimeout(() => {
+                            elements.locationStatus.classList.remove('animate__shakeX');
+                            elements.locationStatus.classList.remove('error');
+                        }, 1000);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            });
+        };
 
-          return await response.json();
-        } finally {
-          elements.form.querySelector('button[type="submit"]').disabled = false;
+        elements.refreshLocationBtn.addEventListener('click', async () => {
+            elements.locationStatus.textContent = '🔄 Tentative de relocalisation...';
+            elements.locationStatus.classList.add('animate__animated', 'animate__pulse');
+            try {
+                await getLocation();
+                elements.locationStatus.classList.remove('animate__pulse');
+            } catch (error) {
+                console.error('Erreur de localisation:', error);
+                showToast('Erreur lors de la récupération de la localisation', 'error');
+                elements.locationStatus.classList.remove('animate__pulse');
+            }
+        });
+
+        // Prévisualisation des photos
+        elements.photosInput.addEventListener('change', () => {
+            elements.previewContainer.innerHTML = '';
+            const files = elements.photosInput.files;
+
+            if (files.length > config.maxPhotos) {
+                showToast(`Maximum ${config.maxPhotos} photos autorisées`, 'error');
+                elements.photosInput.value = '';
+                return;
+            }
+
+            for (const file of files) {
+                if (file.size > config.maxPhotoSize) {
+                    showToast(`La photo ${file.name} dépasse 2MB`, 'error');
+                    elements.photosInput.value = '';
+                    elements.previewContainer.innerHTML = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const preview = document.createElement('div');
+                    preview.className = 'photo-preview';
+                    preview.innerHTML = `
+                        <img src="<span class="math-inline">\{e\.target\.result\}" alt\="Prévisualisation"\>
+<span\></span>{file.name}</span>
+                        <span>${(file.size / 1024).toFixed(2)} KB</span>
+                    `;
+                    elements.previewContainer.appendChild(preview);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Fonction pour afficher la modale d'ID d'expédition
+        function showExpeditionIdModal(colisID) {
+            elements.expeditionCodeDisplay.textContent = colisID;
+            elements.modalExpeditionId.classList.add('active');
         }
-      }
 
-      // Initialisation
-      try {
-        await getLocation();
-      } catch (error) {
-        console.error('Erreur initiale de localisation:', error);
-        showToast('Erreur lors de la récupération initiale de la localisation', 'error');
-      }
-    });
-  </script>
+        // Fonction pour fermer la modale d'ID d'expédition
+        function hideExpeditionIdModal() {
+            elements.modalExpeditionId.classList.remove('active');
+            elements.copyMessage.style.display = 'none';
+        }
 
+        // Fermer la modale au clic sur la croix
+        elements.closeExpeditionIdModal.addEventListener('click', hideExpeditionIdModal);
+
+        // Fermer la modale en cliquant en dehors
+        window.addEventListener('click', (event) => {
+            if (event.target === elements.modalExpeditionId) {
+                hideExpeditionIdModal();
+            }
+        });
+
+        // Copier l'ID d'expédition au clic
+        elements.copyExpeditionIdButton.addEventListener('click', () => {
+            const range = document.createRange();
+            range.selectNode(elements.expeditionCodeDisplay);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+
+            try {
+                document.execCommand('copy');
+                elements.copyMessage.style.display = 'inline';
+                setTimeout(() => {
+                    elements.copyMessage.style.display = 'none';
+                }, 1500);
+            } catch (err) {
+                console.error('Impossible de copier l\'ID:', err);
+                showToast('Erreur lors de la copie de l\'ID', 'error');
+            }
+
+            window.getSelection().removeAllRanges();
+        });
+
+        function showToast(message, type = 'default') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type} animate__animated animate__fadeInDown`; // Ajout des classes animate.css
+            toast.textContent = message;
+            elements.toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('animate__fadeInDown');
+                toast.classList.add('animate__fadeOutUp'); // Animation de disparition
+                setTimeout(() => {
+                    toast.remove();
+                }, 500); // Durée de l'animation de disparition
+            }, 3000);
+        }
+
+        // Soumission du formulaire
+        elements.form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!locationObtained || !userLocation) {
+                showToast('La localisation est requise pour créer une expédition.', 'error');
+                return;
+            }
+
+            const files = elements.photosInput.files;
+            if (files.length === 0 || files.length > config.maxPhotos) {
+                showToast(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`, 'error');
+                return;
+            }
+
+            const submitButton = elements.form.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="animate-spin"><i class="fas fa-spinner"></i></span> Envoi en cours...'; // Ajout d'un spinner
+
+            const formData = {
+                sender: document.getElementById('sender').value.trim(),
+                phone1: document.getElementById('phone1').value.trim(),
+                recipient: document.getElementById('recipient').value.trim(),
+                phone: document.getElementById('phone').value.trim(),
+                address: document.getElementById('address').value.trim(),
+                type: document.getElementById('type').value,
+                details: document.getElementById('details').value.trim(),
+                location: userLocation,
+                photos: []
+            };
+
+            try {
+                for (const file of files) {
+                    const base64 = await toBase64(file);
+                    formData.photos.push({
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        data: base64
+                    });
+                }
+
+                // Génération ID colis
+                formData.colisID = generateID();
+
+                // Envoi au serveur
+                const response = await sendData(formData);
+
+                if (response.success) {
+                    showToast(`Colis créé avec succès! ID: ${formData.colisID}`, 'success');
+                    showExpeditionIdModal(formData.colisID);
+                    elements.form.reset();
+                    elements.previewContainer.innerHTML = '';
+                } else {
+                    showToast(response.message || 'Erreur lors de l\'envoi', 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showToast('Une erreur est survenue', 'error');
+            } finally {
+                submitButton.innerHTML = originalText; // Restaurer le texte original
+                submitButton.disabled = false;
+            }
+        });
+
+        // Fonctions utilitaires
+        function generateID() {
+            const datePart = Date.now().toString(36);
+            const randomPart = Math.random().toString(36).substr(2, 6);
+            return (datePart + randomPart).toUpperCase();
+        }
+
+        function toBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        async function sendData(data) {
+            try {
+                elements.form.querySelector('button[type="submit"]').disabled = true;
+
+                const response = await fetch('/.netlify/functions/expedi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                return await response.json();
+            } finally {
+                elements.form.querySelector('button[type="submit"]').disabled = false;
+            }
+        }
+
+        // Initialisation
+        try {
+            await getLocation();
+        } catch (error) {
+            console.error('Erreur initiale de localisation:', error);
+            showToast('Erreur lors de la récupération initiale de la localisation', 'error');
+        } finally {
+            // Si la localisation n'a pas été obtenue au chargement, afficher un message
+            if (!locationObtained && !userLocation) {
+                showToast('La localisation est nécessaire pour créer une expédition. Veuillez autoriser l\'accès à votre position.', 'warning');
+                }
+            }
+        });
+    </script>
   
 <div class="navigation-arrows">
   <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">

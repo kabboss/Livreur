@@ -180,7 +180,7 @@ main {
 .button-group {
   display: flex;
   flex-direction: row; /* S'assure que les boutons sont en ligne par défaut */
-  gap: 8px; /* Réduit l'espacement */
+  gap: 20px; /* Réduit l'espacement */
   margin-top: 10px; /* Réduit la marge */
 }
 
@@ -920,7 +920,7 @@ main {
 
 
 .update-position-btn {
-  background-color: #4CAF50;
+  background-color: #ecfc0a;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -970,7 +970,7 @@ main {
 .terminer-btn {
   display: inline-flex;
   align-items: center;
-  background-color: #28a745; /* Vert pour le succès */
+  background-color: #45f86f; /* Vert pour le succès */
   color: white;
   border: none;
   padding: 10px 20px;
@@ -979,6 +979,7 @@ main {
   cursor: pointer;
   transition: background-color 0.3s ease, transform 0.3s ease;
   font-family: Arial, sans-serif;
+  height: 70px;
 }
 
 /* Animation de l'icône check_circle */

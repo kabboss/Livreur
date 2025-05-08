@@ -134,133 +134,170 @@
   
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      // Configuration
-      const config = {
-        apiEndpoint: '/.netlify/functions/client-handler'
-      };
-      
-      // Éléments DOM
-      const elements = {
-        form: document.getElementById('client-form'),
-        nom: document.getElementById('nom'),
-        prenom: document.getElementById('prenom'),
-        numero: document.getElementById('numero'),
-        code: document.getElementById('code'),
-        submitBtn: document.querySelector('#client-form button[type="submit"]'),
-        btnText: document.querySelector('.btn-text'),
-        btnLoader: document.querySelector('.btn-loader'),
-        locationStatus: document.getElementById('location-status'),
-        colisInfo: document.getElementById('colis-info'),
-        colisContent: document.getElementById('colis-content'),
-        errorMsg: document.getElementById('error-msg')
-      };
-      
-      let userLocation = null;
-      
-      const getLocation = () => {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) {
-            elements.locationStatus.textContent = '❌ Géolocalisation non supportée';
-            reject(new Error('Géolocalisation non supportée'));
-            return;
-        }
+        // Configuration
+        const config = {
+            apiEndpoint: '/.netlify/functions/client-handler'
+        };
 
-        elements.locationStatus.textContent = '🔄 Localisation en cours...';
-        elements.locationStatus.classList.add('animate__animated', 'animate__flash'); // Ajout des classes d'animation
+        // Éléments DOM
+        const elements = {
+            form: document.getElementById('client-form'),
+            nom: document.getElementById('nom'),
+            prenom: document.getElementById('prenom'),
+            numero: document.getElementById('numero'),
+            code: document.getElementById('code'),
+            submitBtn: document.querySelector('#client-form button[type="submit"]'),
+            btnText: document.querySelector('.btn-text'),
+            btnLoader: document.querySelector('.btn-loader'),
+            locationStatus: document.getElementById('location-status'),
+            colisInfo: document.getElementById('colis-info'),
+            colisContent: document.getElementById('colis-content'),
+            errorMsg: document.getElementById('error-msg')
+        };
 
-        navigator.geolocation.getCurrentPosition(
-            position => {
-                userLocation = {
-                    latitude: position.coords.latitude.toFixed(6),
-                    longitude: position.coords.longitude.toFixed(6)
-                };
-                elements.locationStatus.textContent = '📍 Localisation activée';
-                elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
-                resolve(userLocation);
-            },
-            error => {
-                let message = 'Erreur de localisation';
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        message = '❌ Permission refusée';
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        message = '❌ Service indisponible';
-                        break;
-                    case error.TIMEOUT:
-                        message = '⚠️ Temps écoulé';
-                        break;
+        let userLocation = null;
+        let locationObtained = false; // Variable pour suivre si la localisation a été obtenue
+
+        const getLocation = () => {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    elements.locationStatus.textContent = '❌ Géolocalisation non supportée';
+                    reject(new Error('Géolocalisation non supportée'));
+                    return;
                 }
-                elements.locationStatus.textContent = message;
-                elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
-                elements.locationStatus.classList.add('error', 'animate__animated', 'animate__shakeX'); // Animation d'erreur
-                reject(new Error(message));
-                setTimeout(() => {
-                    elements.locationStatus.classList.remove('animate__shakeX');
-                    elements.locationStatus.classList.remove('error');
-                }, 1000);
-            },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
-    });
-};      
-// Soumission du formulaire
-elements.form.addEventListener('submit', async (e) => {
-  e.preventDefault();
 
- // Reset UI
- elements.errorMsg.hidden = true;
-    elements.colisInfo.hidden = true;
-    elements.btnText.hidden = true;
-    elements.btnLoader.hidden = false;
-    elements.submitBtn.disabled = true;
-    elements.btnLoader.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; // Ajout d'un spinner Font Awesome
-  try {
-    // Validation
-    if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
-      throw new Error('Code colis invalide');
-    }
+                elements.locationStatus.textContent = '🔄 Localisation en cours...';
+                elements.locationStatus.classList.add('animate__animated', 'animate__flash'); // Ajout des classes d'animation
 
-    // 🔽 Obtenir la localisation juste avant d’envoyer
-    if (!userLocation) {
-      await getLocation(); // Cela mettra à jour userLocation
-    }
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userLocation = {
+                            latitude: position.coords.latitude.toFixed(6),
+                            longitude: position.coords.longitude.toFixed(6)
+                        };
+                        locationObtained = true; // Marquer la localisation comme obtenue
+                        elements.locationStatus.textContent = '📍 Localisation activée';
+                        elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
+                        resolve(userLocation);
+                    },
+                    error => {
+                        let message = 'Erreur de localisation';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                message = '❌ Permission refusée';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                message = '❌ Service indisponible';
+                                break;
+                            case error.TIMEOUT:
+                                message = '⚠️ Temps écoulé';
+                                break;
+                        }
+                        elements.locationStatus.textContent = message;
+                        elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
+                        elements.locationStatus.classList.add('error', 'animate__animated', 'animate__shakeX'); // Animation d'erreur
+                        reject(new Error(message));
+                        setTimeout(() => {
+                            elements.locationStatus.classList.remove('animate__shakeX');
+                            elements.locationStatus.classList.remove('error');
+                        }, 1000);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            });
+        };
 
-    // Envoi des données
-    const response = await fetch(config.apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nom: elements.nom.value.trim(),
-        prenom: elements.prenom.value.trim(),
-        numero: elements.numero.value.trim(),
-        code: elements.code.value.trim(),
-        location: userLocation
-      })
-    });
+        const showError = (message) => {
+            elements.errorMsg.textContent = message;
+            elements.errorMsg.hidden = false;
+            elements.colisInfo.hidden = true;
+        };
 
-    const data = await response.json();
+        const displayColisInfo = (colis) => {
+            elements.colisContent.innerHTML = `
+                <p><strong>Nom:</strong> ${colis.nom}</p>
+                <p><strong>Prénom:</strong> ${colis.prenom}</p>
+                <p><strong>Numéro:</strong> ${colis.numero}</p>
+                <p><strong>Code Colis:</strong> ${colis.code}</p>
+                ${colis.localisation ? `<p><strong>Localisation (approx.):</strong> Latitude: ${colis.localisation.latitude}, Longitude: ${colis.localisation.longitude}</p>` : '<p><strong>Localisation:</strong> Non disponible</p>'}
+                <p><strong>Date de création:</strong> ${new Date(colis.dateCreation).toLocaleString()}</p>
+                ${colis.details ? `<p><strong>Détails:</strong> ${colis.details}</p>` : ''}
+                ${colis.type ? `<p><strong>Type de colis:</strong> ${colis.type}</p>` : ''}
+                ${colis.photos && colis.photos.length > 0 ? `
+                    <p><strong>Photos:</strong></p>
+                    <div>
+                        ${colis.photos.map(photo => `<img src="${photo.data}" alt="${photo.name}" style="max-width: 100px; margin-right: 5px;">`).join('')}
+                    </div>
+                ` : ''}
+                `;
+            elements.colisInfo.hidden = false;
+            elements.errorMsg.hidden = true;
+        };
 
-if (!response.ok) {
-    throw new Error(data.message || 'Erreur de recherche');
-}
+        // Obtenir la localisation au chargement de la page
+        getLocation();
 
-if (!data.colis) {
-    throw new Error('Aucune information de colis disponible');
-}
+        // Soumission du formulaire
+        elements.form.addEventListener('submit', async (e) => {
+            e.preventDefault();
 
-// Affichage des résultats
-displayColisInfo(data.colis);
-} catch (error) {
-showError(error.message);
-} finally {
-elements.btnText.hidden = false;
-elements.btnLoader.hidden = true;
-elements.btnLoader.innerHTML = ''; // Nettoyer le loader
-elements.submitBtn.disabled = false;
-}
+            // Vérifier si la localisation a été obtenue
+            if (!locationObtained || !userLocation) {
+                showError('La localisation est nécessaire pour cette action. Veuillez patienter pendant que nous obtenons votre position.');
+                return; // Empêcher la soumission si la localisation n'est pas prête
+            }
 
-      });
+            // Reset UI
+            elements.errorMsg.hidden = true;
+            elements.colisInfo.hidden = true;
+            elements.btnText.hidden = true;
+            elements.btnLoader.hidden = false;
+            elements.submitBtn.disabled = true;
+            elements.btnLoader.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; // Ajout d'un spinner Font Awesome
+
+            try {
+                // Validation du code colis
+                if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
+                    throw new Error('Code colis invalide');
+                }
+
+                // Envoi des données avec la localisation
+                const response = await fetch(config.apiEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nom: elements.nom.value.trim(),
+                        prenom: elements.prenom.value.trim(),
+                        numero: elements.numero.value.trim(),
+                        code: elements.code.value.trim(),
+                        location: userLocation
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erreur de recherche');
+                }
+
+                if (!data.colis) {
+                    throw new Error('Aucune information de colis disponible');
+                }
+
+                // Affichage des résultats
+                displayColisInfo(data.colis);
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                elements.btnText.hidden = false;
+                elements.btnLoader.hidden = true;
+                elements.btnLoader.innerHTML = ''; // Nettoyer le loader
+                elements.submitBtn.disabled = false;
+            }
+        });
+  
+        
 // 🔍 Affiche les détails d’un colis sélectionné
 function displayColisInfo(colis) {
   const statusClass = `status-${(colis.status || 'enregistré')}`.toLowerCase();
