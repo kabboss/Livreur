@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi de Colis</title>
+    <link rel="stylesheet" href="suivi.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+</head>
+<body>
+
+    <div class="navigation-arrows">
+        <a href="index.html" class="arrow left-arrow" aria-label="Page précédente">
+            <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+            </svg>
+        </a>
+        <a href="index.html" class="arrow home-button" aria-label="Page d'accueil">
+            <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+            </svg>
+        </a>
+        <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+            <svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+            </svg>
+        </button>
+    </div>
+    
+    <style>
+        /* Styles pour les flèches de navigation */
+        .navigation-arrows {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.5rem;
+            width: 150px; /* Ajustez la largeur pour espacer les boutons */
+            margin-left: auto;
+            margin-right: auto;
+        }
+    
+        .arrow {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 40px;
+            height: 40px;
+            background-color: #f0f0f0;
+            border-radius: 50%;
+            text-decoration: none;
+            color: #007bff; /* Couleur primaire */
+            transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+    
+        .arrow:hover {
+            background-color: #007bff; /* Couleur primaire au survol */
+            color: white;
+            transform: scale(1.05);
+        }
+    
+        .arrow svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+    
+        .refresh-button:hover {
+            transform: rotate(180deg);
+        }
+    
+    </style>
+    
+    <div class="container">
+        <div class="track-expedition card">
+            <h2><i class="fas fa-box-open mr-2"></i> Suivre l'expédition de mon colis</h2>
+            <div class="form-group">
+                <label for="tracking-code"><i class="fas fa-barcode mr-2"></i> Code du colis</label>
+                <input type="text" id="tracking-code" placeholder="Entrez le code du colis" required pattern="[A-Z0-9]{8,20}">
+            </div>
+            <button id="track-button" class="btn-primary">
+                <span class="btn-text"><i class="fas fa-search mr-2"></i> Suivre mon colis</span>
+                <span class="btn-loader" hidden></span>
+            </button>
+            <div id="tracking-info" class="hidden animate__animated animate__fadeIn">
+                <h3><i class="fas fa-info-circle mr-2"></i> Informations d'expédition</h3>
+                <div id="tracking-details"></div>
+            </div>
+            <div id="tracking-error-msg" class="message-error hidden animate__animated animate__shakeX"></div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // Éléments DOM pour le suivi
+        const trackElements = {
+            trackButton: document.getElementById('track-button'),
+            trackingCodeInput: document.getElementById('tracking-code'),
+            trackingInfoDiv: document.getElementById('tracking-info'),
+            trackingDetailsDiv: document.getElementById('tracking-details'),
+            trackingErrorMsgDiv: document.getElementById('tracking-error-msg')
+        };
+
+        // Fonction pour afficher les informations de suivi
+        function displayTrackingInfo(data) {
+            trackElements.trackingDetailsDiv.innerHTML = `
+                <div class="tracking-item"><strong><i class="fas fa-fingerprint mr-2"></i> Code Colis :</strong> <span>${data.codeID}</span></div>
+                <div class="tracking-item"><strong><i class="fas fa-truck-moving mr-2"></i> Statut :</strong> <span class="status-${data.statut.toLowerCase().replace(/ /g, '-')}">${data.statut}</span></div>
+                <div class="tracking-item">
+                    <strong><i class="fas fa-map-marker-alt mr-2"></i> Localisation du Livreur :</strong>
+                    ${data.localisationLivreur ? `<a href="https://www.google.com/maps/place/$${data.localisationLivreur.latitude},${data.localisationLivreur.longitude}" target="_blank"><i class="fas fa-external-link-alt ml-1"></i> Voir sur Google Maps</a>` : '<span class="not-available">Non disponible</span>'}
+                </div>
+                <div class="tracking-item"><strong><i class="fas fa-phone mr-2"></i> Téléphone Livreur (N°1) :</strong> <a href="tel:${data.telephoneLivreur1}">${data.telephoneLivreur1}</a></div>
+                ${data.telephoneLivreur2 ? `<div class="tracking-item"><strong><i class="fas fa-phone-alt mr-2"></i> Téléphone Livreur (N°2) :</strong> <a href="tel:${data.telephoneLivreur2}">${data.telephoneLivreur2}</a></div>` : ''}
+                <div class="tracking-item"><strong><i class="fas fa-user mr-2"></i> Identifiant Livreur :</strong> <span>${data.idLivreur}</span></div>
+                <div class="tracking-item"><strong><i class="fas fa-calendar-alt mr-2"></i> Début d'expédition :</strong> <span>${new Date(data.dateDebut).toLocaleString('fr-FR')}</span></div>
+                <div class="tracking-item"><strong><i class="fas fa-route mr-2"></i> Distance Expéditeur - Livreur :</strong> <span>${data.distanceExpediteur !== null ? `${data.distanceExpediteur} km` : '<span class="not-available">Non disponible</span>'}</span></div>
+                <div class="tracking-item"><strong><i class="fas fa-location-arrow mr-2"></i> Distance Livreur - Client (Initial) :</strong> <span>${data.distanceDestinataire !== null ? `${data.distanceDestinataire} km` : '<span class="not-available">Non disponible</span>'}</span></div>
+                <div class="tracking-item"><strong><i class="fas fa-ruler-combined mr-2"></i> Distance Facturée (Expéditeur - Client) :</strong> <span>${data.distanceExpediteurDestinataire !== null ? `${data.distanceExpediteurDestinataire} km` : '<span class="not-available">Non disponible</span>'}</span></div>
+                <div class="tracking-item"><strong><i class="fas fa-coins mr-2"></i> Prix de Livraison :</strong> <span>${data.prixLivraison || '<span class="not-available">Non disponible</span>'}</span></div>
+            `;
+            trackElements.trackingInfoDiv.classList.remove('hidden');
+            trackElements.trackingErrorMsgDiv.classList.add('hidden');
+        }
+
+        // Fonction pour afficher une erreur de suivi
+        function showTrackingError(message) {
+            trackElements.trackingErrorMsgDiv.textContent = message;
+            trackElements.trackingErrorMsgDiv.classList.remove('hidden');
+            trackElements.trackingInfoDiv.classList.add('hidden');
+        }
+
+        // Écouteur d'événement pour le bouton de suivi
+        trackElements.trackButton.addEventListener('click', async () => {
+            const trackingCode = trackElements.trackingCodeInput.value.trim();
+
+            if (!/^[A-Z0-9]{8,20}$/.test(trackingCode)) {
+                showTrackingError('Code de suivi invalide.');
+                return;
+            }
+
+            // Reset UI
+            trackElements.trackingInfoDiv.classList.add('hidden');
+            trackElements.trackingErrorMsgDiv.classList.add('hidden');
+            trackElements.trackButton.querySelector('.btn-text').hidden = true;
+            trackElements.trackButton.querySelector('.btn-loader').hidden = false;
+            trackElements.trackButton.querySelector('.btn-loader').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            trackElements.trackButton.disabled = true;
+
+            try {
+                const response = await fetch('/.netlify/functions/suivre-expedition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codeID: trackingCode })
+                });
+
+                const data = await response.json();
+
+                trackElements.trackButton.querySelector('.btn-text').hidden = false;
+                trackElements.trackButton.querySelector('.btn-loader').hidden = true;
+                trackElements.trackButton.querySelector('.btn-loader').innerHTML = '';
+                trackElements.trackButton.disabled = false;
+
+                if (response.ok) {
+                    if (data.expedition) {
+                        displayTrackingInfo(data.expedition);
+                    } else if (data.message) {
+                        showToast(data.message, 'info'); // Afficher le message de patience en toast
+                    } else {
+                        showTrackingError('Aucune information d\'expédition trouvée pour ce code.');
+                    }
+                } else {
+                    showTrackingError(data.error || 'Erreur lors de la récupération des informations de suivi.');
+                }
+
+            } catch (error) {
+                console.error('Erreur lors de la requête de suivi :', error);
+                showToast('Erreur de connexion au serveur.', 'error'); // Afficher l'erreur en toast
+                trackElements.trackButton.querySelector('.btn-text').hidden = false;
+                trackElements.trackButton.querySelector('.btn-loader').hidden = true;
+                trackElements.trackButton.querySelector('.btn-loader').innerHTML = '';
+                trackElements.trackButton.disabled = false;
+            }
+        });
+
+        function showToast(message, type = 'default') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.classList.add('toast', `toast-${type}`, 'animate__animated', 'animate__fadeInRight');
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('animate__fadeInRight');
+                toast.classList.add('animate__fadeOutLeft');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

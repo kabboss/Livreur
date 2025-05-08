@@ -1,3 +1,4 @@
+// Fonction Netlify: updateLivreurPosition.js
 const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
@@ -13,12 +14,10 @@ exports.handler = async function(event, context) {
 
     const { codeID, localisation } = JSON.parse(event.body);
 
-    const updateResult = await expeditionCollection.updateOne(
-      { codeID },
-      { $set: { localisationLivreur: localisation, dateMiseAJourLocalisation: new Date() } }
-    );
-
-    if (updateResult.modifiedCount === 0) {
+    // Vérifier d'abord si le livreur est bien responsable de ce colis
+    const expedition = await expeditionCollection.findOne({ codeID });
+    
+    if (!expedition) {
       return {
         statusCode: 404,
         body: JSON.stringify({ error: 'Expédition non trouvée.' }),
@@ -26,17 +25,29 @@ exports.handler = async function(event, context) {
       };
     }
 
+    // Ici vous pourriez ajouter une vérification supplémentaire
+    // pour confirmer que l'utilisateur actuel est bien le livreur responsable
+    // (nécessite un système d'authentification)
+
+    const updateResult = await expeditionCollection.updateOne(
+      { codeID },
+      { $set: { 
+          localisationLivreur: localisation, 
+          dateMiseAJourLocalisation: new Date() 
+      }}
+    );
+
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: 'Localisation du livreur mise à jour.' }),
+      body: JSON.stringify({ message: 'Localisation mise à jour.' }),
       headers: { 'Access-Control-Allow-Origin': '*' },
     };
 
   } catch (error) {
-    console.error('Erreur lors de la mise à jour de la localisation :', error);
+    console.error('Erreur:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Erreur serveur lors de la mise à jour de la localisation.' }),
+      body: JSON.stringify({ error: 'Erreur serveur.' }),
       headers: { 'Access-Control-Allow-Origin': '*' },
     };
   } finally {

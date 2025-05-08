@@ -913,3 +913,31 @@ main {
   font-size: 20px;
   line-height: 20px;
 }
+
+
+
+
+
+
+.update-position-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
+}
+
+.update-position-btn:hover {
+  background-color: #45a049;
+}
+
+.update-position-btn i {
+  font-size: 16px;
+}

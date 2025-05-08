@@ -13,18 +13,69 @@
 <br>
 <br>
 
-  <div class="navigation-arrows">
-    <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
+<div class="navigation-arrows">
+  <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
       <svg viewBox="0 0 24 24">
-        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+          <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
       </svg>
-    </a>
-    <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+  </a>
+  <a href="index.html" class="arrow home-button" aria-label="Page d'accueil">
       <svg viewBox="0 0 24 24">
-        <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+          <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
       </svg>
-    </button>
-  </div>
+  </a>
+  <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+      <svg viewBox="0 0 24 24">
+          <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+      </svg>
+  </button>
+</div>
+
+<style>
+  /* Styles pour les flèches de navigation */
+  .navigation-arrows {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+      width: 150px; /* Ajustez la largeur pour espacer les boutons */
+      margin-left: auto;
+      margin-right: auto;
+  }
+
+  .arrow {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 40px;
+      height: 40px;
+      background-color: #f0f0f0;
+      border-radius: 50%;
+      text-decoration: none;
+      color: #007bff; /* Couleur primaire */
+      transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .arrow:hover {
+      background-color: #007bff; /* Couleur primaire au survol */
+      color: white;
+      transform: scale(1.05);
+  }
+
+  .arrow svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+  }
+
+  .refresh-button:hover {
+      transform: rotate(180deg);
+  }
+
+</style>
 
   <div class="container">
     <header>
@@ -32,14 +83,7 @@
       <p id="location-status" aria-live="polite">📍 Localisation en cours...</p>
     </header>
 
-    
-  <button
-    id="update-location-global-btn"
-    class="btn btn-outline-primary btn-sm animate__animated animate__fadeIn"
-    style="position: fixed; top: 20px; left: 20px; z-index: 9999;">
-    <i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position
-</button>
-
+  
 <script>
 
 function showToast(message, type = 'info') {
@@ -71,80 +115,6 @@ function showToast(message, type = 'info') {
   
 
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const updateButton = document.getElementById('update-location-global-btn');
-
-    // Définition de la fonction getCurrentCodeID()
-    function getCurrentCodeID() {
-      // Exemple : on récupère l'ID depuis un input caché
-      const input = document.getElementById('current-code-id');
-      return input ? input.value : null;
-    }
-
-    if (updateButton) {
-      updateButton.addEventListener('click', async () => {
-        const codeID = getCurrentCodeID();
-
-        if (!codeID) {
-          showToast('⚠️ Aucun colis en cours d\'expédition sélectionné.', 'warning');
-          return;
-        }
-
-        updateButton.disabled = true;
-        updateButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Mise à jour...';
-
-        if (navigator.geolocation) {
-          showToast('🛰️ Tentative de mise à jour de votre position...', 'info');
-          navigator.geolocation.getCurrentPosition(async (position) => {
-            const nouvelleLocalisation = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            };
-
-            try {
-              const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ codeID, localisation: nouvelleLocalisation }),
-              });
-
-              const data = await res.json();
-
-              if (res.ok) {
-                updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2 text-success"></i> Position mise à jour !';
-                showToast('📍 Votre position a été mise à jour avec succès !', 'success');
-                setTimeout(() => {
-                  updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
-                  updateButton.disabled = false;
-                }, 3000);
-              } else {
-                updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
-                updateButton.disabled = false;
-                showToast(`❌ Erreur: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
-              }
-
-            } catch (error) {
-              updateButton.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i> Erreur';
-              updateButton.disabled = false;
-              showToast('⚡ Erreur de connexion lors de la mise à jour', 'error');
-            }
-          }, (error) => {
-            updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
-            updateButton.disabled = false;
-            let msg = 'Erreur lors de la récupération de la localisation.';
-            if (error.code === error.PERMISSION_DENIED) msg = '⚠️ Autorisation refusée.';
-            else if (error.code === error.POSITION_UNAVAILABLE) msg = '📍 Position indisponible.';
-            else if (error.code === error.TIMEOUT) msg = '⏳ Délai dépassé.';
-            showToast(msg, 'warning');
-          });
-        } else {
-          updateButton.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
-          updateButton.disabled = false;
-          showToast('🌐 Géolocalisation non supportée par votre navigateur.', 'error');
-        }
-      });
-    }
-  });
 </script>
 
 
@@ -242,6 +212,23 @@ function deg2rad(deg) {
 
 
 
+
+
+function calculerPrixLivraison(distance) {
+    if (distance <= 5) {
+        return '500 FCFA';
+    } else if (distance > 5 && distance <= 10) {
+        return '1 000 FCFA';
+    } else if (distance > 10 && distance <= 15) {
+        return '1 500 FCFA';
+    } else if (distance > 15 && distance <= 20) {
+        return '2 000 FCFA';
+    } else {
+        return 'À partir de 3 000 FCFA (selon la zone)';
+    }
+}
+
+
       function displayColis(colisArray) {
         if (!colisArray?.length) {
           colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
@@ -280,6 +267,22 @@ function deg2rad(deg) {
             )
             : 'N/A';
 
+
+
+            const distanceExpediteurDestinataire = colis.expediteur.localisation && colis.destinataire.localisation
+            ? calculerDistance(
+                colis.expediteur.localisation.latitude,
+                colis.expediteur.localisation.longitude,
+                colis.destinataire.localisation.latitude,
+                colis.destinataire.localisation.longitude
+            )
+            : 'N/A';
+
+        const prixLivraison = distanceExpediteurDestinataire !== 'N/A'
+            ? calculerPrixLivraison(parseFloat(distanceExpediteurDestinataire))
+            : 'N/A';
+
+
           card.innerHTML = `
             <div class="colis-image-container">
               ${mainPhoto ? `
@@ -308,7 +311,7 @@ function deg2rad(deg) {
                     🗺️ Localiser
                   </a>
 
-                    <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> Distance : ${distanceExpediteur} km</p>
+                    <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> La distance par raport a votre postion est de : ${distanceExpediteur} km</p>
 
                   </p>` : ''}
 
@@ -326,10 +329,19 @@ function deg2rad(deg) {
                     🗺️ Localiser
                   </a>
                   
-                 <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> Distance : ${distanceDestinataire} km</p>
+                 <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> La distance par raport a votre postion est de  : ${distanceDestinataire} km</p>
 
                   </p>` : ''}
               </div>
+
+
+              <div class="informations-livraison">
+                    <h3>Informations de Livraison</h3>
+                    ${colis.expediteur.localisation && colis.destinataire.localisation ? `
+                        <p><i class="fas fa-route mr-2"></i> Distance Entre l'expediteur et le destinataire : ${distanceExpediteurDestinataire} km</p>
+                        <p><i class="fas fa-coins mr-2"></i> Frais de livraison : ${prixLivraison}</p>
+                    ` : `<p><i class="fas fa-exclamation-triangle mr-2"></i> Impossible de calculer la distance et le prix (coordonnées manquantes).</p>`}
+                </div>
 
               <div class="meta-info">
                 <p><strong>Statut :</strong> <span class="statut ${colis.statut.toLowerCase()}">${colis.statut}</span></p>
@@ -385,6 +397,143 @@ function deg2rad(deg) {
         // Gestion des boutons après l'affichage
         setupEventListeners();
       }
+
+
+
+      function setupLocationUpdateButton(card) {
+    if (card.querySelector('.update-position-btn')) return;
+
+    const buttonGroup = card.querySelector('.button-group');
+    const updateBtn = document.createElement('button');
+    updateBtn.className = 'update-position-btn btn btn-info';
+    updateBtn.innerHTML = '<i class="fas fa-map-marker-alt mr-2"></i> Actualiser ma position';
+
+    updateBtn.onclick = () => {
+        const codeID = card.dataset.id;
+
+        // Créer un formulaire pour demander l'ID du livreur
+        const formHTML = `
+            <div class="update-livreur-id-form animate__animated animate__fadeIn">
+                <div class="form-group">
+                    <label for="livreur-id-update-${codeID}"><i class="fas fa-user mr-2"></i> Votre Identifiant:</label>
+                    <input type="text" id="livreur-id-update-${codeID}" class="form-control" required placeholder="Saisir votre identifiant">
+                </div>
+                <div class="button-group-form">
+                    <button class="confirm-update-btn btn btn-primary btn-sm" data-id="${codeID}">
+                        <i class="fas fa-check mr-2"></i> Vérifier et Actualiser
+                    </button>
+                    <button class="cancel-update-btn btn btn-secondary btn-sm">
+                        <i class="fas fa-times mr-2"></i> Annuler
+                    </button>
+                </div>
+            </div>
+        `;
+
+        updateBtn.insertAdjacentHTML('afterend', formHTML);
+        updateBtn.style.display = 'none'; // Masquer le bouton d'actualisation temporairement
+
+        const updateForm = card.querySelector('.update-livreur-id-form');
+        const confirmUpdateBtn = updateForm.querySelector('.confirm-update-btn');
+        const cancelUpdateBtn = updateForm.querySelector('.cancel-update-btn');
+        const livreurIdInput = updateForm.querySelector(`#livreur-id-update-${codeID}`);
+
+        cancelUpdateBtn.addEventListener('click', () => {
+            updateForm.classList.remove('animate__fadeIn');
+            updateForm.classList.add('animate__fadeOut');
+            setTimeout(() => {
+                updateForm.remove();
+                updateBtn.style.display = 'inline-block'; // Réafficher le bouton d'actualisation
+            }, 300);
+        });
+
+        confirmUpdateBtn.addEventListener('click', async () => {
+            const livreurIdToVerify = livreurIdInput.value;
+            if (!livreurIdToVerify) {
+                showToast('⚠️ Veuillez saisir votre identifiant.', 'warning');
+                livreurIdInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+                setTimeout(() => {
+                    livreurIdInput.classList.remove('is-invalid', 'animate__shakeX');
+                }, 1000);
+                return;
+            }
+
+            confirmUpdateBtn.disabled = true;
+            confirmUpdateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Vérification...';
+
+            try {
+                const verificationResult = await fetch('/.netlify/functions/verifierLivreur', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codeID: codeID, livreurId: livreurIdToVerify }),
+                });
+
+                const verificationData = await verificationResult.json();
+
+                if (verificationResult.ok && verificationData.isAuthorized) {
+                    // L'identifiant est correct, maintenant récupérer la position et mettre à jour
+                    confirmUpdateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Actualisation de la position...';
+
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(async (position) => {
+                            const localisation = {
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude
+                            };
+
+                            const updateRes = await fetch('/.netlify/functions/updateLivreurPosition', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ codeID: codeID, localisation: localisation }),
+                            });
+
+                            if (updateRes.ok) {
+                                showToast('📍 Position mise à jour avec succès', 'success');
+                                updateForm.classList.remove('animate__fadeIn');
+                                updateForm.classList.add('animate__fadeOut');
+                                setTimeout(() => {
+                                    updateForm.remove();
+                                    updateBtn.style.display = 'inline-block';
+                                }, 300);
+                            } else {
+                                const updateData = await updateRes.json();
+                                showToast(`❌ Erreur lors de la mise à jour: ${updateData.error || 'Une erreur inconnue est survenue'}`, 'error');
+                                confirmUpdateBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Vérifier et Actualiser';
+                                confirmUpdateBtn.disabled = false;
+                            }
+
+                        }, (error) => {
+                            showToast(`Erreur de géolocalisation: ${error.message}`, 'warning');
+                            confirmUpdateBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Vérifier et Actualiser';
+                            confirmUpdateBtn.disabled = false;
+                        }, { enableHighAccuracy: true, timeout: 10000 });
+                    } else {
+                        showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+                        confirmUpdateBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Vérifier et Actualiser';
+                        confirmUpdateBtn.disabled = false;
+                    }
+
+                } else {
+                    showToast('🚫 Identifiant incorrect.', 'error');
+                    confirmUpdateBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Vérifier et Actualiser';
+                    confirmUpdateBtn.disabled = false;
+                    livreurIdInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+                    setTimeout(() => {
+                        livreurIdInput.classList.remove('is-invalid', 'animate__shakeX');
+                    }, 1000);
+                }
+
+            } catch (error) {
+                console.error('Erreur lors de la vérification de l\'identifiant:', error);
+                showToast('⚡ Erreur de communication avec le serveur.', 'error');
+                confirmUpdateBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Vérifier et Actualiser';
+                confirmUpdateBtn.disabled = false;
+            }
+        });
+    };
+
+    buttonGroup.appendChild(updateBtn);
+}
+
 
       function setupEventListeners() {
         // Gestion des boutons "Expédier"
@@ -474,17 +623,31 @@ function deg2rad(deg) {
                       longitude: position.coords.longitude,
                     };
 
-                    const res = await fetch('/.netlify/functions/enregistrerExpedition', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        codeID: codeID,
-                        localisationLivreur: localisationLivreur,
-                        telephoneLivreur1: livreurTel1,
-                        telephoneLivreur2: livreurTel2,
-                        idLivreur: livreurID,
-                      }),
-                    });
+
+
+
+const distanceExpediteur = card.querySelector('.coordonnees.expediteur .distance')?.textContent.split(': ')[1]?.split(' ')[0];
+const distanceDestinataire = card.querySelector('.coordonnees.destinataire .distance')?.textContent.split(': ')[1]?.split(' ')[0];
+const distanceExpediteurDestinataire = card.querySelector('.informations-livraison p:nth-child(1)')?.textContent.split(': ')[1]?.split(' ')[0];
+const prixLivraison = card.querySelector('.informations-livraison p:nth-child(2)')?.textContent.split(': ')[1];
+
+const res = await fetch('/.netlify/functions/enregistrerExpedition', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        codeID: codeID,
+        localisationLivreur: localisationLivreur,
+        telephoneLivreur1: livreurTel1,
+        telephoneLivreur2: livreurTel2,
+        idLivreur: livreurID,
+        distanceExpediteur: distanceExpediteur !== 'N/A' ? parseFloat(distanceExpediteur) : null,
+        distanceDestinataire: distanceDestinataire !== 'N/A' ? parseFloat(distanceDestinataire) : null,
+        distanceExpediteurDestinataire: distanceExpediteurDestinataire !== 'N/A' ? parseFloat(distanceExpediteurDestinataire) : null,
+        prixLivraison: prixLivraison !== 'N/A' ? prixLivraison : null,
+    }),
+});
+
+
 
                     const data = await res.json();
 
@@ -628,6 +791,52 @@ function deg2rad(deg) {
           showToast('Erreur de connexion au serveur', 'error');
         }
       });
+
+
+
+      async function updateLivreurPosition(codeID) {
+    try {
+        if (!navigator.geolocation) {
+            showToast('La géolocalisation n\'est pas supportée par votre navigateur', 'error');
+            return;
+        }
+
+        showToast('🛰️ Récupération de votre position...', 'info');
+        
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            const localisation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+            };
+
+            const res = await fetch('/.netlify/functions/mettreAJourLocalisation', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ codeID, localisation }),
+            });
+
+            if (res.ok) {
+                showToast('📍 Position mise à jour avec succès', 'success');
+            } else {
+                const data = await res.json();
+                showToast(`Erreur: ${data.error || 'Impossible de mettre à jour la position'}`, 'error');
+            }
+        }, (error) => {
+            let errorMessage = 'Erreur de géolocalisation';
+            if (error.code === error.PERMISSION_DENIED) {
+                errorMessage = 'Autorisation de localisation refusée';
+            }
+            showToast(errorMessage, 'error');
+        });
+    } catch (e) {
+        showToast('Erreur de connexion au serveur', 'error');
+    }
+}
+
+
+
+
+
 
 
             // Création d'un formulaire modale pour la confirmation de livraison
