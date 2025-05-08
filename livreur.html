@@ -368,8 +368,7 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
                              target="_blank" rel="noopener">
                              🗺️ Localiser
                         </a>
-                            <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> LA DISTANCE ENTRE VOUS EST DE : ${distanceExpediteur} km</p>
-                        </p>` : ''}
+<p class="distance"><i class="fas fa-ruler-combined mr-2"></i> LA DISTANCE ENTRE VOUS EST DE : ${distanceExpediteur !== null ? distanceExpediteur.toFixed(3) : 'N/A'} km</p>                        </p>` : ''}
                 </div>
 
                 <div class="coordonnees destinataire">
@@ -382,14 +381,14 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
                              target="_blank" rel="noopener">
                              🗺️ Localiser
                         </a>
-                           <p class="distance"><i class="fas fa-ruler-combined mr-2"></i>LA DISTANCE ENTRE VOUS EST DE : ${distanceDestinataire} km</p>
+                           <p class="distance"><i class="fas fa-ruler-combined mr-2"></i>LA DISTANCE ENTRE VOUS EST DE : ${distanceDestinataire !== null ? distanceDestinataire.toFixed(3) : 'N/A'} km</p>
                         </p>` : ''}
                 </div>
 
                 <div class="informations-livraison">
                     <h3>Informations de Livraison</h3>
                     ${colis.expediteur?.localisation && colis.destinataire?.localisation ? `
-                        <p><i class="fas fa-route mr-2"></i> Distance Entre l'expediteur et le destinataire : ${distanceExpediteurDestinataire} km</p>
+                        <p><i class="fas fa-route mr-2"></i> Distance Entre l'expediteur et le destinataire : ${distanceExpediteurDestinataire !== null ? distanceDestinataire.toFixed(3) : 'N/A'} km</p>
                         <p><i class="fas fa-coins mr-2"></i> Frais de livraison : ${prixLivraison}</p>
                     ` : `<p><i class="fas fa-exclamation-triangle mr-2"></i> Impossible de calculer la distance et le prix (coordonnées manquantes).</p>`}
                 </div>
@@ -683,35 +682,33 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
 
 
 
-const distanceExpediteurText = card.querySelector('.coordonnees.expediteur .distance')?.textContent.split(': ')[1];
-const distanceExpediteur = distanceExpediteurText ? parseFloat(distanceExpediteurText) : null;
+                    const distanceExpediteurText = card.querySelector('.coordonnees.expediteur .distance')?.textContent.split(': ')[1];
+                const distanceExpediteur = distanceExpediteurText ? parseFloat(distanceExpediteurText) : null;
 
-const distanceDestinataireText = card.querySelector('.coordonnees.destinataire .distance')?.textContent.split(': ')[1];
-const distanceDestinataire = distanceDestinataireText ? parseFloat(distanceDestinataireText) : null;
+                const distanceDestinataireText = card.querySelector('.coordonnees.destinataire .distance')?.textContent.split(': ')[1];
+                const distanceDestinataire = distanceDestinataireText ? parseFloat(distanceDestinataireText) : null;
 
-const distanceExpediteurDestinataireText = card.querySelector('.informations-livraison p:nth-child(1)')?.textContent.split(': ')[1];
-const distanceExpediteurDestinataire = distanceExpediteurDestinataireText ? parseFloat(distanceExpediteurDestinataireText) : null;
+                const distanceExpediteurDestinataireText = card.querySelector('.informations-livraison p:nth-child(1)')?.textContent.split(': ')[1];
+                const distanceExpediteurDestinataire = distanceExpediteurDestinataireText ? parseFloat(distanceExpediteurDestinataireText) : null;
 
-const prixLivraison = card.querySelector('.informations-livraison p:nth-child(2)')?.textContent.split(': ')[1];
+                const prixLivraisonElement = card.querySelector('.informations-livraison p:nth-child(2)')?.textContent.split(': ')[1]?.trim();
+                const prixLivraisonToSend = prixLivraisonElement !== 'N/A' ? prixLivraisonElement : null;
 
-
-
-const res = await fetch('/.netlify/functions/enregistrerExpedition', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-        codeID: codeID,
-        localisationLivreur: localisationLivreur,
-        telephoneLivreur1: livreurTel1,
-        telephoneLivreur2: livreurTel2,
-        idLivreur: livreurID,
-        distanceExpediteur: distanceExpediteur !== 'N/A' ? parseFloat(distanceExpediteur) : null,
-        distanceDestinataire: distanceDestinataire !== 'N/A' ? parseFloat(distanceDestinataire) : null,
-        distanceExpediteurDestinataire: distanceExpediteurDestinataire !== 'N/A' ? parseFloat(distanceExpediteurDestinataire) : null,
-        prixLivraison: prixLivraison !== 'N/A' ? prixLivraison : null,
-    }),
-});
-
+                const res = await fetch('/.netlify/functions/enregistrerExpedition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        codeID: codeID,
+                        localisationLivreur: localisationLivreur,
+                        telephoneLivreur1: livreurTel1,
+                        telephoneLivreur2: livreurTel2,
+                        idLivreur: livreurID,
+                        distanceExpediteur: distanceExpediteur,
+                        distanceDestinataire: distanceDestinataire,
+                        distanceExpediteurDestinataire: distanceExpediteurDestinataire,
+                        prixLivraison: prixLivraisonToSend, // Utilisation de prixLivraisonToSend
+                    }),
+                });
 
 
                     const data = await res.json();
