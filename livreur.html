@@ -292,6 +292,8 @@ function calculerPrixLivraison(distance) {
 }
 
 
+let currentColis = null; // Déclaration de la variable globale pour stocker le colis actuel
+
 function displayColis(colisArray) {
     if (!colisArray?.length) {
         colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
@@ -309,8 +311,8 @@ function displayColis(colisArray) {
         const photos = colis.colis?.photos || [];
         const mainPhoto = photos[0]?.data ? photos[0].data : null;
 
-// Calcul des distances (s'assure que livreurLocation est défini dans la portée)
-const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude
+        // Calcul des distances (s'assure que livreurLocation est défini dans la portée)
+        const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude
             ? calculerDistance(
                 livreurLocation.latitude,
                 livreurLocation.longitude,
@@ -361,27 +363,27 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
 
                 <div class="coordonnees expediteur">
                     <h3>Expéditeur</h3>
-                    <p>👤 ${colis.expediteur?.nom || 'Non spécifié'}</p>
-                    <p>📞 <a href="tel:${colis.expediteur?.telephone || ''}">${colis.expediteur?.telephone || 'Non spécifié'}</a></p>
+                    <p>👤 <span class="math-inline">\{colis\.expediteur?\.nom \|\| 'Non spécifié'\}</p\>
+<p\>📞 <a href\="tel\:</span>{colis.expediteur?.telephone || ''}">${colis.expediteur?.telephone || 'Non spécifié'}</a></p>
                     ${colis.expediteur?.localisation ? `
-                        <p><a href="https://maps.google.com?q=$${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
-                             target="_blank" rel="noopener">
-                             🗺️ Localiser
+                        <p><a href="https://maps.google.com?q=$$${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
+                            target="_blank" rel="noopener">
+                            🗺️ Localiser
                         </a>
-<p class="distance"><i class="fas fa-ruler-combined mr-2"></i> LA DISTANCE ENTRE VOUS EST DE : ${distanceExpediteur !== null ? distanceExpediteur.toFixed(3) : 'N/A'} km</p>                        </p>` : ''}
+<p class="distance"><i class="fas fa-ruler-combined mr-2"></i> LA DISTANCE ENTRE VOUS EST DE : ${distanceExpediteur !== null ? distanceExpediteur.toFixed(3) : 'N/A'} km</p>                         </p>` : ''}
                 </div>
 
                 <div class="coordonnees destinataire">
                     <h3>Destinataire</h3>
-                    <p>👤 ${colis.destinataire?.nom || 'Non spécifié'} ${colis.destinataire?.prenom || ''}</p>
-                    <p>📞 <a href="tel:${colis.destinataire?.telephone || ''}">${colis.destinataire?.telephone || 'Non spécifié'}</a></p>
+                    <p>👤 ${colis.destinataire?.nom || 'Non spécifié'} <span class="math-inline">\{colis\.destinataire?\.prenom \|\| ''\}</p\>
+<p\>📞 <a href\="tel\:</span>{colis.destinataire?.telephone || ''}">${colis.destinataire?.telephone || 'Non spécifié'}</a></p>
                     ${colis.destinataire?.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
                     ${colis.destinataire?.localisation ? `
-                        <p><a href="https://maps.google.com?q=$${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
-                             target="_blank" rel="noopener">
-                             🗺️ Localiser
+                        <p><a href="https://maps.google.com?q=$$${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
+                            target="_blank" rel="noopener">
+                            🗺️ Localiser
                         </a>
-                           <p class="distance"><i class="fas fa-ruler-combined mr-2"></i>LA DISTANCE ENTRE VOUS EST DE : ${distanceDestinataire !== null ? distanceDestinataire.toFixed(3) : 'N/A'} km</p>
+                            <p class="distance"><i class="fas fa-ruler-combined mr-2"></i>LA DISTANCE ENTRE VOUS EST DE : ${distanceDestinataire !== null ? distanceDestinataire.toFixed(3) : 'N/A'} km</p>
                         </p>` : ''}
                 </div>
 
@@ -394,7 +396,7 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
                 </div>
 
                 <div class="meta-info">
-                    <p><strong>Statut :</strong> <span class="statut ${colis.statut?.toLowerCase() || 'inconnu'}">${colis.statut || 'Inconnu'}</span></p>
+                    <p><strong>Statut :</strong> <span class="statut <span class="math-inline">\{colis\.statut?\.toLowerCase\(\) \|\| 'inconnu'\}"\></span>{colis.statut || 'Inconnu'}</span></p>
                     <p><strong>Livraison prévue :</strong> ${colis.dateLivraison ? new Date(colis.dateLivraison).toLocaleDateString('fr-FR') : 'Non précisée'}</p>
                 </div>
 
@@ -402,8 +404,8 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
                     ${colis.estExpedie
                         ? `<p class="text-muted"><i class="fas fa-truck mr-2"></i> En cours de livraison par le livreur #${colis.idLivreurEnCharge || 'Non spécifié'}.</p>`
                         : `<button class="expedier-btn btn btn-primary" data-id="${colis.codeID}" aria-label="Expédier le colis ${colis.codeID}">
-                                <i class="fas fa-truck-loading mr-2"></i> Expédier
-                            </button>`
+                                    <i class="fas fa-truck-loading mr-2"></i> Expédier
+                                </button>`
                     }
                     <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Livraison Terminer ${colis.codeID}">
     <span class="material-icons animated-check">check_circle</span>
@@ -449,6 +451,14 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
                 img.src = mainPhoto;
             });
         }
+
+        // Stocker le colis actuel lors de l'affichage (pour la méthode 2)
+        const confirmBtn = card.querySelector('.expedier-btn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function() {
+                currentColis = colis; // Stockez le colis actuel
+            });
+        }
     });
 
     // Gestion des boutons après l'affichage (principalement pour les boutons "Expédier" et "Terminer")
@@ -456,7 +466,7 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
 }
 
 
-    function setupLocationUpdateButton(card) {
+function setupLocationUpdateButton(card) {
     if (card.querySelector('.update-position-btn')) return;
 
     const buttonGroup = card.querySelector('.button-group');
@@ -471,8 +481,8 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
         const formHTML = `
             <div class="update-livreur-id-form animate__animated animate__fadeIn">
                 <div class="form-group">
-                    <label for="livreur-id-update-${codeID}"><i class="fas fa-user mr-2"></i> Votre Identifiant:</label>
-                    <input type="text" id="livreur-id-update-${codeID}" class="form-control" required placeholder="Saisir votre identifiant">
+                    <label for="livreur-id-update-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-user mr\-2"\></i\> Votre Identifiant\:</label\>
+<input type\="text" id\="livreur\-id\-update\-</span>{codeID}" class="form-control" required placeholder="Saisir votre identifiant">
                 </div>
                 <div class="button-group-form">
                     <button class="confirm-update-btn btn btn-primary btn-sm" data-id="${codeID}">
@@ -591,44 +601,44 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
 }
 
 
-      function setupEventListeners() {
-        // Gestion des boutons "Expédier"
-        document.querySelectorAll('.expedier-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
+function setupEventListeners() {
+    // Gestion des boutons "Expédier"
+    document.querySelectorAll('.expedier-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
             const codeID = btn.dataset.id;
             const card = btn.closest('.card');
 
             const formHTML = `
-              <div class="expedition-form animate__animated animate__fadeIn">
-                <h3 class="form-title"><i class="fas fa-truck-loading mr-2"></i> Informations d'expédition</h3>
-                <div class="form-group">
-                  <label for="livreur-id-${codeID}"><i class="fas fa-user mr-2"></i> Identifiant Livreur:</label>
-                  <input type="text" id="livreur-id-${codeID}" class="form-control" required placeholder="Saisir l'identifiant">
+                <div class="expedition-form animate__animated animate__fadeIn">
+                    <h3 class="form-title"><i class="fas fa-truck-loading mr-2"></i> Informations d'expédition</h3>
+                    <div class="form-group">
+                        <label for="livreur-id-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-user mr\-2"\></i\> Identifiant Livreur\:</label\>
+<input type\="text" id\="livreur\-id\-</span>{codeID}" class="form-control" required placeholder="Saisir l'identifiant">
+                    </div>
+                    <div class="form-group">
+                        <label for="livreur-tel1-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-phone mr\-2"\></i\> Téléphone Livreur 1\:</label\>
+<input type\="tel" id\="livreur\-tel1\-</span>{codeID}" class="form-control" required placeholder="Numéro principal">
+                    </div>
+                    <div class="form-group">
+                        <label for="livreur-tel2-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-phone\-alt mr\-2"\></i\> Téléphone Livreur 2\:</label\>
+<input type\="tel" id\="livreur\-tel2\-</span>{codeID}" class="form-control" placeholder="Numéro secondaire (optionnel)">
+                    </div>
+                    <div class="button-group-form">
+                        <button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="${codeID}">
+                            <span class="btn-inner"><i class="fas fa-check-circle mr-2"></i> Confirmer l'expédition</span>
+                            <span class="btn-loading"><i class="fas fa-spinner fa-spin"></i></span>
+                        </button>
+                        <button class="cancel-expedition-btn btn btn-secondary btn-animated" data-id="${codeID}">
+                            <span class="btn-inner"><i class="fas fa-times-circle mr-2"></i> Annuler</span>
+                        </button>
+                    </div>
                 </div>
-                <div class="form-group">
-                  <label for="livreur-tel1-${codeID}"><i class="fas fa-phone mr-2"></i> Téléphone Livreur 1:</label>
-                  <input type="tel" id="livreur-tel1-${codeID}" class="form-control" required placeholder="Numéro principal">
-                </div>
-                <div class="form-group">
-                  <label for="livreur-tel2-${codeID}"><i class="fas fa-phone-alt mr-2"></i> Téléphone Livreur 2:</label>
-                  <input type="tel" id="livreur-tel2-${codeID}" class="form-control" placeholder="Numéro secondaire (optionnel)">
-                </div>
-                <div class="button-group-form">
-                  <button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="${codeID}">
-                    <span class="btn-inner"><i class="fas fa-check-circle mr-2"></i> Confirmer l'expédition</span>
-                    <span class="btn-loading"><i class="fas fa-spinner fa-spin"></i></span>
-                  </button>
-                  <button class="cancel-expedition-btn btn btn-secondary btn-animated" data-id="${codeID}">
-                    <span class="btn-inner"><i class="fas fa-times-circle mr-2"></i> Annuler</span>
-                  </button>
-                </div>
-              </div>
             `;
 
             btn.insertAdjacentHTML('afterend', formHTML);
             btn.classList.add('animate__animated', 'animate__fadeOut');
             setTimeout(() => {
-              btn.style.display = 'none';
+                btn.style.display = 'none';
             }, 300);
 
             const confirmBtn = card.querySelector('.confirm-expedition-btn');
@@ -636,161 +646,211 @@ const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.la
             const formDiv = card.querySelector('.expedition-form');
 
             cancelBtn.addEventListener('click', () => {
-              formDiv.classList.remove('animate__fadeIn');
-              formDiv.classList.add('animate__fadeOut');
-              setTimeout(() => {
-                formDiv.remove();
-                btn.classList.remove('animate__fadeOut');
-                btn.classList.add('animate__animated', 'animate__fadeIn');
-                btn.style.display = 'inline-block';
-              }, 300);
+                formDiv.classList.remove('animate__fadeIn');
+                formDiv.classList.add('animate__fadeOut');
+                setTimeout(() => {
+                    formDiv.remove();
+                    btn.classList.remove('animate__fadeOut');
+                    btn.classList.add('animate__animated', 'animate__fadeIn');
+                    btn.style.display = 'inline-block';
+                }, 300);
             });
 
             confirmBtn.addEventListener('click', async () => {
-    const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
-    const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
-    const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
+                const livreurID = document.getElementById(`livreur-id-${codeID}`).value;
+                const livreurTel1 = document.getElementById(`livreur-tel1-${codeID}`).value;
+                const livreurTel2 = document.getElementById(`livreur-tel2-${codeID}`).value;
 
-    if (!livreurID || !livreurTel1) {
-        showToast('⚠️ L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'warning');
-        const idInput = document.getElementById(`livreur-id-${codeID}`);
-        const tel1Input = document.getElementById(`livreur-tel1-${codeID}`);
-        if (!livreurID) idInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
-        if (!livreurTel1) tel1Input.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
-        setTimeout(() => {
-            idInput.classList.remove('is-invalid', 'animate__shakeX');
-            tel1Input.classList.remove('is-invalid', 'animate__shakeX');
-        }, 1000);
-        return;
-    }
-
-    confirmBtn.disabled = true;
-    confirmBtn.querySelector('.btn-inner').style.display = 'none';
-    confirmBtn.querySelector('.btn-loading').style.display = 'inline-block';
-    cancelBtn.disabled = true;
-    cancelBtn.classList.add('disabled');
-
-    try {
-        if (navigator.geolocation) {
-            showToast('🛰️ Récupération de votre position...', 'info');
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const localisationLivreur = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                };
-
-                let distanceExpediteur = null;
-                if (colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude) {
-                    distanceExpediteur = calculerDistance(
-                        localisationLivreur.latitude,
-                        localisationLivreur.longitude,
-                        colis.expediteur.localisation.latitude,
-                        colis.expediteur.localisation.longitude
-                    );
-                }
-
-                let distanceDestinataire = null;
-                if (colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude) {
-                    distanceDestinataire = calculerDistance(
-                        localisationLivreur.latitude,
-                        localisationLivreur.longitude,
-                        colis.destinataire.localisation.latitude,
-                        colis.destinataire.localisation.longitude
-                    );
-                }
-
-                let distanceExpediteurDestinataire = null;
-                if (colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude) {
-                    distanceExpediteurDestinataire = calculerDistance(
-                        colis.expediteur.localisation.latitude,
-                        colis.expediteur.localisation.longitude,
-                        colis.destinataire.localisation.latitude,
-                        colis.destinataire.localisation.longitude
-                    );
-                }
-
-                const prixLivraison = distanceExpediteurDestinataire !== null
-                    ? calculerPrixLivraison(distanceExpediteurDestinataire)
-                    : null;
-
-                const res = await fetch('/.netlify/functions/enregistrerExpedition', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        codeID: codeID,
-                        localisationLivreur: localisationLivreur,
-                        telephoneLivreur1: livreurTel1,
-                        telephoneLivreur2: livreurTel2,
-                        idLivreur: livreurID,
-                        distanceExpediteur: distanceExpediteur,
-                        distanceDestinataire: distanceDestinataire,
-                        distanceExpediteurDestinataire: distanceExpediteurDestinataire,
-                        prixLivraison: prixLivraison,
-                    }),
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                    formDiv.classList.remove('animate__fadeIn');
-                    formDiv.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+                if (!livreurID || !livreurTel1) {
+                    showToast('⚠️ L\'identifiant et le premier numéro de téléphone du livreur sont requis.', 'warning');
+                    const idInput = document.getElementById(`livreur-id-${codeID}`);
+                    const tel1Input = document.getElementById(`livreur-tel1-${codeID}`);
+                    if (!livreurID) idInput.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
+                    if (!livreurTel1) tel1Input.classList.add('is-invalid', 'animate__animated', 'animate__shakeX');
                     setTimeout(() => {
-                        formDiv.style.display = 'none';
-                        card.querySelector('.button-group').innerHTML = `
-                          <p class="info-expedition animate__animated animate__fadeIn"><i class="fas fa-check-double mr-2 text-success"></i> Expédition enregistrée !</p>
-                          <p class="instruction-livreur animate__animated animate__fadeIn delay-0-5s"><i class="fas fa-info-circle mr-2 text-info"></i> Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
-                        `;
-                        card.classList.add('en-cours-expedition');
-                        setupLocationUpdateButton(card);
-                    }, 300);
-                    showToast('✅ Informations d\'expédition enregistrées avec succès !', 'success');
-                } else {
+                        idInput.classList.remove('is-invalid', 'animate__shakeX');
+                        tel1Input.classList.remove('is-invalid', 'animate__shakeX');
+                    }, 1000);
+                    return;
+                }
+
+                confirmBtn.disabled = true;
+                confirmBtn.querySelector('.btn-inner').style.display = 'none';
+                confirmBtn.querySelector('.btn-loading').style.display = 'inline-block';
+                cancelBtn.disabled = true;
+                cancelBtn.classList.add('disabled');
+
+                try {
+                    if (navigator.geolocation) {
+                        showToast('🛰️ Récupération de votre position...', 'info');
+                        navigator.geolocation.getCurrentPosition(async (position) => {
+                            const localisationLivreur = {
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude,
+                            };
+
+                            let distanceExpediteur = null;
+                            if (currentColis?.expediteur?.localisation?.latitude && currentColis?.expediteur?.localisation?.longitude) {
+                                distanceExpediteur = calculerDistance(
+                                    localisationLivreur.latitude,
+                                    localisationLivreur.longitude,
+                                    currentColis.expediteur.localisation.latitude,
+                                    currentColis.expediteur.localisation.longitude
+                                );
+                            }
+
+                            let distanceDestinataire = null;
+                            if (currentColis?.destinataire?.localisation?.latitude && currentColis?.destinataire?.localisation?.longitude) {
+                                distanceDestinataire = calculerDistance(
+                                    localisationLivreur.latitude,
+                                    localisationLivreur.longitude,
+                                    currentColis.destinataire.localisation.latitude,
+                                    currentColis.destinataire.localisation.longitude
+                                );
+                            }
+
+                            let distanceExpediteurDestinataire = null;
+                            if (currentColis?.expediteur?.localisation?.latitude && currentColis?.expediteur?.localisation?.longitude && currentColis?.destinataire?.localisation?.latitude && currentColis?.destinataire?.localisation?.longitude) {
+                                distanceExpediteurDestinataire = calculerDistance(
+                                    currentColis.expediteur.localisation.latitude,
+                                    currentColis.expediteur.localisation.longitude,
+                                    currentColis.destinataire.localisation.latitude,
+                                    currentColis.destinataire.localisation.longitude
+                                );
+                            }
+
+                            const prixLivraison = distanceExpediteurDestinataire !== null
+                                ? calculerPrixLivraison(distanceExpediteurDestinataire)
+                                : null;
+
+                            const res = await fetch('/.netlify/functions/enregistrerExpedition', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    codeID: codeID,
+                                    localisationLivreur: localisationLivreur,
+                                    telephoneLivreur1: livreurTel1,
+                                    telephoneLivreur2: livreurTel2,
+                                    idLivreur: livreurID,
+                                    distanceExpediteur: distanceExpediteur,
+                                    distanceDestinataire: distanceDestinataire,
+                                    distanceExpediteurDestinataire: distanceExpediteurDestinataire,
+                                    prixLivraison: prixLivraison,
+                                }),
+                            });
+
+                            const data = await res.json();
+
+                            if (res.ok) {
+                                formDiv.classList.remove('animate__fadeIn');
+                                formDiv.classList.add('animate__animated', 'animate__fadeOut', 'animate__faster');
+                                setTimeout(() => {
+                                    formDiv.style.display = 'none';
+                                    card.querySelector('.button-group').innerHTML = `
+                                        <p class="info-expedition animate__animated animate__fadeIn"><i class="fas fa-check-double mr-2 text-success"></i> Expédition enregistrée !</p>
+                                        <p class="instruction-livreur animate__animated animate__fadeIn delay-0-5s"><i class="fas fa-info-circle mr-2 text-info"></i> Veuillez récupérer le Colis chez l'expéditeur et Le livrer dans les brefs délais !</p>
+                                    `;
+                                    card.classList.add('en-cours-expedition');
+                                    setupLocationUpdateButton(card);
+                                }, 300);
+                                showToast('✅ Informations d\'expédition enregistrées avec succès !', 'success');
+                            } else {
+                                confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+                                confirmBtn.disabled = false;
+                                confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+                                confirmBtn.querySelector('.btn-loading').style.display = 'none';
+                                cancelBtn.disabled = false;
+                                cancelBtn.classList.remove('disabled');
+                                showToast(`❌ Erreur lors de l'enregistrement: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+                            }
+
+                        }, (error) => {
+                            confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+                            confirmBtn.disabled = false;
+                            confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+                            confirmBtn.querySelector('.btn-loading').style.display = 'none';
+                            cancelBtn.disabled = false;
+                            cancelBtn.classList.remove('disabled');
+                            let errorMessage = 'Erreur lors de la récupération de la localisation.';
+                            if (error.code === error.PERMISSION_DENIED) {
+                                errorMessage = '⚠️ Autorisation de localisation refusée.';
+                            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                                errorMessage = '📍 Position indisponible.';
+                            } else if (error.code === error.TIMEOUT) {
+                                errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
+                            }
+                            showToast(errorMessage, 'warning');
+                        }, { enableHighAccuracy: true, timeout: 10000 });
+                    } else {
+                        confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
+                        confirmBtn.disabled = false;
+                        confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
+                        confirmBtn.querySelector('.btn-loading').style.display = 'none';
+                        cancelBtn.disabled = false;
+                        cancelBtn.classList.remove('disabled');
+                        showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
+                    }
+                } catch (e) {
                     confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
                     confirmBtn.disabled = false;
                     confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
                     confirmBtn.querySelector('.btn-loading').style.display = 'none';
                     cancelBtn.disabled = false;
                     cancelBtn.classList.remove('disabled');
-                    showToast(`❌ Erreur lors de l'enregistrement: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
+                    showToast('⚡ Erreur de connexion au serveur.', 'error');
+                }
+            });
+        });
+    });
+
+    // Gestion des boutons "Terminer"
+    document.querySelectorAll('.terminer-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const codeID = btn.dataset.id;
+            const card = btn.closest('.card');
+
+            const isConfirmed = confirm(`Êtes-vous sûr d'avoir terminé la livraison du colis #${codeID} ?`);
+            if (!isConfirmed) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-icons spin">hourglass_empty</span> Terminer...';
+
+            try {
+                const res = await fetch('/.netlify/functions/terminerLivraison', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codeID: codeID }),
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    card.classList.remove('en-cours-expedition');
+                    card.classList.add('livraison-terminee', 'animate__animated', 'animate__pulse');
+                    card.querySelector('.button-group').innerHTML = `
+                        <p class="text-success animate__animated animate__fadeIn"><i class="fas fa-check-circle mr-2"></i> Livraison terminée !</p>
+                    `;
+                    const statutSpan = card.querySelector('.statut');
+                    if (statutSpan) {
+                        statutSpan.textContent = 'Livré';
+                        statutSpan.className = 'statut livre';
+                    }
+                    showToast(`📦 Le colis #${codeID} a été marqué comme livré avec succès !`, 'success');
+                } else {
+                    btn.innerHTML = '<span class="material-icons">check_circle</span> Terminer';
+                    btn.disabled = false;
+                    showToast(`❌ Erreur lors de la mise à jour du statut: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
                 }
 
-            }, (error) => {
-                confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
-                confirmBtn.disabled = false;
-                confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
-                confirmBtn.querySelector('.btn-loading').style.display = 'none';
-                cancelBtn.disabled = false;
-                cancelBtn.classList.remove('disabled');
-                let errorMessage = 'Erreur lors de la récupération de la localisation.';
-                if (error.code === error.PERMISSION_DENIED) {
-                    errorMessage = '⚠️ Autorisation de localisation refusée.';
-                } else if (error.code === error.POSITION_UNAVAILABLE) {
-                    errorMessage = '📍 Position indisponible.';
-                } else if (error.code === error.TIMEOUT) {
-                    errorMessage = '⏳ Délai d\'attente pour la localisation dépassé.';
-                }
-                showToast(errorMessage, 'warning');
-            });
-        } else {
-            confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
-            confirmBtn.disabled = false;
-            confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
-            confirmBtn.querySelector('.btn-loading').style.display = 'none';
-            cancelBtn.disabled = false;
-            cancelBtn.classList.remove('disabled');
-            showToast('🌐 La géolocalisation n\'est pas supportée par votre navigateur.', 'error');
-        }
-    } catch (e) {
-        confirmBtn.innerHTML = '<span class="btn-inner"><i class="fas fa-exclamation-triangle mr-2"></i> Erreur</span><span class="btn-loading"></span>';
-        confirmBtn.disabled = false;
-        confirmBtn.querySelector('.btn-inner').style.display = 'inline-block';
-        confirmBtn.querySelector('.btn-loading').style.display = 'none';
-        cancelBtn.disabled = false;
-        cancelBtn.classList.remove('disabled');
-        showToast('⚡ Erreur de connexion au serveur.', 'error');
-    }
-});
-          });
+            } catch (error) {
+                console.error('Erreur lors de la mise à jour du statut de livraison:', error);
+                btn.innerHTML = '<span class="material-icons">check_circle</span> Terminer';
+                btn.disabled = false;
+                showToast('⚡ Erreur de communication avec le serveur.', 'error');
+            }
+              });
         });
 
         // Gestion des boutons "Terminer"
