@@ -439,6 +439,8 @@
           ? calculerPrixLivraison(distanceExpediteurDestinataire)
           : null;
 
+
+        card.dataset.colis = JSON.stringify(colis); // <-- Ajouter cette ligne  
         card.innerHTML = `
           <div class="colis-image-container">
             ${mainPhoto ? `
@@ -512,6 +514,10 @@
         `;
 
         colisList.appendChild(card);
+
+
+
+        
 
         // Ajouter le bouton "Actualiser ma position" si le colis est déjà expédié
         if (colis.estExpedie) {
@@ -831,6 +837,13 @@
                   });
 
                   const data = await res.json();
+
+  console.log("Données reçues:", {
+  distanceExpediteur,
+  distanceDestinataire,
+  distanceExpediteurDestinataire,
+  prixLivraison
+});
 
                   if (res.ok) {
                     showToast('✅ Informations d\'expédition enregistrées avec succès !', 'success');
