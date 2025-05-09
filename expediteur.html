@@ -635,306 +635,398 @@
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-        // Configuration
-        const config = {
-            maxPhotos: 2,
-            maxPhotoSize: 2 * 1024 * 1024 // 2MB
-        };
+document.addEventListener('DOMContentLoaded', () => {
+    // Configuration
+    const config = {
+        maxPhotos: 2,
+        maxPhotoSize: 2 * 1024 * 1024, // 2MB
+        locationAttempts: 3, // Nombre maximum de tentatives de localisation par cycle
+        locationTimeout: 30000, // Délai pour chaque tentative (en ms)
+        desiredAccuracy: 50, // Précision souhaitée en mètres
+    };
 
-        // Éléments DOM
-        const elements = {
-            showFormBtn: document.getElementById('show-form'),
-            formContainer: document.getElementById('expedition-form'),
-            form: document.getElementById('form'),
-            locationStatus: document.getElementById('location-status'),
-            locationInput: document.getElementById('location'),
-            refreshLocationBtn: document.getElementById('refresh-location'),
-            photosInput: document.getElementById('photos'),
-            previewContainer: document.getElementById('preview-container'),
-            successMsg: document.getElementById('success-msg'),
-            errorMsg: document.getElementById('error-msg'),
-            modalExpeditionId: document.getElementById('expeditionIdModal'),
-            closeExpeditionIdModal: document.getElementById('closeExpeditionIdModal'),
-            expeditionCodeDisplay: document.getElementById('expedition-code'),
-            copyExpeditionIdButton: document.getElementById('copyExpeditionId'),
-            copyMessage: document.getElementById('copy-message'),
-            toastContainer: document.getElementById('toast-container'),
-            submitButton: document.querySelector('#form button[type="submit"]') // Sélectionner le bouton de soumission
-        };
+    // Éléments DOM
+    const elements = {
+        showFormBtn: document.getElementById('show-form'),
+        formContainer: document.getElementById('expedition-form'),
+        form: document.getElementById('form'),
+        locationStatus: document.getElementById('location-status'),
+        locationInput: document.getElementById('location'),
+        refreshLocationBtn: document.getElementById('refresh-location'),
+        photosInput: document.getElementById('photos'),
+        previewContainer: document.getElementById('preview-container'),
+        successMsg: document.getElementById('success-msg'),
+        errorMsg: document.getElementById('error-msg'),
+        modalExpeditionId: document.getElementById('expeditionIdModal'),
+        closeExpeditionIdModal: document.getElementById('closeExpeditionIdModal'),
+        expeditionCodeDisplay: document.getElementById('expedition-code'),
+        copyExpeditionIdButton: document.getElementById('copyExpeditionId'),
+        copyMessage: document.getElementById('copy-message'),
+        toastContainer: document.getElementById('toast-container'),
+        submitButton: document.querySelector('#form button[type="submit"]'),
+        locationControls: document.createElement('div'), // Container pour les boutons de localisation
+        retryLocationBtn: document.createElement('button'),
+        validateLocationBtn: document.createElement('button'),
+        accuracyBars: [] // Tableau pour stocker les éléments de barre de précision
+    };
 
-        let userLocation = null;
-        let locationObtained = false; // Variable pour suivre si la localisation a été obtenue
+    let validatedLocation = null;
+    let locationAttemptsMade = 0;
+    let isLocating = false;
 
-        // Afficher le formulaire
-        elements.showFormBtn.addEventListener('click', () => {
-            elements.formContainer.style.display = 'block';
-            elements.showFormBtn.style.display = 'none';
-        });
+    // Styles pour les barres de précision (inchangés)
+    const accuracyBarStyle = `
+        width: 80%;
+        height: 8px;
+        background-color: #f0f0f0;
+        border-radius: 4px;
+        margin-top: 5px;
+        overflow: hidden;
+    `;
+    const accuracyProgressStyle = `
+        height: 100%;
+        background-color: var(--success);
+        border-radius: 4px;
+        width: 0%;
+        transition: width 0.3s ease-in-out;
+    `;
 
-        const getLocation = () => {
-            return new Promise((resolve, reject) => {
-                elements.locationStatus.textContent = '🔄 Localisation en cours...';
-                elements.locationStatus.classList.add('animate__animated', 'animate__flash'); // Ajout des classes d'animation
+    // Cacher le formulaire initialement
+    elements.formContainer.style.display = 'none';
+    elements.showFormBtn.style.display = 'none'; // Cacher le bouton initial
 
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        userLocation = {
-                            latitude: position.coords.latitude,
-                            longitude: position.coords.longitude
-                        };
-                        locationObtained = true; // Marquer la localisation comme obtenue
-                        elements.locationStatus.textContent = '📍 Position enregistrée';
-                        elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
-                        resolve(userLocation);
-                    },
-                    error => {
-                        let message = '';
-                        switch (error.code) {
-                            case error.PERMISSION_DENIED:
-                                message = "🚫 L'accès à la localisation a été refusé.";
-                                break;
-                            case error.POSITION_UNAVAILABLE:
-                                message = "🛰️ Informations de localisation non disponibles.";
-                                break;
-                            case error.TIMEOUT:
-                                message = "⏳ Délai d'attente pour la localisation dépassé.";
-                                break;
-                            case error.UNKNOWN_ERROR:
-                                message = "❓ Une erreur inconnue est survenue lors de la localisation.";
-                                break;
-                        }
-                        elements.locationStatus.classList.remove('animate__animated', 'animate__flash'); // Suppression des classes
-                        elements.locationStatus.classList.add('error', 'animate__animated', 'animate__shakeX'); // Ajout d'une animation d'erreur
-                        elements.locationStatus.textContent = message;
-                        reject(new Error(message));
-                        setTimeout(() => {
-                            elements.locationStatus.classList.remove('animate__shakeX');
-                            elements.locationStatus.classList.remove('error');
-                        }, 1000);
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                );
-            });
-        };
+    // Créer et insérer les contrôles de localisation en haut
+    function setupLocationControls() {
+        elements.locationControls.style.marginTop = '1rem';
+        elements.locationControls.style.marginBottom = '1rem'; // Ajouter un peu d'espace après
 
-        elements.refreshLocationBtn.addEventListener('click', async () => {
-            elements.locationStatus.textContent = '🔄 Tentative de relocalisation...';
-            elements.locationStatus.classList.add('animate__animated', 'animate__pulse');
-            try {
-                await getLocation();
-                elements.locationStatus.classList.remove('animate__pulse');
-            } catch (error) {
-                console.error('Erreur de localisation:', error);
-                showToast('Erreur lors de la récupération de la localisation', 'error');
-                elements.locationStatus.classList.remove('animate__pulse');
+        elements.retryLocationBtn.textContent = 'Réessayer la localisation';
+        elements.retryLocationBtn.className = 'btn-primary';
+        elements.retryLocationBtn.style.marginRight = '0.5rem';
+        elements.retryLocationBtn.addEventListener('click', startLocationProcess);
+
+        elements.validateLocationBtn.textContent = 'Valider la localisation';
+        elements.validateLocationBtn.className = 'btn-primary';
+        elements.validateLocationBtn.disabled = true; // Désactivé initialement
+        elements.validateLocationBtn.addEventListener('click', () => {
+            if (validatedLocation) {
+                elements.locationInput.value = `Lat: ${validatedLocation.latitude.toFixed(5)}, Lon: ${validatedLocation.longitude.toFixed(5)} (Précision: ${validatedLocation.accuracy.toFixed(0)}m)`;
+                elements.locationStatus.textContent = '✅ Localisation validée. Vous pouvez maintenant créer votre expédition.';
+                elements.retryLocationBtn.style.display = 'none';
+                elements.validateLocationBtn.style.display = 'none';
+                elements.showFormBtn.style.display = 'block'; // Afficher le bouton pour montrer le formulaire
+            } else {
+                showToast('Aucune localisation valide à enregistrer.', 'error');
             }
         });
 
-        // Prévisualisation des photos
-        elements.photosInput.addEventListener('change', () => {
-            elements.previewContainer.innerHTML = '';
-            const files = elements.photosInput.files;
+        elements.locationControls.appendChild(elements.retryLocationBtn);
+        elements.locationControls.appendChild(elements.validateLocationBtn);
+        elements.container.insertBefore(elements.locationControls, elements.container.firstChild); // Insérer en haut du container
 
-            if (files.length > config.maxPhotos) {
-                showToast(`Maximum ${config.maxPhotos} photos autorisées`, 'error');
-                elements.photosInput.value = '';
-                return;
+        // Créer et insérer les barres de précision
+        for (let i = 0; i < config.locationAttempts; i++) {
+            const barContainer = document.createElement('div');
+            barContainer.style.cssText = accuracyBarStyle;
+            const progressBar = document.createElement('div');
+            progressBar.style.cssText = accuracyProgressStyle;
+            barContainer.appendChild(progressBar);
+            elements.accuracyBars.push(progressBar);
+            elements.container.insertBefore(barContainer, elements.container.firstChild); // Insérer en haut
+        }
+    }
+
+    function startLocationProcess() {
+        if (isLocating) return;
+        isLocating = true;
+        validatedLocation = null;
+        elements.validateLocationBtn.disabled = true;
+        elements.locationStatus.textContent = '🔄 Démarrage du processus de localisation...';
+        locationAttemptsMade = 0;
+        elements.accuracyBars.forEach(bar => bar.style.width = '0%');
+        attemptGetLocation();
+    }
+
+    function attemptGetLocation() {
+        if (locationAttemptsMade >= config.locationAttempts || validatedLocation) {
+            isLocating = false;
+            if (!validatedLocation) {
+              elements.locationStatus.textContent = `⚠️ La localisation actuelle est trop imprécise pour autoriser une expédition après ${config.locationAttempts} tentatives. Veuillez réessayer, s'il vous plaît.`;
             }
-
-            for (const file of files) {
-                if (file.size > config.maxPhotoSize) {
-                    showToast(`La photo ${file.name} dépasse 2MB`, 'error');
-                    elements.photosInput.value = '';
-                    elements.previewContainer.innerHTML = '';
-                    return;
-                }
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const preview = document.createElement('div');
-                    preview.className = 'photo-preview';
-                    preview.innerHTML = `
-                        <img src="${e.target.result}" alt="Prévisualisation">
-<span\></span>{file.name}</span>
-                        <span>${(file.size / 1024).toFixed(2)} KB</span>
-                    `;
-                    elements.previewContainer.appendChild(preview);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-        // Fonction pour afficher la modale d'ID d'expédition
-        function showExpeditionIdModal(colisID) {
-            elements.expeditionCodeDisplay.textContent = colisID;
-            elements.modalExpeditionId.classList.add('active');
+            return;
         }
 
-        // Fonction pour fermer la modale d'ID d'expédition
-        function hideExpeditionIdModal() {
-            elements.modalExpeditionId.classList.remove('active');
-            elements.copyMessage.style.display = 'none';
-        }
+        locationAttemptsMade++;
+        elements.locationStatus.textContent = `🔄 Localisation en cours (Tentative ${locationAttemptsMade}/${config.locationAttempts})...`;
 
-        // Fermer la modale au clic sur la croix
-        elements.closeExpeditionIdModal.addEventListener('click', hideExpeditionIdModal);
+        navigator.geolocation.getCurrentPosition(
+            position => {
+                const { latitude, longitude, accuracy } = position.coords;
+                updateAccuracyBar(locationAttemptsMade - 1, accuracy);
 
-        // Fermer la modale en cliquant en dehors
-        window.addEventListener('click', (event) => {
-            if (event.target === elements.modalExpeditionId) {
-                hideExpeditionIdModal();
-            }
-        });
-
-        // Copier l'ID d'expédition au clic
-        elements.copyExpeditionIdButton.addEventListener('click', () => {
-            const range = document.createRange();
-            range.selectNode(elements.expeditionCodeDisplay);
-            window.getSelection().removeAllRanges();
-            window.getSelection().addRange(range);
-
-            try {
-                document.execCommand('copy');
-                elements.copyMessage.style.display = 'inline';
-                setTimeout(() => {
-                    elements.copyMessage.style.display = 'none';
-                }, 1500);
-            } catch (err) {
-                console.error('Impossible de copier l\'ID:', err);
-                showToast('Erreur lors de la copie de l\'ID', 'error');
-            }
-
-            window.getSelection().removeAllRanges();
-        });
-
-        function showToast(message, type = 'default') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type} animate__animated animate__fadeInDown`; // Ajout des classes animate.css
-            toast.textContent = message;
-            elements.toastContainer.appendChild(toast);
-
-            setTimeout(() => {
-                toast.classList.remove('animate__fadeInDown');
-                toast.classList.add('animate__fadeOutUp'); // Animation de disparition
-                setTimeout(() => {
-                    toast.remove();
-                }, 500); // Durée de l'animation de disparition
-            }, 3000);
-        }
-
-        // Soumission du formulaire
-        elements.form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            if (!locationObtained || !userLocation) {
-                showToast('La localisation est requise pour créer une expédition.', 'error');
-                return;
-            }
-
-            const files = elements.photosInput.files;
-            if (files.length === 0 || files.length > config.maxPhotos) {
-                showToast(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`, 'error');
-                return;
-            }
-
-            const submitButton = elements.form.querySelector('button[type="submit"]');
-            const originalText = submitButton.textContent;
-            submitButton.disabled = true;
-            submitButton.innerHTML = '<span class="animate-spin"><i class="fas fa-spinner"></i></span> Envoi en cours...'; // Ajout d'un spinner
-
-            const formData = {
-                sender: document.getElementById('sender').value.trim(),
-                phone1: document.getElementById('phone1').value.trim(),
-                recipient: document.getElementById('recipient').value.trim(),
-                phone: document.getElementById('phone').value.trim(),
-                address: document.getElementById('address').value.trim(),
-                type: document.getElementById('type').value,
-                details: document.getElementById('details').value.trim(),
-                location: userLocation,
-                photos: []
-            };
-
-            try {
-                for (const file of files) {
-                    const base64 = await toBase64(file);
-                    formData.photos.push({
-                        name: file.name,
-                        type: file.type,
-                        size: file.size,
-                        data: base64
-                    });
-                }
-
-                // Génération ID colis
-                formData.colisID = generateID();
-
-                // Envoi au serveur
-                const response = await sendData(formData);
-
-                if (response.success) {
-                    showToast(`Colis créé avec succès! ID: ${formData.colisID}`, 'success');
-                    showExpeditionIdModal(formData.colisID);
-                    elements.form.reset();
-                    elements.previewContainer.innerHTML = '';
+                if (accuracy <= config.desiredAccuracy) {
+                    validatedLocation = { latitude, longitude, accuracy };
+                    elements.locationStatus.textContent = `✅ Localisation précise obtenue (Précision: ${accuracy.toFixed(0)}m). Validez pour continuer.`;
+                    elements.validateLocationBtn.disabled = false;
+                    isLocating = false;
                 } else {
-                    showToast(response.message || 'Erreur lors de l\'envoi', 'error');
+                    elements.locationStatus.textContent = `⚠️ Précision actuelle : ${accuracy.toFixed(0)}m (Précision souhaitée: ${config.desiredAccuracy}m). Tentative suivante...`;
+                    setTimeout(attemptGetLocation, 1500); // Petit délai avant la prochaine tentative
                 }
-            } catch (error) {
-                console.error('Erreur:', error);
-                showToast('Une erreur est survenue', 'error');
-            } finally {
-                submitButton.innerHTML = originalText; // Restaurer le texte original
-                submitButton.disabled = false;
+            },
+            error => {
+                let message = '';
+                switch (error.code) {
+                    case error.PERMISSION_DENIED:
+                        message = "🚫 L'accès à la localisation a été refusé.";
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        message = "🛰️ Informations de localisation non disponibles.";
+                        break;
+                    case error.TIMEOUT:
+                        message = "⏳ Délai d'attente dépassé.";
+                        break;
+                    case error.UNKNOWN_ERROR:
+                        message = "❓ Erreur inconnue.";
+                        break;
+                }
+                elements.locationStatus.textContent = `❌ Erreur lors de la tentative ${locationAttemptsMade}: ${message}. Tentative suivante...`;
+                updateAccuracyBar(locationAttemptsMade - 1, -1); // Indiquer une erreur sur la barre
+                setTimeout(attemptGetLocation, 2000);
+            },
+            { enableHighAccuracy: true, timeout: config.locationTimeout, maximumAge: 0 }
+        );
+    }
+
+    function updateAccuracyBar(index, accuracy) {
+        const progressBar = elements.accuracyBars[index];
+        if (accuracy > 0) {
+            const percentage = Math.max(0, Math.min(100, (config.desiredAccuracy / accuracy) * 100));
+            progressBar.style.width = `${percentage}%`;
+            progressBar.style.backgroundColor = percentage < 100 ? 'orange' : 'var(--success)';
+        } else {
+            progressBar.style.width = '100%';
+            progressBar.style.backgroundColor = 'var(--error)'; // Indiquer une erreur
+        }
+    }
+
+    // Afficher le formulaire seulement après la validation de la localisation
+    elements.showFormBtn.addEventListener('click', () => {
+        if (validatedLocation) {
+            elements.formContainer.style.display = 'block';
+            elements.showFormBtn.style.display = 'none'; // Cacher à nouveau après avoir affiché le formulaire
+        } else {
+            showToast('Veuillez valider la localisation avant de créer une expédition.', 'warning');
+        }
+    });
+
+    // Prévisualisation des photos (inchangé)
+    elements.photosInput.addEventListener('change', () => {
+        elements.previewContainer.innerHTML = '';
+        const files = elements.photosInput.files;
+
+        if (files.length > config.maxPhotos) {
+            showToast(`Maximum ${config.maxPhotos} photos autorisées`, 'error');
+            elements.photosInput.value = '';
+            return;
+        }
+
+        for (const file of files) {
+            if (file.size > config.maxPhotoSize) {
+                showToast(`La photo ${file.name} dépasse 2MB`, 'error');
+                elements.photosInput.value = '';
+                elements.previewContainer.innerHTML = '';
+                return;
             }
-        });
 
-        // Fonctions utilitaires
-        function generateID() {
-            const datePart = Date.now().toString(36);
-            const randomPart = Math.random().toString(36).substr(2, 6);
-            return (datePart + randomPart).toUpperCase();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const preview = document.createElement('div');
+                preview.className = 'photo-preview';
+                preview.innerHTML = `
+                    <img src="${e.target.result}" alt="Prévisualisation">
+                    <span>${file.name}</span>
+                    <span>${(file.size / 1024).toFixed(2)} KB</span>
+                `;
+                elements.previewContainer.appendChild(preview);
+            };
+            reader.readAsDataURL(file);
         }
+    });
 
-        function toBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-            });
+    // Fonction pour afficher la modale d'ID d'expédition (inchangée)
+    function showExpeditionIdModal(colisID) {
+        elements.expeditionCodeDisplay.textContent = colisID;
+        elements.modalExpeditionId.classList.add('active');
+    }
+
+    // Fonction pour fermer la modale d'ID d'expédition (inchangée)
+    function hideExpeditionIdModal() {
+        elements.modalExpeditionId.classList.remove('active');
+        elements.copyMessage.style.display = 'none';
+    }
+
+    // Fermer la modale au clic sur la croix (inchangé)
+    elements.closeExpeditionIdModal.addEventListener('click', hideExpeditionIdModal);
+
+    // Fermer la modale en cliquant en dehors (inchangé)
+    window.addEventListener('click', (event) => {
+        if (event.target === elements.modalExpeditionId) {
+            hideExpeditionIdModal();
         }
+    });
 
-        async function sendData(data) {
-            try {
-                elements.form.querySelector('button[type="submit"]').disabled = true;
+    // Copier l'ID d'expédition au clic (inchangé)
+    elements.copyExpeditionIdButton.addEventListener('click', () => {
+        const range = document.createRange();
+        range.selectNode(elements.expeditionCodeDisplay);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
 
-                const response = await fetch('/.netlify/functions/expedi', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                return await response.json();
-            } finally {
-                elements.form.querySelector('button[type="submit"]').disabled = false;
-            }
-        }
-
-        // Initialisation
         try {
-            await getLocation();
-        } catch (error) {
-            console.error('Erreur initiale de localisation:', error);
-            showToast('Erreur lors de la récupération initiale de la localisation', 'error');
-        } finally {
-            // Si la localisation n'a pas été obtenue au chargement, afficher un message
-            if (!locationObtained && !userLocation) {
-                showToast('La localisation est nécessaire pour créer une expédition. Veuillez autoriser l\'accès à votre position.', 'warning');
-                }
+            document.execCommand('copy');
+            elements.copyMessage.style.display = 'inline';
+            setTimeout(() => {
+                elements.copyMessage.style.display = 'none';
+            }, 1500);
+        } catch (err) {
+            console.error('Impossible de copier l\'ID:', err);
+            showToast('Erreur lors de la copie de l\'ID', 'error');
+        }
+
+        window.getSelection().removeAllRanges();
+    });
+
+    // Fonction pour afficher les toasts (inchangée)
+    function showToast(message, type = 'default') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type} animate__animated animate__fadeInDown`;
+        toast.textContent = message;
+        elements.toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.remove('animate__fadeInDown');
+            toast.classList.add('animate__fadeOutUp');
+            setTimeout(() => {
+                toast.remove();
+            }, 500);
+        }, 3000);
+    }
+
+    // Soumission du formulaire (inchangé)
+    elements.form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!validatedLocation) {
+            showToast('Veuillez valider la localisation avant d\'envoyer le colis.', 'error');
+            return;
+        }
+
+        const files = elements.photosInput.files;
+        if (files.length === 0 || files.length > config.maxPhotos) {
+            showToast(`Veuillez sélectionner entre 1 et ${config.maxPhotos} photos`, 'error');
+            return;
+        }
+
+        const submitButton = elements.form.querySelector('button[type="submit"]');
+        const originalText = submitButton.textContent;
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<span class="animate-spin"><i class="fas fa-spinner"></i></span> Envoi en cours...';
+
+        const formData = {
+            sender: document.getElementById('sender').value.trim(),
+            phone1: document.getElementById('phone1').value.trim(),
+            recipient: document.getElementById('recipient').value.trim(),
+            phone: document.getElementById('phone').value.trim(),
+            address: document.getElementById('address').value.trim(),
+            type: document.getElementById('type').value,
+            details: document.getElementById('details').value.trim(),
+            location: validatedLocation, // Utiliser la localisation validée
+            photos: []
+        };
+
+        try {
+            for (const file of files) {
+                const base64 = await toBase64(file);
+                formData.photos.push({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data: base64
+                });
             }
+
+            formData.colisID = generateID();
+
+            const response = await sendData(formData);
+
+            if (response.success) {
+                showToast(`Colis créé avec succès! ID: ${formData.colisID}`, 'success');
+                showExpeditionIdModal(formData.colisID);
+                elements.form.reset();
+                elements.previewContainer.innerHTML = '';
+                validatedLocation = null;
+                elements.locationInput.value = '';
+                elements.locationStatus.textContent = '📍 Localisation non validée.';
+                elements.retryLocationBtn.style.display = 'inline';
+                elements.validateLocationBtn.style.display = 'none';
+                elements.showFormBtn.style.display = 'none'; // Cacher après soumission
+                elements.formContainer.style.display = 'none'; // Cacher le formulaire après soumission
+            } else {
+                showToast(response.message || 'Erreur lors de l\'envoi', 'error');
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            showToast('Une erreur est survenue', 'error');
+        } finally {
+            submitButton.innerHTML = originalText;
+            submitButton.disabled = false;
+        }
+    });
+
+    // Fonctions utilitaires (inchangées)
+    function generateID() {
+        const datePart = Date.now().toString(36);
+        const randomPart = Math.random().toString(36).substr(2, 6);
+        return (datePart + randomPart).toUpperCase();
+    }
+
+    function toBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
         });
-    </script>
+    }
+
+    async function sendData(data) {
+        try {
+            elements.form.querySelector('button[type="submit"]').disabled = true;
+
+            const response = await fetch('/.netlify/functions/expedi', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            return await response.json();
+        } finally {
+            elements.form.querySelector('button[type="submit"]').disabled = false;
+        }
+    }
+
+    // Initialisation : Setup des contrôles de localisation au chargement
+    const container = document.querySelector('.container');
+    if (container) {
+        elements.container = container;
+        setupLocationControls();
+        startLocationProcess(); // Démarrer la localisation dès le chargement
+    } else {
+        console.error("Le container principal n'a pas été trouvé.");
+    }
+});
+</script>
   
 <div class="navigation-arrows">
   <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
