@@ -361,8 +361,8 @@
     }
 
     .modal-header-expedition h2 {
-      font-size: 1.2rem;
-      color: var(--secondary);
+      font-size: 1.4rem;
+      color:chartreuse;
       margin: 0;
     }
 
@@ -601,7 +601,6 @@
             <div class="form-group">
               <label for="location">Localisation</label>
               <input type="text" id="location" name="location" readonly>
-              <button type="button" id="refresh-location" class="btn-icon">🔄 Actualiser</button>
             </div>
           </div>
         </div>
@@ -623,7 +622,7 @@
         <span class="close-button-expedition" id="closeExpeditionIdModal">&times;</span>
       </div>
       <div class="modal-body-expedition">
-        <p>Votre ID d'expédition   NB ( Veuillez Communiquer ce code au Destinataire) :</p>
+        <p>ℹ️ Pour que la distance soit correctement calculée et que le processus d’expédition puisse démarrer, le client doit impérativement se connecter à son compte, rechercher le colis, puis cliquer sur <strong>« Recevoir »</strong>. Ce n’est qu’à partir de cette action que le système déclenchera l’expédition. Une fois un livreur assigné, vous pourrez suivre l’acheminement du colis grâce au code fourni.</p>
         <p id="expedition-code"></p>
         <button class="copy-button" id="copyExpeditionId">Copier l'ID</button>
         <p id="copy-message" style="display:none; color: green;">Copié !</p>
