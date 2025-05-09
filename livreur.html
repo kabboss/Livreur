@@ -292,8 +292,6 @@ function calculerPrixLivraison(distance) {
 }
 
 
-let currentColis = null; // Déclaration de la variable globale pour stocker le colis actuel
-
 function displayColis(colisArray) {
     if (!colisArray?.length) {
         colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
@@ -305,6 +303,10 @@ function displayColis(colisArray) {
         const card = document.createElement('article');
         card.className = 'card colis-card animate__animated animate__fadeIn';
         card.dataset.id = colis.codeID;
+        card.dataset.expediteurLatitude = colis.expediteur?.localisation?.latitude;
+        card.dataset.expediteurLongitude = colis.expediteur?.localisation?.longitude;
+        card.dataset.destinataireLatitude = colis.destinataire?.localisation?.latitude;
+        card.dataset.destinataireLongitude = colis.destinataire?.localisation?.longitude;
         card.setAttribute('aria-label', `Colis ${colis.codeID}`);
 
         // Gestion des photos
@@ -312,36 +314,36 @@ function displayColis(colisArray) {
         const mainPhoto = photos[0]?.data ? photos[0].data : null;
 
         // Calcul des distances (s'assure que livreurLocation est défini dans la portée)
-        const distanceExpediteur = livreurLocation && colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude
+        const distanceExpediteur = livreurLocation && card.dataset.expediteurLatitude && card.dataset.expediteurLongitude
             ? calculerDistance(
                 livreurLocation.latitude,
                 livreurLocation.longitude,
-                colis.expediteur.localisation.latitude,
-                colis.expediteur.localisation.longitude
+                parseFloat(card.dataset.expediteurLatitude),
+                parseFloat(card.dataset.expediteurLongitude)
             )
-            : null; // Correction : Utilisation de null
+            : null;
 
-        const distanceDestinataire = livreurLocation && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude
+        const distanceDestinataire = livreurLocation && card.dataset.destinataireLatitude && card.dataset.destinataireLongitude
             ? calculerDistance(
                 livreurLocation.latitude,
                 livreurLocation.longitude,
-                colis.destinataire.localisation.latitude,
-                colis.destinataire.localisation.longitude
+                parseFloat(card.dataset.destinataireLatitude),
+                parseFloat(card.dataset.destinataireLongitude)
             )
-            : null; // Correction : Utilisation de null
+            : null;
 
-        const distanceExpediteurDestinataire = colis.expediteur?.localisation?.latitude && colis.expediteur?.localisation?.longitude && colis.destinataire?.localisation?.latitude && colis.destinataire?.localisation?.longitude
+        const distanceExpediteurDestinataire = card.dataset.expediteurLatitude && card.dataset.expediteurLongitude && card.dataset.destinataireLatitude && card.dataset.destinataireLongitude
             ? calculerDistance(
-                colis.expediteur.localisation.latitude,
-                colis.expediteur.localisation.longitude,
-                colis.destinataire.localisation.latitude,
-                colis.destinataire.localisation.longitude
+                parseFloat(card.dataset.expediteurLatitude),
+                parseFloat(card.dataset.expediteurLongitude),
+                parseFloat(card.dataset.destinataireLatitude),
+                parseFloat(card.dataset.destinataireLongitude)
             )
-            : null; // Correction : Utilisation de null
+            : null;
 
-        const prixLivraison = distanceExpediteurDestinataire !== null // Correction : Vérification avec null
-            ? calculerPrixLivraison(distanceExpediteurDestinataire) // Correction : Pas besoin de parseFloat si calculerDistance renvoie un nombre
-            : null; // Correction : Utilisation de null
+        const prixLivraison = distanceExpediteurDestinataire !== null
+            ? calculerPrixLivraison(distanceExpediteurDestinataire)
+            : null;
 
         card.innerHTML = `
             <div class="colis-image-container">
@@ -449,14 +451,6 @@ function displayColis(colisArray) {
                     modal.classList.add('active');
                 };
                 img.src = mainPhoto;
-            });
-        }
-
-        // Stocker le colis actuel lors de l'affichage (pour la méthode 2)
-        const confirmBtn = card.querySelector('.expedier-btn');
-        if (confirmBtn) {
-            confirmBtn.addEventListener('click', function() {
-                currentColis = colis; // Stockez le colis actuel
             });
         }
     });
@@ -604,9 +598,9 @@ function setupLocationUpdateButton(card) {
 function setupEventListeners() {
     // Gestion des boutons "Expédier"
     document.querySelectorAll('.expedier-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const codeID = btn.dataset.id;
-            const card = btn.closest('.card');
+        btn.addEventListener('click', async function() { // Notez l'utilisation de 'function' pour 'this'
+            const codeID = this.dataset.id;
+            const card = this.closest('.card');
 
             const formHTML = `
                 <div class="expedition-form animate__animated animate__fadeIn">
@@ -623,8 +617,7 @@ function setupEventListeners() {
                         <label for="livreur-tel2-<span class="math-inline">\{codeID\}"\><i class\="fas fa\-phone\-alt mr\-2"\></i\> Téléphone Livreur 2\:</label\>
 <input type\="tel" id\="livreur\-tel2\-</span>{codeID}" class="form-control" placeholder="Numéro secondaire (optionnel)">
                     </div>
-                    <div class="button-group-form">
-                        <button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="${codeID}">
+                    <div class="button-group-form"><button class="confirm-expedition-btn btn btn-primary btn-animated" data-id="${codeID}">
                             <span class="btn-inner"><i class="fas fa-check-circle mr-2"></i> Confirmer l'expédition</span>
                             <span class="btn-loading"><i class="fas fa-spinner fa-spin"></i></span>
                         </button>
@@ -635,10 +628,10 @@ function setupEventListeners() {
                 </div>
             `;
 
-            btn.insertAdjacentHTML('afterend', formHTML);
-            btn.classList.add('animate__animated', 'animate__fadeOut');
+            this.insertAdjacentHTML('afterend', formHTML);
+            this.classList.add('animate__animated', 'animate__fadeOut');
             setTimeout(() => {
-                btn.style.display = 'none';
+                this.style.display = 'none';
             }, 300);
 
             const confirmBtn = card.querySelector('.confirm-expedition-btn');
@@ -650,9 +643,9 @@ function setupEventListeners() {
                 formDiv.classList.add('animate__fadeOut');
                 setTimeout(() => {
                     formDiv.remove();
-                    btn.classList.remove('animate__fadeOut');
-                    btn.classList.add('animate__animated', 'animate__fadeIn');
-                    btn.style.display = 'inline-block';
+                    this.classList.remove('animate__fadeOut');
+                    this.classList.add('animate__animated', 'animate__fadeIn');
+                    this.style.display = 'inline-block';
                 }, 300);
             });
 
@@ -689,33 +682,38 @@ function setupEventListeners() {
                                 longitude: position.coords.longitude,
                             };
 
+                            const expediteurLatitude = parseFloat(card.dataset.expediteurLatitude);
+                            const expediteurLongitude = parseFloat(card.dataset.expediteurLongitude);
+                            const destinataireLatitude = parseFloat(card.dataset.destinataireLatitude);
+                            const destinataireLongitude = parseFloat(card.dataset.destinataireLongitude);
+
                             let distanceExpediteur = null;
-                            if (currentColis?.expediteur?.localisation?.latitude && currentColis?.expediteur?.localisation?.longitude) {
+                            if (!isNaN(expediteurLatitude) && !isNaN(expediteurLongitude)) {
                                 distanceExpediteur = calculerDistance(
                                     localisationLivreur.latitude,
                                     localisationLivreur.longitude,
-                                    currentColis.expediteur.localisation.latitude,
-                                    currentColis.expediteur.localisation.longitude
+                                    expediteurLatitude,
+                                    expediteurLongitude
                                 );
                             }
 
                             let distanceDestinataire = null;
-                            if (currentColis?.destinataire?.localisation?.latitude && currentColis?.destinataire?.localisation?.longitude) {
+                            if (!isNaN(destinataireLatitude) && !isNaN(destinataireLongitude)) {
                                 distanceDestinataire = calculerDistance(
                                     localisationLivreur.latitude,
                                     localisationLivreur.longitude,
-                                    currentColis.destinataire.localisation.latitude,
-                                    currentColis.destinataire.localisation.longitude
+                                    destinataireLatitude,
+                                    destinataireLongitude
                                 );
                             }
 
                             let distanceExpediteurDestinataire = null;
-                            if (currentColis?.expediteur?.localisation?.latitude && currentColis?.expediteur?.localisation?.longitude && currentColis?.destinataire?.localisation?.latitude && currentColis?.destinataire?.localisation?.longitude) {
+                            if (!isNaN(expediteurLatitude) && !isNaN(expediteurLongitude) && !isNaN(destinataireLatitude) && !isNaN(destinataireLongitude)) {
                                 distanceExpediteurDestinataire = calculerDistance(
-                                    currentColis.expediteur.localisation.latitude,
-                                    currentColis.expediteur.localisation.longitude,
-                                    currentColis.destinataire.localisation.latitude,
-                                    currentColis.destinataire.localisation.longitude
+                                    expediteurLatitude,
+                                    expediteurLongitude,
+                                    destinataireLatitude,
+                                    destinataireLongitude
                                 );
                             }
 
@@ -803,55 +801,6 @@ function setupEventListeners() {
         });
     });
 
-    // Gestion des boutons "Terminer"
-    document.querySelectorAll('.terminer-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const codeID = btn.dataset.id;
-            const card = btn.closest('.card');
-
-            const isConfirmed = confirm(`Êtes-vous sûr d'avoir terminé la livraison du colis #${codeID} ?`);
-            if (!isConfirmed) {
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerHTML = '<span class="material-icons spin">hourglass_empty</span> Terminer...';
-
-            try {
-                const res = await fetch('/.netlify/functions/terminerLivraison', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ codeID: codeID }),
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                    card.classList.remove('en-cours-expedition');
-                    card.classList.add('livraison-terminee', 'animate__animated', 'animate__pulse');
-                    card.querySelector('.button-group').innerHTML = `
-                        <p class="text-success animate__animated animate__fadeIn"><i class="fas fa-check-circle mr-2"></i> Livraison terminée !</p>
-                    `;
-                    const statutSpan = card.querySelector('.statut');
-                    if (statutSpan) {
-                        statutSpan.textContent = 'Livré';
-                        statutSpan.className = 'statut livre';
-                    }
-                    showToast(`📦 Le colis #${codeID} a été marqué comme livré avec succès !`, 'success');
-                } else {
-                    btn.innerHTML = '<span class="material-icons">check_circle</span> Terminer';
-                    btn.disabled = false;
-                    showToast(`❌ Erreur lors de la mise à jour du statut: ${data.error || 'Une erreur inconnue est survenue'}`, 'error');
-                }
-
-            } catch (error) {
-                console.error('Erreur lors de la mise à jour du statut de livraison:', error);
-                btn.innerHTML = '<span class="material-icons">check_circle</span> Terminer';
-                btn.disabled = false;
-                showToast('⚡ Erreur de communication avec le serveur.', 'error');
-            }
-              });
-        });
 
         // Gestion des boutons "Terminer"
         document.querySelectorAll('.terminer-btn').forEach(btn => {
