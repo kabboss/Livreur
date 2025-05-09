@@ -10,78 +10,36 @@ exports.handler = async function(event, context) {
         await client.connect();
         const db = client.db(dbName);
         const expeditionCollection = db.collection('cour_expedition');
-        const livraisonsCollection = db.collection('livraisons');
 
-        const { 
-            codeID, 
-            localisationLivreur, 
-            telephoneLivreur1, 
-            telephoneLivreur2, 
-            idLivreur,
-            distanceExpediteur,
-            distanceDestinataire,
-            distanceExpediteurDestinataire,
-            prixLivraison
-        } = JSON.parse(event.body);
+        const { codeID, localisationLivreur, telephoneLivreur1, telephoneLivreur2, idLivreur, distanceExpediteur, distanceDestinataire, distanceExpediteurDestinataire, prixLivraison } = JSON.parse(event.body);
 
-        // Vérifier d'abord si le colis existe
-        const colisExistant = await livraisonsCollection.findOne({ codeID });
-        if (!colisExistant) {
-            return {
-                statusCode: 404,
-                body: JSON.stringify({ error: 'Colis non trouvé' }),
-                headers: { 'Access-Control-Allow-Origin': '*' },
-            };
-        }
-
-        // Enregistrer les informations d'expédition
-        const expeditionData = {
-            codeID,
-            localisationLivreur,
-            telephoneLivreur1,
-            telephoneLivreur2,
-            idLivreur,
+        // Enregistrer les informations d'expédition dans la nouvelle collection
+        const expeditionResult = await expeditionCollection.insertOne({
+            codeID: codeID,
+            localisationLivreur: localisationLivreur,
+            telephoneLivreur1: telephoneLivreur1,
+            telephoneLivreur2: telephoneLivreur2,
+            idLivreur: idLivreur,
             dateDebut: new Date(),
-            statut: 'En cours',
-            distanceExpediteur,
-            distanceDestinataire,
-            distanceExpediteurDestinataire,
-            prixLivraison,
-            detailsColis: {
-                type: colisExistant.colis?.type,
-                details: colisExistant.colis?.details,
-                expediteur: colisExistant.expediteur,
-                destinataire: colisExistant.destinataire
-            }
-        };
-
-        const expeditionResult = await expeditionCollection.insertOne(expeditionData);
+            statut: 'En cours', // Statut initial dans la nouvelle collection
+            distanceExpediteur: distanceExpediteur,
+            distanceDestinataire: distanceDestinataire,
+            distanceExpediteurDestinataire: distanceExpediteurDestinataire,
+            prixLivraison: prixLivraison,
+            // Vous pouvez ajouter d'autres informations ici si nécessaire
+        });
 
         if (!expeditionResult.acknowledged) {
             return {
                 statusCode: 500,
-                body: JSON.stringify({ error: 'Erreur lors de l\'enregistrement de l\'expédition' }),
+                body: JSON.stringify({ error: 'Erreur lors de l\'enregistrement de l\'expédition.' }),
                 headers: { 'Access-Control-Allow-Origin': '*' },
             };
         }
 
-        // Mettre à jour le statut dans la collection livraisons
-        await livraisonsCollection.updateOne(
-            { codeID },
-            { $set: { 
-                estExpedie: true,
-                idLivreurEnCharge: idLivreur,
-                dateExpedition: new Date(),
-                statut: 'En cours de livraison'
-            }}
-        );
-
         return {
             statusCode: 200,
-            body: JSON.stringify({ 
-                message: 'Expédition enregistrée avec succès',
-                expeditionId: expeditionResult.insertedId
-            }),
+            body: JSON.stringify({ message: 'Informations d\'expédition enregistrées avec les détails de distance et de prix.' }),
             headers: { 'Access-Control-Allow-Origin': '*' },
         };
 
@@ -89,7 +47,7 @@ exports.handler = async function(event, context) {
         console.error('Erreur lors de l\'enregistrement de l\'expédition :', error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'Erreur serveur lors de l\'enregistrement de l\'expédition' }),
+            body: JSON.stringify({ error: 'Erreur serveur lors de l\'enregistrement de l\'expédition.' }),
             headers: { 'Access-Control-Allow-Origin': '*' },
         };
     } finally {
