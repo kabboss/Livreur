@@ -3,539 +3,102 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Suivi de colis en temps réel">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
-  <title>Suivi Colis | Plateforme de livraison</title>
+  <meta name="description" content="Suivi de colis en temps réel - Plateforme de livraison premium">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <title>Suivi Colis | Plateforme de livraison premium</title>
   <link rel="stylesheet" href="client.css">
-  <style>
-    /* Styles pour la section de localisation (similaires à expediteur) */
-    #location-section {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-bottom: 20px;
-      padding: 20px;
-      background-color: #f9f9f9;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    #location-controls {
-      display: flex;
-      gap: 10px;
-      margin-top: 15px;
-    }
-
-    .accuracy-bar-container {
-      width: 80%;
-      height: 8px;
-      background-color: #ddd;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 5px;
-    }
-
-    .accuracy-progress {
-      height: 100%;
-      background-color: var(--success); /* Utiliser la variable de succès si définie */
-      border-radius: 4px;
-      width: 0%;
-      transition: width 0.3s ease-in-out;
-    }
-
-    .accuracy-progress.warning {
-      background-color: orange;
-    }
-
-    .accuracy-progress.error {
-      background-color: red;
-    }
-
-    .btn-location {
-      padding: 10px 15px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 1rem;
-      transition: background-color 0.3s ease;
-    }
-
-    .btn-retry {
-      background-color: #007bff;
-      color: white;
-    }
-
-    .btn-validate {
-      background-color: #28a745;
-      color: white;
-    }
-
-    .btn-location:hover {
-      filter: brightness(90%);
-    }
-
-    #client-form {
-      display: none; /* Cacher le formulaire initialement */
-    }
-  </style>
 </head>
 <body>
-
+  <!-- Navigation -->
   <div class="navigation-arrows">
-    <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
-        <svg viewBox="0 0 24 24">
-            <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
-        </svg>
-    </a>
-    <a href="index.html" class="arrow home-button" aria-label="Page d'accueil">
-        <svg viewBox="0 0 24 24">
-            <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-        </svg>
-    </a>
-    <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
-        <svg viewBox="0 0 24 24">
-            <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-        </svg>
+    <button class="arrow left-arrow" aria-label="Page précédente" onclick="window.location.href='Connection.html'">
+      <svg viewBox="0 0 24 24">
+        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+      </svg>
     </button>
-</div>
+    <button class="arrow home-button" aria-label="Page d'accueil" onclick="window.location.href='index.html'">
+      <svg viewBox="0 0 24 24">
+        <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+      </svg>
+    </button>
+    <button class="arrow refresh-button" aria-label="Actualiser la page">
+      <svg viewBox="0 0 24 24">
+        <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+      </svg>
+    </button>
+  </div>
 
+  <!-- Main Container -->
   <div class="container">
-    <h1>🔍 Suivi de colis</h1>
+    <h1>Suivi de colis</h1>
 
+    <!-- Location Section -->
     <div id="location-section">
-      <p id="location-status">📍 Tentative de localisation...</p>
-      <div id="accuracy-bars-container">
-        </div>
+      <p id="location-status"><i class="fas fa-map-marker-alt"></i> Localisation en cours...</p>
+      <div id="accuracy-bars-container"></div>
       <div id="location-controls">
-        <button id="retry-location-btn" class="btn-location btn-retry">Réessayer</button>
-        <button id="validate-location-btn" class="btn-location btn-validate" disabled>Valider</button>
+        <button id="retry-location-btn" class="btn-location btn-retry">
+          <i class="fas fa-sync-alt"></i> Réessayer
+        </button>
+        <button id="validate-location-btn" class="btn-location btn-validate" disabled>
+          <i class="fas fa-check-circle"></i> Valider
+        </button>
       </div>
     </div>
 
+    <!-- Logo -->
     <div class="logo-container">
-      <img src="img/ChatGPT Image 30 avr. 2025, 20_34_02.png" alt="Logo Livreur 2.0" class="logo-img animate__animated animate__fadeInDown">
+      <img src="img/ChatGPT Image 30 avr. 2025, 20_34_02.png" alt="Logo Livreur Premium" class="logo-img">
     </div>
 
+    <!-- Client Form -->
     <form id="client-form" class="card">
-      <h2>Rechercher un colis</h2>
+      <h2><i class="fas fa-search"></i> Rechercher un colis</h2>
 
       <div class="form-group">
-        <label for="nom">Nom</label>
-        <input type="text" id="nom" required autocomplete="family-name">
+        <label for="nom"><i class="fas fa-user"></i> Nom</label>
+        <input type="text" id="nom" required autocomplete="family-name" placeholder="Votre nom de famille">
       </div>
 
       <div class="form-group">
-        <label for="prenom">Prénom</label>
-        <input type="text" id="prenom" required autocomplete="given-name">
+        <label for="prenom"><i class="fas fa-user"></i> Prénom</label>
+        <input type="text" id="prenom" required autocomplete="given-name" placeholder="Votre prénom">
       </div>
 
       <div class="form-group">
-        <label for="numero">Téléphone</label>
-        <input type="tel" id="numero" required autocomplete="tel">
+        <label for="numero"><i class="fas fa-phone"></i> Téléphone</label>
+        <input type="tel" id="numero" required autocomplete="tel" placeholder="Votre numéro de téléphone">
       </div>
 
       <div class="form-group">
-        <label for="code">Code colis</label>
-        <input type="text" id="code" required pattern="[A-Z0-9]{8,20}">
+        <label for="code"><i class="fas fa-barcode"></i> Code colis</label>
+        <input type="text" id="code" required pattern="[A-Z0-9]{8,20}" placeholder="Code à 8-20 caractères">
       </div>
 
       <button type="submit" class="btn-primary">
-        <span class="btn-text">📦 Rechercher</span>
-        <span class="btn-loader" hidden></span>
+        <span class="btn-text"><i class="fas fa-search"></i> Rechercher</span>
+        <span class="btn-loader"><i class="fas fa-spinner fa-spin"></i></span>
       </button>
     </form>
 
+    <!-- Messages -->
     <div id="messages">
-      <p id="error-msg" class="message-error" hidden></p>
+      <p id="error-msg" class="message-error"></p>
     </div>
 
-    <div id="colis-info" class="card" hidden>
+    <!-- Colis Info -->
+    <div id="colis-info" class="card">
       <div id="colis-content"></div>
     </div>
   </div>
 
-  <button class="modern-link-button" onclick="window.location.href='suivi.html'">
-    👀Suivre ma commande
+  <!-- Alternative Link -->
+  <button class="modern-link-button">
+    <i class="fas fa-eye"></i> Suivre ma commande
   </button>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // Configuration (similaire à expediteur)
-        const config = {
-            apiEndpoint: '/.netlify/functions/client-handler',
-            locationAttempts: 3,
-            locationTimeout: 10000,
-            desiredAccuracy: 50, // Ajustez la précision souhaitée
-        };
-
-        // Éléments DOM
-        const elements = {
-            form: document.getElementById('client-form'),
-            nom: document.getElementById('nom'),
-            prenom: document.getElementById('prenom'),
-            numero: document.getElementById('numero'),
-            code: document.getElementById('code'),
-            submitBtn: document.querySelector('#client-form button[type="submit"]'),
-            btnText: document.querySelector('.btn-text'),
-            btnLoader: document.querySelector('.btn-loader'),
-            locationStatus: document.getElementById('location-status'),
-            colisInfo: document.getElementById('colis-info'),
-            colisContent: document.getElementById('colis-content'),
-            errorMsg: document.getElementById('error-msg'),
-            retryLocationBtn: document.getElementById('retry-location-btn'),
-            validateLocationBtn: document.getElementById('validate-location-btn'),
-            accuracyBarsContainer: document.getElementById('accuracy-bars-container'),
-            validatedLocationInfo: document.getElementById('validated-location-info'),
-            container: document.querySelector('.container') // Sélectionner le conteneur principal
-        };
-
-        let validatedLocation = null;
-        let locationAttemptsMade = 0;
-        let isLocating = false;
-
-        // Créer les barres de précision (similaire à expediteur)
-        function setupAccuracyBars() {
-            elements.accuracyBars = [];
-            elements.accuracyBarsContainer.innerHTML = '';
-            for (let i = 0; i < config.locationAttempts; i++) {
-                const barContainer = document.createElement('div');
-                barContainer.className = 'accuracy-bar-container';
-                const progressBar = document.createElement('div');
-                progressBar.className = 'accuracy-progress';
-                barContainer.appendChild(progressBar);
-                elements.accuracyBars.push(progressBar);
-                elements.accuracyBarsContainer.appendChild(barContainer);
-            }
-        }
-
-        // Mettre à jour les barres de précision (similaire à expediteur)
-        function updateAccuracyBar(index, accuracy) {
-            const progressBar = elements.accuracyBars[index];
-            if (accuracy > 0) {
-                const percentage = Math.min(100, (config.desiredAccuracy / accuracy) * 100);
-                progressBar.style.width = `${percentage}%`;
-                progressBar.classList.remove('error', 'warning');
-                if (percentage < 60) {
-                    progressBar.classList.add('warning');
-                }
-            } else {
-                progressBar.style.width = '100%';
-                progressBar.classList.add('error');
-            }
-        }
-
-        // Démarrer le processus de localisation (similaire à expediteur)
-        function startLocationProcess() {
-            if (isLocating) return;
-            isLocating = true;
-            validatedLocation = null;
-            elements.validateLocationBtn.disabled = true;
-            elements.validatedLocationInfo.textContent = '';
-            elements.locationStatus.textContent = '📍 Tentative de localisation...';
-            locationAttemptsMade = 0;
-            setupAccuracyBars();
-            attemptGetLocation();
-        }
-
-        // Tenter d'obtenir la localisation (similaire à expediteur)
-        function attemptGetLocation() {
-            if (locationAttemptsMade >= config.locationAttempts || validatedLocation) {
-                isLocating = false;
-                if (!validatedLocation) {
-                    elements.locationStatus.textContent = `⚠️ Impossible d'obtenir une localisation précise après ${config.locationAttempts} tentatives.`;
-                }
-                return;
-            }
-
-            locationAttemptsMade++;
-            elements.locationStatus.textContent = `📍 Localisation en cours (Tentative <span class="math-inline">\{locationAttemptsMade\}/</span>{config.locationAttempts})...`;
-
-            navigator.geolocation.getCurrentPosition(
-                position => {
-                    const { latitude, longitude, accuracy } = position.coords;
-                    updateAccuracyBar(locationAttemptsMade - 1, accuracy);
-
-                    if (accuracy <= config.desiredAccuracy) {
-                        validatedLocation = { latitude, longitude, accuracy };
-                        elements.locationStatus.textContent = `✅ Localisation précise obtenue (Précision: ${accuracy.toFixed(0)}m).`;
-                        elements.validatedLocationInfo.textContent = `Localisation validée: Lat ${latitude.toFixed(6)}, Lon ${longitude.toFixed(6)} (Précision: ${accuracy.toFixed(0)}m)`;
-                        elements.validateLocationBtn.disabled = false;
-                        isLocating = false;
-                    } else {
-                        elements.locationStatus.textContent = `⚠️ Précision actuelle : ${accuracy.toFixed(0)}m (Souhaitée: ${config.desiredAccuracy}m). Tentative suivante...`;
-                        setTimeout(attemptGetLocation, 1500);
-                    }
-                },
-                error => {
-                    let message = 'Erreur de localisation';
-                    switch (error.code) {
-                        case error.PERMISSION_DENIED:
-                            message = '🚫 Permission refusée.';
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            message = '🛰️ Service indisponible.';
-                            break;
-                        case error.TIMEOUT:
-                            message = '⏳ Délai d\'attente dépassé.';
-                            break;
-                        case error.UNKNOWN_ERROR:
-                            message = '❓ Erreur inconnue.';
-                            break;
-                    }
-                    elements.locationStatus.textContent = `❌ Erreur (Tentative ${locationAttemptsMade}): ${message}.`;
-                    updateAccuracyBar(locationAttemptsMade - 1, -1);
-                    setTimeout(attemptGetLocation, 2000);
-                },
-                { enableHighAccuracy: true, timeout: config.locationTimeout, maximumAge: 0 }
-            );
-        }
-
-        // Écouteur pour le bouton "Réessayer"
-        elements.retryLocationBtn.addEventListener('click', startLocationProcess);
-
-        // Écouteur pour le bouton "Valider"
-        elements.validateLocationBtn.addEventListener('click', () => {
-            if (validatedLocation) {
-                elements.form.style.display = 'block'; // Afficher le formulaire
-                document.getElementById('location-section').style.display = 'none'; // Cacher la section de localisation
-            } else {
-                showAlert('Veuillez valider la localisation avant de continuer.', 'warning');
-            }
-        });
-
-        // Initialiser le processus de localisation au chargement
-        startLocationProcess();
-
-        const showError = (message) => {
-            elements.errorMsg.textContent = message;
-            elements.errorMsg.hidden = false;
-            elements.colisInfo.hidden = true;
-        };
-
-        // Soumission du formulaire (inchangé)
-        elements.form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            if (!validatedLocation) {
-                showAlert('La localisation doit être validée avant de rechercher un colis.', 'warning');
-                return;
-            }
-
-            // Reset UI
-            elements.errorMsg.hidden = true;
-            elements.colisInfo.hidden = true;
-            elements.btnText.hidden = true;
-            elements.btnLoader.hidden = false;
-            elements.submitBtn.disabled = true;
-            elements.btnLoader.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-            try {
-                if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
-                    throw new Error('Code colis invalide');
-                }
-
-                const response = await fetch(config.apiEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        nom: elements.nom.value.trim(),
-                        prenom: elements.prenom.value.trim(),
-                        numero: elements.numero.value.trim(),
-                        code: elements.code.value.trim(),
-                        location: validatedLocation
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.message || 'Erreur de recherche');
-                }
-
-                if (!data.colis) {
-                    throw new Error('Aucune information de colis disponible');
-                }
-
-                displayColisInfo(data.colis);
-
-            } catch (error) {
-                showError(error.message);
-            } finally {
-                elements.btnText.hidden = false;
-                elements.btnLoader.hidden = true;
-                elements.btnLoader.innerHTML = '';
-                elements.submitBtn.disabled = false;
-            }
-        });
-
-        // 🔍 Affiche les détails d’un colis sélectionné (inchangé)
-        function displayColisInfo(colis) {
-            const statusClass = `status-${(colis.status || 'enregistré')}`.toLowerCase();
-
-            elements.colisContent.innerHTML = `
-              <div class="colis-header">
-                <h2>
-                  Colis #${colis.colisID}
-                  <span class="status-badge ${statusClass}">${(colis.status || 'enregistré').toUpperCase()}
-                  </span>
-                </h2>
-                <p class="colis-meta">
-                  <strong>Créé le :</strong> ${new Date(colis.createdAt).toLocaleString('fr-FR')}
-                </p>
-              </div>
-
-              <div class="colis-grid">
-                <div class="colis-section">
-                  <h3>Expéditeur</h3>
-                  <p>${escapeHTML(colis.sender)}</p>
-                  <p>${escapeHTML(colis.phone1)}</p>
-                </div>
-
-                <div class="colis-section">
-                  <h3>Destinataire</h3>
-                  <p>${escapeHTML(colis.recipient)}</p>
-                  <p>${escapeHTML(colis.phone)}</p>
-                  <p>${escapeHTML(colis.address)}</p>
-                </div>
-
-                <div class="colis-section">
-                  <h3>Détails</h3>
-                  <p><strong>Type :</strong> ${escapeHTML(colis.type)}</p>
-                  <p><strong>Description :</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
-                </div>
-              </div>
-
-              ${colis.photos?.length > 0 ? `
-                <div class="colis-photos">
-                  <h3>Photos</h3>
-                  <div class="photos-grid">
-                    ${colis.photos.slice(0, 2).map(photo => `
-                      <img src="${photo.data}" alt="Photo du colis" class="photo-preview" />
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-
-              ${colis.history?.length > 0 ? `
-                <div class="colis-timeline">
-                  <h3>Historique</h3>
-                  <div class="timeline">
-                    ${colis.history.map(item => `
-                      <div class="timeline-item">
-                        <div class="timeline-date">
-                          ${new Date(item.date).toLocaleString('fr-FR')}
-                        </div>
-                        <div class="timeline-content">
-                          <strong>${item.status.toUpperCase()}</strong>
-                          ${item.location ? `<p>📍 ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
-                          ${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}
-                        </div>
-                      </div>
-                    `).join('')}
-                  </div>
-                </div>
-              ` : ''}
-
-              <div class="action-buttons">
-                <button id="btn-recevoir" class="btn receive-btn">✅ Recevoir</button>
-                <button id="btn-decliner" class="btn decline-btn">❌ Décliner</button>
-              </div>
-            `;
-
-            elements.colisInfo.hidden = false;
-
-            const recevoirButton = document.getElementById('btn-recevoir');
-            let recevoirClicked = false;
-
-            recevoirButton.addEventListener('click', async () => {
-              if (recevoirClicked) {
-                return;
-              }
-              recevoirClicked = true;
-              recevoirButton.disabled = true;
-              recevoirButton.classList.add('disabled');
-
-              const codeID = colis.colisID;
-
-              try {
-                showSpinner();
-
-                const response = await fetch('/.netlify/functions/recevoir', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ codeID }),
-                });
-
-                const data = await response.json();
-                hideSpinner();
-
-                if (response.ok) {
-                  showCheckmark();
-                  showToast(data.message, 'success');
-                  recevoirButton.disabled = true;
-                  recevoirButton.classList.add('disabled');
-                } else {
-                  showAlert(data.error || 'Erreur lors de l’enregistrement.', 'error');
-                  recevoirButton.disabled = false;
-                  recevoirButton.classList.remove('disabled');
-                  recevoirClicked = false;
-                }
-              } catch (err) {
-                console.error(err);
-                hideSpinner();
-                showAlert('Erreur de connexion au serveur.', 'error');
-                recevoirButton.disabled = false;
-                recevoirButton.classList.remove('disabled');
-                recevoirClicked = false;
-              }
-            });
-
-            document.getElementById('btn-decliner').addEventListener('click', async () => {
-              const codeID = colis.colisID;
-
-              const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
-              if (!confirmed) return;
-
-              try {
-                showSpinner();
-
-                const response = await fetch('/.netlify/functions/decliner', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ codeID }),
-                });
-
-                const result = await response.json();
-                hideSpinner();
-
-                if (response.ok) {
-                  showAlert("Le colis a été supprimé de notre serveur. Veuillez contacter votre expéditeur pour réexpédier le colis.", 'success');
-                  elements.colisInfo.hidden = true;
-                } else {
-                  showAlert(result.error || 'Erreur lors du traitement.', 'error');
-                }
-              } catch (error) {
-                console.error(error);
-                hideSpinner();
-                showAlert('Erreur de connexion au serveur.', 'error');
-              }
-            });
-          }
-
-          function escapeHTML(str) {
-            if (!str) return '';
-            return str.toString()
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#39;');
-          }
-        });
-      </script>
-
-  <div id="custom-alert" class="custom-alert hidden">
+  <!-- Alert Modal -->
+  <div id="custom-alert" class="custom-alert">
     <div class="alert-content">
       <img id="alert-icon" src="" alt="icon" class="alert-icon">
       <p id="alert-message">Message</p>
@@ -543,135 +106,544 @@
     </div>
   </div>
 
-  <div id="spinner-overlay" class="spinner-overlay hidden">
+  <!-- Spinner Overlay -->
+  <div id="spinner-overlay" class="spinner-overlay">
     <div class="spinner"></div>
   </div>
 
-  <div id="custom-confirm" class="custom-alert hidden">
+  <!-- Confirmation Modal -->
+  <div id="custom-confirm" class="custom-alert">
     <div class="alert-content">
-      <img src="https://cdn-icons-png.flaticon.com/512/190/190406.png" alt="question" class="alert-icon" />
+      <img src="https://cdn-icons-png.flaticon.com/512/190/190406.png" alt="question" class="alert-icon">
       <p id="confirm-message">Êtes-vous sûr de vouloir refuser ce colis ?</p>
-      <button id="confirm-yes">Oui</button>
-      <button id="confirm-no">Non</button>
+      <div class="confirm-buttons">
+        <button id="confirm-yes">Oui</button>
+        <button id="confirm-no">Non</button>
+      </div>
     </div>
   </div>
 
-  <div id="toast" class="toast hidden">
-    <img id="toast-icon" src="" alt="icon" class="toast-icon" />
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">
+    <img id="toast-icon" src="" alt="icon" class="toast-icon">
     <span id="toast-message">Message</span>
   </div>
 
-  <div id="check-animation" class="checkmark-wrapper hidden">
+  <!-- Checkmark Animation -->
+  <div id="check-animation" class="checkmark-wrapper">
     <svg class="checkmark" viewBox="0 0 52 52">
-      <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" />
-      <path class="checkmark-check" fill="none" d="M14 27l7 7 16-16" />
+      <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+      <path class="checkmark-check" fill="none" d="M14 27l7 7 16-16"/>
     </svg>
   </div>
 
   <script>
-    function showCheckmark(duration = 5000) {
-      const wrapper = document.getElementById('check-animation');
-      wrapper.classList.remove('hidden');
-
-      setTimeout(() => {
-        wrapper.classList.add('hidden');
-      }, duration);
-    }
-  </script>
-
-  <script>
-    function showToast(message, type = 'info', duration = 3000) {
-      const toast = document.getElementById('toast');
-      const toastMessage = document.getElementById('toast-message');
-      const toastIcon = document.getElementById('toast-icon');
-
-      const icons = {
-        info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
-        success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
-        error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
+    document.addEventListener('DOMContentLoaded', () => {
+      // Configuration
+      const config = {
+        apiEndpoint: '/.netlify/functions/client-handler',
+        locationAttempts: 3,
+        locationTimeout: 10000,
+        desiredAccuracy: 50,
       };
 
-      toastMessage.textContent = message;
-      toastIcon.src = icons[type] || icons.info;
+      // DOM Elements
+      const elements = {
+        form: document.getElementById('client-form'),
+        nom: document.getElementById('nom'),
+        prenom: document.getElementById('prenom'),
+        numero: document.getElementById('numero'),
+        code: document.getElementById('code'),
+        submitBtn: document.querySelector('#client-form button[type="submit"]'),
+        btnText: document.querySelector('.btn-text'),
+        btnLoader: document.querySelector('.btn-loader'),
+        locationStatus: document.getElementById('location-status'),
+        colisInfo: document.getElementById('colis-info'),
+        colisContent: document.getElementById('colis-content'),
+        errorMsg: document.getElementById('error-msg'),
+        retryLocationBtn: document.getElementById('retry-location-btn'),
+        validateLocationBtn: document.getElementById('validate-location-btn'),
+        accuracyBarsContainer: document.getElementById('accuracy-bars-container'),
+        refreshButton: document.querySelector('.refresh-button'),
+        modernLinkButton: document.querySelector('.modern-link-button')
+      };
 
-      toast.classList.add('show', 'animate__animated', 'animate__fadeIn');
+      // State
+      let validatedLocation = null;
+      let locationAttemptsMade = 0;
+      let isLocating = false;
 
-      setTimeout(() => {
-        toast.classList.remove('show', 'animate__fadeIn');
-        toast.classList.add('animate__fadeOut');
+      // Initialize
+      init();
+
+      function init() {
+        setupEventListeners();
+        startLocationProcess();
+        hideElementsOnStart();
+      }
+
+      function hideElementsOnStart() {
+        elements.form.classList.remove('active');
+        elements.colisInfo.classList.remove('visible');
+        elements.errorMsg.classList.remove('visible');
+        document.querySelectorAll('.custom-alert, .toast, .spinner-overlay, .checkmark-wrapper')
+          .forEach(el => el.classList.add('hidden'));
+      }
+
+      function setupEventListeners() {
+        // Navigation
+        elements.refreshButton.addEventListener('click', () => location.reload());
+        elements.modernLinkButton.addEventListener('click', () => {
+          window.location.href = 'suivi.html';
+        });
+
+        // Location
+        elements.retryLocationBtn.addEventListener('click', startLocationProcess);
+        elements.validateLocationBtn.addEventListener('click', validateLocation);
+
+        // Form submission
+        elements.form.addEventListener('submit', handleFormSubmit);
+      }
+
+      // Location Functions
+      function setupAccuracyBars() {
+        elements.accuracyBars = [];
+        elements.accuracyBarsContainer.innerHTML = '';
+        
+        for (let i = 0; i < config.locationAttempts; i++) {
+          const barContainer = document.createElement('div');
+          barContainer.className = 'accuracy-bar-container';
+          
+          const progressBar = document.createElement('div');
+          progressBar.className = 'accuracy-progress';
+          
+          barContainer.appendChild(progressBar);
+          elements.accuracyBars.push(progressBar);
+          elements.accuracyBarsContainer.appendChild(barContainer);
+        }
+      }
+
+      function updateAccuracyBar(index, accuracy) {
+        const progressBar = elements.accuracyBars[index];
+        if (accuracy > 0) {
+          const percentage = Math.min(100, (config.desiredAccuracy / accuracy) * 100);
+          progressBar.style.width = `${percentage}%`;
+          progressBar.classList.remove('error', 'warning');
+          
+          if (percentage < 60) {
+            progressBar.classList.add('warning');
+          }
+        } else {
+          progressBar.style.width = '100%';
+          progressBar.classList.add('error');
+        }
+      }
+
+      function startLocationProcess() {
+        if (isLocating) return;
+        
+        isLocating = true;
+        validatedLocation = null;
+        elements.validateLocationBtn.disabled = true;
+        elements.validateLocationBtn.classList.remove('active');
+        elements.locationStatus.innerHTML = '<i class="fas fa-map-marker-alt"></i> Tentative de localisation...';
+        locationAttemptsMade = 0;
+        
+        setupAccuracyBars();
+        attemptGetLocation();
+      }
+
+      function attemptGetLocation() {
+        if (locationAttemptsMade >= config.locationAttempts || validatedLocation) {
+          isLocating = false;
+          
+          if (!validatedLocation) {
+            elements.locationStatus.innerHTML = 
+              `<i class="fas fa-exclamation-triangle"></i> Impossible d'obtenir une localisation précise après ${config.locationAttempts} tentatives.`;
+          }
+          return;
+        }
+
+        locationAttemptsMade++;
+        elements.locationStatus.innerHTML = 
+          `<i class="fas fa-map-marker-alt"></i> Localisation en cours (Tentative ${locationAttemptsMade}/${config.locationAttempts})...`;
+
+        navigator.geolocation.getCurrentPosition(
+          position => handleLocationSuccess(position),
+          error => handleLocationError(error),
+          {
+            enableHighAccuracy: true,
+            timeout: config.locationTimeout,
+            maximumAge: 0
+          }
+        );
+      }
+
+      function handleLocationSuccess(position) {
+        const { latitude, longitude, accuracy } = position.coords;
+        updateAccuracyBar(locationAttemptsMade - 1, accuracy);
+
+        if (accuracy <= config.desiredAccuracy) {
+          validatedLocation = { latitude, longitude, accuracy };
+          elements.locationStatus.innerHTML = 
+            `<i class="fas fa-check-circle"></i> Localisation précise obtenue (Précision: ${accuracy.toFixed(0)}m).`;
+          elements.validateLocationBtn.disabled = false;
+          elements.validateLocationBtn.classList.add('active');
+          isLocating = false;
+        } else {
+          elements.locationStatus.innerHTML = 
+            `<i class="fas fa-exclamation-circle"></i> Précision actuelle : ${accuracy.toFixed(0)}m (Souhaitée: ${config.desiredAccuracy}m). Tentative suivante...`;
+          setTimeout(attemptGetLocation, 1500);
+        }
+      }
+
+      function handleLocationError(error) {
+        let message = 'Erreur de localisation';
+        let icon = 'fa-exclamation-circle';
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Permission refusée';
+            icon = 'fa-ban';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Service indisponible';
+            icon = 'fa-satellite-dish';
+            break;
+          case error.TIMEOUT:
+            message = 'Délai dépassé';
+            icon = 'fa-clock';
+            break;
+          case error.UNKNOWN_ERROR:
+            message = 'Erreur inconnue';
+            icon = 'fa-question-circle';
+            break;
+        }
+        
+        elements.locationStatus.innerHTML = 
+          `<i class="fas ${icon}"></i> Erreur (Tentative ${locationAttemptsMade}): ${message}.`;
+        updateAccuracyBar(locationAttemptsMade - 1, -1);
+        setTimeout(attemptGetLocation, 2000);
+      }
+
+      function validateLocation() {
+        if (validatedLocation) {
+          elements.form.classList.add('active');
+          document.getElementById('location-section').style.display = 'none';
+          showToast('Localisation validée avec succès', 'success');
+        } else {
+          showAlert('Veuillez obtenir une localisation valide avant de continuer', 'warning');
+        }
+      }
+
+      // Form Handling
+      async function handleFormSubmit(e) {
+        e.preventDefault();
+
+        if (!validatedLocation) {
+          showAlert('La localisation doit être validée avant de rechercher un colis', 'warning');
+          return;
+        }
+
+        // Reset UI
+        elements.errorMsg.classList.remove('visible');
+        elements.colisInfo.classList.remove('visible');
+        setLoadingState(true);
+
+        try {
+          if (!validateForm()) return;
+
+          const response = await fetchColisData();
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.message || 'Erreur de recherche');
+          }
+
+          if (!data.colis) {
+            throw new Error('Aucune information de colis disponible');
+          }
+
+          displayColisInfo(data.colis);
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          setLoadingState(false);
+        }
+      }
+
+      function validateForm() {
+        if (!elements.code.value.match(/^[A-Z0-9]{8,20}$/)) {
+          showError('Code colis invalide (8-20 caractères alphanumériques)');
+          return false;
+        }
+        return true;
+      }
+
+      function fetchColisData() {
+        return fetch(config.apiEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nom: elements.nom.value.trim(),
+            prenom: elements.prenom.value.trim(),
+            numero: elements.numero.value.trim(),
+            code: elements.code.value.trim(),
+            location: validatedLocation
+          })
+        });
+      }
+
+      function setLoadingState(isLoading) {
+        if (isLoading) {
+          elements.btnText.style.display = 'none';
+          elements.btnLoader.style.display = 'inline-block';
+          elements.submitBtn.disabled = true;
+          elements.submitBtn.classList.add('loading');
+        } else {
+          elements.btnText.style.display = 'inline-block';
+          elements.btnLoader.style.display = 'none';
+          elements.submitBtn.disabled = false;
+          elements.submitBtn.classList.remove('loading');
+        }
+      }
+
+      // Colis Display
+      function displayColisInfo(colis) {
+        const statusClass = `status-${(colis.status || 'enregistré').toLowerCase()}`;
+        
+        elements.colisContent.innerHTML = `
+          <div class="colis-header">
+            <h2>
+              Colis #${colis.colisID}
+              <span class="status-badge ${statusClass}">
+                ${(colis.status || 'enregistré').toUpperCase()}
+              </span>
+            </h2>
+            <p class="colis-meta">
+              <i class="fas fa-calendar-alt"></i> Créé le : ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+            </p>
+          </div>
+
+          <div class="colis-grid">
+            <div class="colis-section">
+              <h3><i class="fas fa-user-tie"></i> Expéditeur</h3>
+              <p><i class="fas fa-user"></i> ${escapeHTML(colis.sender)}</p>
+              <p><i class="fas fa-phone"></i> ${escapeHTML(colis.phone1)}</p>
+            </div>
+
+            <div class="colis-section">
+              <h3><i class="fas fa-user"></i> Destinataire</h3>
+              <p><i class="fas fa-user"></i> ${escapeHTML(colis.recipient)}</p>
+              <p><i class="fas fa-phone"></i> ${escapeHTML(colis.phone)}</p>
+              <p><i class="fas fa-map-marker-alt"></i> ${escapeHTML(colis.address)}</p>
+            </div>
+
+            <div class="colis-section">
+              <h3><i class="fas fa-info-circle"></i> Détails</h3>
+              <p><i class="fas fa-tag"></i> <strong>Type :</strong> ${escapeHTML(colis.type)}</p>
+              <p><i class="fas fa-align-left"></i> <strong>Description :</strong> ${escapeHTML(colis.details || 'Non spécifié')}</p>
+            </div>
+          </div>
+
+          ${colis.photos?.length > 0 ? `
+            <div class="colis-photos">
+              <h3><i class="fas fa-camera"></i> Photos</h3>
+              <div class="photos-grid">
+                ${colis.photos.slice(0, 2).map(photo => `
+                  <img src="${photo.data}" alt="Photo du colis" class="photo-preview">
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          ${colis.history?.length > 0 ? `
+            <div class="colis-timeline">
+              <h3><i class="fas fa-history"></i> Historique</h3>
+              <div class="timeline">
+                ${colis.history.map(item => `
+                  <div class="timeline-item">
+                    <div class="timeline-date">
+                      <i class="fas fa-clock"></i> ${new Date(item.date).toLocaleString('fr-FR')}
+                    </div>
+                    <div class="timeline-content">
+                      <strong>${item.status.toUpperCase()}</strong>
+                      ${item.location ? `<p><i class="fas fa-map-pin"></i> ${item.location.latitude}, ${item.location.longitude}</p>` : ''}
+                      ${item.notes ? `<p><i class="fas fa-comment"></i> ${escapeHTML(item.notes)}</p>` : ''}
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="action-buttons">
+            <button id="btn-recevoir" class="btn receive-btn">
+              <i class="fas fa-check"></i> Recevoir
+            </button>
+            <button id="btn-decliner" class="btn decline-btn">
+              <i class="fas fa-times"></i> Décliner
+            </button>
+          </div>
+        `;
+
+        elements.colisInfo.classList.add('visible');
+        setupColisActionHandlers(colis);
+      }
+
+      function setupColisActionHandlers(colis) {
+        const recevoirButton = document.getElementById('btn-recevoir');
+        const declinerButton = document.getElementById('btn-decliner');
+        let recevoirClicked = false;
+
+        recevoirButton.addEventListener('click', async () => {
+          if (recevoirClicked) return;
+          recevoirClicked = true;
+          recevoirButton.disabled = true;
+          recevoirButton.classList.add('disabled');
+
+          try {
+            showSpinner();
+            const response = await fetch('/.netlify/functions/recevoir', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ codeID: colis.colisID })
+            });
+
+            const data = await response.json();
+            hideSpinner();
+
+            if (response.ok) {
+              showCheckmark();
+              showToast(data.message || 'Colis marqué comme reçu', 'success');
+              recevoirButton.disabled = true;
+            } else {
+              throw new Error(data.error || 'Erreur lors de la réception');
+            }
+          } catch (err) {
+            showAlert(err.message || 'Erreur de connexion', 'error');
+            recevoirClicked = false;
+            recevoirButton.disabled = false;
+            recevoirButton.classList.remove('disabled');
+          }
+        });
+
+        declinerButton.addEventListener('click', async () => {
+          const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
+          if (!confirmed) return;
+
+          try {
+            showSpinner();
+            const response = await fetch('/.netlify/functions/decliner', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ codeID: colis.colisID })
+            });
+
+            const result = await response.json();
+            hideSpinner();
+
+            if (response.ok) {
+              showAlert(result.message || "Colis refusé avec succès", 'success');
+              elements.colisInfo.classList.remove('visible');
+            } else {
+              throw new Error(result.error || 'Erreur lors du refus');
+            }
+          } catch (error) {
+            showAlert(error.message || 'Erreur de connexion', 'error');
+          }
+        });
+      }
+
+      // UI Helpers
+      function showError(message) {
+        elements.errorMsg.textContent = message;
+        elements.errorMsg.classList.add('visible');
+      }
+
+      function escapeHTML(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      // UI Components
+      function showAlert(message, type = 'info') {
+        const alertBox = document.getElementById('custom-alert');
+        const alertMessage = document.getElementById('alert-message');
+        const alertIcon = document.getElementById('alert-icon');
+
+        alertMessage.textContent = message;
+        alertIcon.src = getIconForType(type);
+        alertBox.classList.remove('hidden');
+
+        document.getElementById('alert-close').onclick = () => {
+          alertBox.classList.add('hidden');
+        };
+      }
+
+      function showConfirm(message) {
+        return new Promise((resolve) => {
+          const confirmBox = document.getElementById('custom-confirm');
+          const confirmMessage = document.getElementById('confirm-message');
+
+          confirmMessage.textContent = message;
+          confirmBox.classList.remove('hidden');
+
+          document.getElementById('confirm-yes').onclick = () => {
+            confirmBox.classList.add('hidden');
+            resolve(true);
+          };
+
+          document.getElementById('confirm-no').onclick = () => {
+            confirmBox.classList.add('hidden');
+            resolve(false);
+          };
+        });
+      }
+
+      function showToast(message, type = 'info', duration = 3000) {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        const toastIcon = document.getElementById('toast-icon');
+
+        toastMessage.textContent = message;
+        toastIcon.src = getIconForType(type);
+        toast.classList.remove('hidden');
+
         setTimeout(() => {
-          toast.classList.remove('animate__fadeOut');
-        }, 500);
-      }, duration);
-    }
-  </script>
+          toast.classList.add('hidden');
+        }, duration);
+      }
 
-  <script>
-    function showConfirm(message) {
-      return new Promise((resolve) => {
-        const confirmBox = document.getElementById('custom-confirm');
-        const confirmMessage = document.getElementById('confirm-message');
+      function showSpinner() {
+        document.getElementById('spinner-overlay').classList.remove('hidden');
+      }
 
-        confirmMessage.textContent = message;
-        confirmBox.classList.remove('hidden');
+      function hideSpinner() {
+        document.getElementById('spinner-overlay').classList.add('hidden');
+      }
 
-        document.getElementById('confirm-yes').onclick = () => {
-          confirmBox.classList.add('hidden');
-          resolve(true);
+      function showCheckmark(duration = 2000) {
+        const wrapper = document.getElementById('check-animation');
+        wrapper.classList.remove('hidden');
+
+        setTimeout(() => {
+          wrapper.classList.add('hidden');
+        }, duration);
+      }
+
+      function getIconForType(type) {
+        const icons = {
+          info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
+          success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
+          error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
+          warning: 'https://cdn-icons-png.flaticon.com/512/3161/3161837.png'
         };
-
-        document.getElementById('confirm-no').onclick = () => {
-          confirmBox.classList.add('hidden');
-          resolve(false);
-        };
-      });
-    }
+        return icons[type] || icons.info;
+      }
+    });
   </script>
-
-  <script>
-    function showAlert(message, type = 'info') {
-      const alertBox = document.getElementById('custom-alert');
-      const alertMessage = document.getElementById('alert-message');
-      const alertIcon = document.getElementById('alert-icon');
-
-      alertMessage.textContent = message;
-
-      const icons = {
-        info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
-        success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
-        error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
-      };
-
-      alertIcon.src = icons[type] || icons.info;
-
-      alertBox.classList.remove('hidden');
-
-      document.getElementById('alert-close').onclick = () => {
-        alertBox.classList.add('hidden');
-      };
-    }
-
-    function showSpinner() {
-      document.getElementById('spinner-overlay').classList.remove('hidden');
-    }
-
-    function hideSpinner() {
-      document.getElementById('spinner-overlay').classList.add('hidden');
-    }
-  </script>
-
-  <div class="navigation-arrows">
-    <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
-      <svg viewBox="0 0 24 24">
-        <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
-      </svg>
-    </a>
-    <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
-      <svg viewBox="0 0 24 24">
-        <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-      </svg>
-    </button>
-  </div>
-
 </body>
 </html>

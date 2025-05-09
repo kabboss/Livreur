@@ -214,12 +214,10 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const locationStatus = document.getElementById('location-status');
     const colisList = document.getElementById('colis-list');
     const modal = document.getElementById('imageModal');
     const modalImage = document.getElementById('modalImage');
     const modalClose = document.getElementById('modalClose');
-    let livreurLocation = null;
 
     // Fonction pour afficher les notifications
     function showToast(message, type = 'info') {
@@ -249,52 +247,133 @@
       modal.classList.remove('active');
     });
 
-    // Obtenir la position du livreur
-    const getLocation = () => {
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          pos => {
-            livreurLocation = {
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-            };
-            locationStatus.innerHTML = `📍 <a href="https://www.google.com/maps?q=${livreurLocation.latitude},${livreurLocation.longitude}" target="_blank" style="color: blue; text-decoration: underline;">Voir ma position sur Google Maps</a>`;
-            locationStatus.classList.add('success');
-            fetchColis();
-          },
-          err => {
-            locationStatus.textContent = '⚠️ Impossible d\'obtenir la localisation (activez-la pour une meilleure expérience)';
-            locationStatus.classList.add('error');
-            fetchColis();
-          },
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
-      } else {
-        locationStatus.textContent = '⚠️ Géolocalisation non supportée par votre navigateur';
-        locationStatus.classList.add('error');
-        fetchColis();
-      }
-    };
+        // Sélection des éléments du DOM pour la localisation précise
+    const locationStatus = document.getElementById('location-status'); // Assurez-vous d'avoir cet ID dans votre HTML
+    const accuracyBarsContainer = document.createElement('div');
+    const accuracyBars = [];
+    let locationAttemptsMade = 0;
+    const maxLocationAttempts = 3; // Nombre maximal de tentatives
+    const desiredAccuracy = 20; // Précision souhaitée en mètres
+    let livreurLocation = null;
 
-    // Récupérer la liste des colis depuis l'API
-    async function fetchColis() {
-      try {
-        colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
+    // Styles CSS pour les barres de précision (peuvent être externalisés)
+    const accuracyBarStyle = `
+      width: 100%;
+      height: 8px;
+      background-color: #eee;
+      margin-bottom: 5px;
+      border-radius: 4px;
+      overflow: hidden;
+    `;
 
-        const res = await fetch('/.netlify/functions/getLivraisons');
-        const data = await res.json();
+    const accuracyProgressStyle = `
+      height: 100%;
+      width: 0%;
+      background-color: orange;
+      border-radius: 4px;
+      transition: width 0.3s ease-in-out, background-color 0.3s ease-in-out;
+    `;
 
-        if (res.ok) {
-          displayColis(data);
-        } else {
-          colisList.innerHTML = `<div class="error-message">Erreur: ${data.error || 'Impossible de charger les colis'}</div>`;
-        }
-      } catch (e) {
-        console.error('Erreur fetch:', e);
-        colisList.innerHTML = '<div class="error-message">Erreur de connexion au serveur</div>';
-      }
-    }
+    // Créer et ajouter les barres de précision
+    for (let i = 0; i < maxLocationAttempts; i++) {
+      const barContainer = document.createElement('div');
+      barContainer.style.cssText = accuracyBarStyle;
+      const progressBar = document.createElement('div');
+      progressBar.style.cssText = accuracyProgressStyle;
+      barContainer.appendChild(progressBar);
+      accuracyBars.push(progressBar);
+      accuracyBarsContainer.appendChild(barContainer);
+    }
 
+    // Ajouter les barres de précision avant le statut de la localisation (assurez-vous que locationStatus existe dans le DOM)
+    if (locationStatus && locationStatus.parentNode) {
+      locationStatus.parentNode.insertBefore(accuracyBarsContainer, locationStatus);
+    }
+
+    // Obtenir la position du livreur avec tentatives et précision
+    const getLocation = () => {
+      locationAttemptsMade = 0;
+      livreurLocation = null;
+      accuracyBars.forEach(bar => bar.style.width = '0%'); // Réinitialiser les barres
+      attemptGetLocation();
+    };
+
+    function attemptGetLocation() {
+      locationAttemptsMade++;
+      if (locationAttemptsMade > maxLocationAttempts || livreurLocation) {
+        if (!livreurLocation) {
+          locationStatus.textContent = `⚠️ Impossible d'obtenir une localisation précise après ${maxLocationAttempts} tentatives.`;
+          locationStatus.classList.add('error');
+          fetchColis(); // Continuer même si la localisation précise échoue
+        }
+        return;
+      }
+
+      locationStatus.textContent = `⏳ Tentative de localisation ${locationAttemptsMade}/${maxLocationAttempts}...`;
+      locationStatus.className = ''; // Réinitialiser les classes de statut
+
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            const { latitude, longitude, accuracy } = pos.coords;
+            updateAccuracyBar(accuracyBars[locationAttemptsMade - 1], accuracy);
+
+            if (accuracy <= desiredAccuracy) {
+              livreurLocation = { latitude, longitude };
+              locationStatus.innerHTML = `📍 <a href="https://www.google.com/maps?q=$${latitude},${longitude}" target="_blank" style="color: blue; text-decoration: underline;">Position précise obtenue (Précision: ${accuracy.toFixed(0)}m). Voir sur la carte</a>`;
+              locationStatus.classList.add('success');
+              fetchColis();
+            } else {
+              locationStatus.textContent = `⚠️ Précision actuelle : ${accuracy.toFixed(0)}m (Souhaitée: ${desiredAccuracy}m). Tentative suivante...`;
+              setTimeout(attemptGetLocation, 1500); // Tenter à nouveau après un délai
+            }
+          },
+          err => {
+            updateAccuracyBar(accuracyBars[locationAttemptsMade - 1], -1); // Indiquer une erreur
+            locationStatus.textContent = `⚠️ Erreur lors de la tentative ${locationAttemptsMade}: ${err.message}. Nouvelle tentative...`;
+            locationStatus.classList.add('error');
+            setTimeout(attemptGetLocation, 2000); // Tenter à nouveau après un délai
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      } else {
+        locationStatus.textContent = '⚠️ Géolocalisation non supportée par votre navigateur';
+        locationStatus.classList.add('error');
+        fetchColis();
+      }
+    };
+
+    function updateAccuracyBar(progressBar, accuracy) {
+      if (progressBar) {
+        if (accuracy > 0) {
+          const percentage = Math.min(100, (desiredAccuracy / accuracy) * 100);
+          progressBar.style.width = `${percentage}%`;
+          progressBar.style.backgroundColor = percentage < 100 ? 'orange' : 'var(--success)';
+        } else {
+          progressBar.style.width = '100%';
+          progressBar.style.backgroundColor = 'var(--error)';
+        }
+      }
+    }
+
+    // Récupérer la liste des colis depuis l'API
+    async function fetchColis() {
+      try {
+        colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
+
+        const res = await fetch('/.netlify/functions/getLivraisons');
+        const data = await res.json();
+
+        if (res.ok) {
+          displayColis(data);
+        } else {
+          colisList.innerHTML = `<div class="error-message">Erreur: ${data.error || 'Impossible de charger les colis'}</div>`;
+        }
+      } catch (e) {
+        console.error('Erreur fetch:', e);
+        colisList.innerHTML = '<div class="error-message">Erreur de connexion au serveur</div>';
+      }
+    }
     // Fonction de calcul de distance ultra-précise (Algorithme de Vincenty)
     function calculerDistance(lat1, lon1, lat2, lon2) {
       // Constantes de l'ellipsoïde WGS-84
@@ -692,6 +771,15 @@
 
       buttonGroup.appendChild(updateBtn);
     }
+
+
+
+
+
+
+
+
+
 
     // Configurer les écouteurs d'événements
     function setupEventListeners() {
