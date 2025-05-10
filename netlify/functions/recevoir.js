@@ -70,7 +70,7 @@ exports.handler = async function(event, context) {
         const livraisonData = {
             codeID,
             dateLivraison: new Date(),
-            statut: 'livré', // Changement de statut
+            statut: 'En cour de livraison', // Changement de statut
             dateReception: new Date(), // Ajout de la date de réception
             localisationReception: clientLocation, // Ajout de la localisation du client
             colis: {
