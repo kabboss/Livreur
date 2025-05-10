@@ -9,7 +9,7 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json'
     };
 
-    // Répondre immédiatement aux requêtes OPTIONS (prévol)
+    // Répondre aux requêtes OPTIONS (prévol)
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
@@ -18,25 +18,40 @@ exports.handler = async (event, context) => {
         };
     }
 
+    // Vérifier la méthode HTTP
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ 
+                success: false, 
+                message: 'Méthode non autorisée' 
+            })
+        };
+    }
+
     try {
-        // Vérifier la méthode HTTP
-        if (event.httpMethod !== 'POST') {
+        const data = JSON.parse(event.body);
+        
+        if (!data.id_livreur || !data.nom || !data.prenom || !data.whatsapp) {
             return {
-                statusCode: 405,
+                statusCode: 400,
                 headers,
-                body: JSON.stringify({ success: false, message: 'Méthode non autorisée' })
+                body: JSON.stringify({ 
+                    success: false, 
+                    message: 'Données requises manquantes' 
+                })
             };
         }
 
-        const data = JSON.parse(event.body);
-        
-        const client = await MongoClient.connect(process.env.MONGODB_URI, {
+        const client = new MongoClient(process.env.MONGODB_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
             connectTimeoutMS: 5000,
-            socketTimeoutMS: 30000
+            serverSelectionTimeoutMS: 5000
         });
-        
+
+        await client.connect();
         const db = client.db('FarmsConnect');
         
         // Vérifier si le livreur existe déjà
@@ -61,7 +76,6 @@ exports.handler = async (event, context) => {
         
         // Insérer le nouveau livreur
         const result = await db.collection('Res_livreur').insertOne(data);
-        
         await client.close();
         
         return {
@@ -69,18 +83,20 @@ exports.handler = async (event, context) => {
             headers,
             body: JSON.stringify({ 
                 success: true, 
-                id: result.insertedId 
+                id: result.insertedId,
+                message: 'Livreur ajouté avec succès'
             })
         };
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur MongoDB:', error);
         return {
             statusCode: 500,
             headers,
             body: JSON.stringify({ 
                 success: false, 
                 message: 'Erreur serveur',
-                error: error.message 
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
             })
         };
     }
