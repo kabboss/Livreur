@@ -320,7 +320,7 @@
 
             if (accuracy <= desiredAccuracy) {
               livreurLocation = { latitude, longitude };
-              locationStatus.innerHTML = `📍 <a href="https://www.google.com/maps?q=$${latitude},${longitude}" target="_blank" style="color: blue; text-decoration: underline;">Position précise obtenue (Précision: ${accuracy.toFixed(0)}m). Voir sur la carte</a>`;
+              locationStatus.innerHTML = `📍 <a href="https://www.google.com/maps?q=${latitude},${longitude}" target="_blank" style="color: blue; text-decoration: underline;">Position précise obtenue (Précision: ${accuracy.toFixed(0)}m). Voir sur la carte</a>`;
               locationStatus.classList.add('success');
               fetchColis();
             } else {
@@ -361,7 +361,7 @@
       try {
         colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
 
-        const res = await fetch('/.netlify/functions/getLivraisons');
+        const res = await fetch('https://livreur2.netlify.app/.netlify/functions/getLivraisons');
         const data = await res.json();
 
         if (res.ok) {
@@ -547,7 +547,7 @@
                      target="_blank" rel="noopener">
                      🗺️ Localiser
                 </a>
-                <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> LA DISTANCE ENTRE VOUS EST DE : ${distanceExpediteur !== null ? distanceExpediteur.toFixed(3) : 'N/A'} km</p>
+                <p class="distance"><i class="fas fa-ruler-combined mr-2"></i> DISTANCE ENTRE VOUS: ${distanceExpediteur !== null ? distanceExpediteur.toFixed(3) : 'N/A'} km</p>
                 </p>` : ''}
             </div>
 
@@ -561,14 +561,14 @@
                      target="_blank" rel="noopener">
                      🗺️ Localiser
                 </a>
-                <p class="distance"><i class="fas fa-ruler-combined mr-2"></i>LA DISTANCE ENTRE VOUS EST DE : ${distanceDestinataire !== null ? distanceDestinataire.toFixed(3) : 'N/A'} km</p>
+                <p class="distance"><i class="fas fa-ruler-combined mr-2"></i>DISTANCE ENTRE VOUS : ${distanceDestinataire !== null ? distanceDestinataire.toFixed(3) : 'N/A'} km</p>
                 </p>` : ''}
             </div>
 
             <div class="informations-livraison">
               <h3>Informations de Livraison</h3>
               ${colis.expediteur?.localisation && colis.destinataire?.localisation ? `
-                <p><i class="fas fa-route mr-2"></i> Distance Entre l'expediteur et le destinataire : ${distanceExpediteurDestinataire !== null ? distanceExpediteurDestinataire.toFixed(3) : 'N/A'} km</p>
+                <p><i class="fas fa-route mr-2"></i> Distance Entre Expediteur et Destinataire : ${distanceExpediteurDestinataire !== null ? distanceExpediteurDestinataire.toFixed(3) : 'N/A'} km</p>
                 <p><i class="fas fa-coins mr-2"></i> Frais de livraison : ${prixLivraison || 'N/A'}</p>
               ` : `<p><i class="fas fa-exclamation-triangle mr-2"></i> Impossible de calculer la distance et le prix (coordonnées manquantes).</p>`}
             </div>
@@ -586,7 +586,10 @@
                   </button>`
               }
               <button class="terminer-btn" data-id="${colis.codeID}" aria-label="Livraison Terminer ${colis.codeID}">
-                <span class="material-icons animated-check">check_circle</span>
+<p>
+  <span class="material-icons animated-check" style="color: green;">check_circle</span>
+  <strong>Livraison terminée</strong>
+</p>
               </button>
             </div>
           </div>
@@ -699,7 +702,7 @@
           confirmUpdateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Vérification...';
 
           try {
-            const verificationResult = await fetch('/.netlify/functions/verifierLivreur', {
+            const verificationResult = await fetch('https://livreur2.netlify.app/.netlify/functions/verifierLivreur', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ codeID: codeID, livreurId: livreurIdToVerify }),
@@ -718,7 +721,7 @@
                     longitude: position.coords.longitude
                   };
 
-                  const updateRes = await fetch('/.netlify/functions/updateLivreurPosition', {
+                  const updateRes = await fetch('https://livreur2.netlify.app/.netlify/functions/updateLivreurPosition', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ codeID: codeID, localisation: localisation }),
@@ -908,7 +911,7 @@
                     : null;
 
                   // Envoi des données au serveur
-                  const res = await fetch('/.netlify/functions/enregistrerExpedition', {
+                  const res = await fetch('https://livreur2.netlify.app/.netlify/functions/enregistrerExpedition', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1045,7 +1048,7 @@
             btn.innerHTML = '<span class="spinner"></span> Finalisation...';
 
             try {
-              const res = await fetch('/.netlify/functions/deleteLivraison', {
+              const res = await fetch('https://livreur2.netlify.app/.netlify/functions/deleteLivraison', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 

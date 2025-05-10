@@ -6,192 +6,11 @@
     <title>Connexion - Livreur 2.0</title>
     <link rel="stylesheet" href="Connection.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
-    <style>
-        /* Styles pour le conteneur principal */
-        .container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #f4f6f8;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 2rem;
-        }
+    
 
 
-        /* Styles pour le logo */
-        .logo-img {
-            max-width: 150px;
-            height: auto;
-            margin-bottom: 1.5rem;
-            animation: fadeInDown 0.8s ease-out;
-        }
-
-        /* Styles pour le formulaire */
-        .form {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 90%;
-            max-width: 400px;
-            animation: fadeInUp 0.8s ease-out;
-        }
-
-        .form label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: #333;
-            font-weight: 500;
-        }
-
-        .form input, .form select {
-            width: 100%;
-            padding: 0.75rem;
-            margin-bottom: 1rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 1rem;
-        }
-
-        .form input:focus, .form select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-        }
-
-        /* Styles pour le bouton */
-        .btn {
-            background-color: #007bff;
-            color: white;
-            padding: 0.75rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1.1rem;
-            transition: background-color 0.3s ease;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .btn:hover {
-            background-color: #0056b3;
-        }
-
-        .btn:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-
-        /* Styles pour le message de chargement */
-        #loading-message {
-            display: none;
-            margin-top: 1rem;
-            color: #555;
-            text-align: center;
-        }
-
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 2s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Styles pour le message d'erreur */
-        #error-message {
-            display: none;
-            color: #dc3545;
-            margin-top: 1rem;
-            text-align: center;
-        }
-
-        /* Styles pour le message de succès */
-        #message {
-            margin-top: 1rem;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        /* Styles pour les toasts */
-        .toast {
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
-            background-color: white;
-            border-left: 5px solid;
-            padding: 1rem 1.5rem;
-            border-radius: 4px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            color: #333;
-            opacity: 0;
-            transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.320, 1.275);
-            transform: translateY(-20px);
-            z-index: 1000;
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .toast.success {
-            border-left-color: #28a745;
-        }
-
-        .toast.error {
-            border-left-color: #dc3545;
-        }
-
-        .toast.warning {
-            border-left-color: #ffc107;
-        }
-
-        .toast .close-btn {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            cursor: pointer;
-            font-size: 1.2rem;
-            color: #aaa;
-        }
-
-        /* Animations */
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -213,81 +32,46 @@
         </button>
     </div>
     
-    <style>
-        /* Styles pour les flèches de navigation */
-        .navigation-arrows {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 1.5rem;
-            width: 150px; /* Ajustez la largeur pour espacer les boutons */
-            margin-left: auto;
-            margin-right: auto;
-        }
-    
-        .arrow {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 40px;
-            height: 40px;
-            background-color: #f0f0f0;
-            border-radius: 50%;
-            text-decoration: none;
-            color: #007bff; /* Couleur primaire */
-            transition: background-color 0.3s ease, color 0.3s ease, transform 0.2s ease;
-            cursor: pointer;
-            border: none;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-    
-        .arrow:hover {
-            background-color: #007bff; /* Couleur primaire au survol */
-            color: white;
-            transform: scale(1.05);
-        }
-    
-        .arrow svg {
-            width: 20px;
-            height: 20px;
-            fill: currentColor;
-        }
-    
-        .refresh-button:hover {
-            transform: rotate(180deg);
-        }
-    
-    </style>
     <br>
         <img src="img/ChatGPT Image 30 avr. 2025, 20_34_02.png" alt="Logo Livreur 2.0" class="logo-img">
-        <form class="form" id="login-form">
-            <label for="whatsapp">Numéro WhatsApp :</label>
-            <input type="tel" id="whatsapp" name="whatsapp" required>
+<!-- Assure-toi d’avoir bien cette ligne dans <head> -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 
-            <label for="type">Type de compte :</label>
-            <select id="type" name="type" required>
-                <option value="">-- Choisir un type --</option>
-                <option value="expediteur">Expéditeur (Commerçant ou Particulier)</option>
-                <option value="client">Client</option>
-                <option value="livreur">Livreur</option>
-                <option value="admin">Admin</option>
-            </select>
+<form class="form" id="login-form">
+    <label for="whatsapp">
+        <i class="fab fa-whatsapp"></i> Numéro WhatsApp :
+    </label>
+    <input type="tel" id="whatsapp" name="whatsapp" placeholder="+226 70 00 00 00" required>
 
-            <label for="password">Mot de passe :</label>
-            <input type="password" id="password" name="password" required>
+    <label for="type">
+        <i class="fas fa-user-tag"></i> Type de compte :
+    </label>
+    <select id="type" name="type" required>
+        <option value="">-- Choisir un type --</option>
+        <option value="expediteur">Expéditeur (Commerçant ou Particulier)</option>
+        <option value="client">Client</option>
+        <option value="livreur">Livreur</option>
+        <option value="admin">Admin</option>
+    </select>
 
-            <button type="submit" class="btn">
-                <span class="btn-text">Se connecter</span>
-                <span class="spinner" style="display: none;"></span>
-            </button>
+    <label for="password">
+        <i class="fas fa-lock"></i> Mot de passe :
+    </label>
+    <input type="password" id="password" name="password" placeholder="Mot de passe" required>
 
-            <div id="loading-message" style="display:none;">
-                <p>Connexion en cours...</p>
-                <div class="spinner"></div>
-            </div>
+    <button type="submit" class="btn">
+        <i class="fas fa-sign-in-alt mr-2"></i>
+        <span class="btn-text">Se connecter</span>
+        <span class="spinner" style="display: none;"></span>
+    </button>
 
-            <div id="error-message" style="display:none;"></div>
-        </form>
+    <div id="loading-message" style="display:none;">
+        <p><i class="fas fa-spinner fa-spin"></i> Connexion en cours...</p>
+    </div>
+
+    <div id="error-message" style="display:none; color: red; margin-top: 10px;"></div>
+</form>
+``
 
         <div id="message"></div>
     </div>
@@ -310,7 +94,7 @@
             document.getElementById('error-message').style.display = 'none';
 
             try {
-                const response = await fetch('/.netlify/functions/login', {
+                const response = await fetch('https://livreur2.netlify.app/.netlify/functions/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ whatsapp, password, type })
@@ -326,13 +110,13 @@
                     // Redirection conditionnelle selon le type de compte
                     setTimeout(() => {
                         if (type === 'expediteur') {
-                            window.location.href = '/expediteur.html';
+                            window.location.href = 'expediteur.html';
                         } else if (type === 'client') {
-                            window.location.href = '/client.html';
+                            window.location.href = 'client.html';
                         } else if (type === 'livreur') {
-                            window.location.href = '/livreur.html';
+                            window.location.href = 'livreur.html';
                         } else if (type === 'admin') {
-                            window.location.href = '/admin.html';
+                            window.location.href = 'admin.html';
                         } else {
                             window.location.href = '/';
                         }

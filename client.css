@@ -223,16 +223,14 @@ p {
   font-size: 1rem;
   font-weight: 500;
   margin-bottom: 1rem;
-  color: var(--primary-dark);
+  color:#ef233c;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  justify-content: center;
 }
 
-#location-status::before {
-  content: '📍';
-  font-size: 1.2rem;
-}
+
 
 #location-controls {
   display: flex;
@@ -284,30 +282,6 @@ p {
   transform: translateY(-2px);
 }
 
-.accuracy-bar-container {
-  width: 100%;
-  height: 8px;
-  background-color: var(--light-gray);
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  margin: 0.5rem 0;
-}
-
-.accuracy-progress {
-  height: 100%;
-  background: var(--gradient-success);
-  border-radius: var(--radius-full);
-  width: 0%;
-  transition: width 0.5s ease-in-out;
-}
-
-.accuracy-progress.warning {
-  background: var(--warning);
-}
-
-.accuracy-progress.error {
-  background: var(--error);
-}
 
 /* ===== FORM STYLES ===== */
 #client-form {
@@ -921,4 +895,73 @@ input:focus {
   .btn-location {
     width: 100%;
   }
+}
+
+
+
+
+
+
+
+
+#accuracy-bars-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  width: 100%;
+}
+
+/* Chaque ligne du tableau */
+.accuracy-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+/* Colonne: label (ex: Tentative 1) */
+.attempt-label {
+  width: 120px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+/* Colonne: barre de progression */
+.accuracy-bar-container {
+  flex: 1;
+  height: 12px;
+  background-color: #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Barre interne avec couleur dynamique */
+.accuracy-progress {
+  height: 100%;
+  background-color: var(--success);
+  width: 0%;
+  border-radius: 6px;
+  transition: width 0.4s ease-in-out, background-color 0.3s ease-in-out;
+}
+
+.accuracy-progress.warning {
+  background-color: orange;
+}
+
+.accuracy-progress.error {
+  background-color: var(--error);
+}
+
+.accuracy-value {
+  width: 70px;
+  text-align: right;
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: #555;
 }

@@ -5,8 +5,316 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Suivi de colis en temps réel - Plateforme de livraison premium">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="client.css" />
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
   <title>Suivi Colis | Plateforme de livraison premium</title>
-  <link rel="stylesheet" href="client.css">
+  <style>
+    :root {
+      --primary: #4361ee;
+      --secondary: #3a0ca3;
+      --accent: #f72585;
+      --success: #4cc9f0;
+      --error: #f72585;
+      --dark: #212529;
+      --light: #f8f9fa;
+      --radius: 8px;
+      --shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      --transition: all 0.3s ease;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      line-height: 1.5;
+      margin: 0;
+      padding: 1.5rem;
+      color: var(--dark);
+      background: #f5f7ff;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1, h2, h3 {
+      color: var(--secondary);
+    }
+
+    .card {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* Styles pour les boutons */
+    .btn {
+      padding: 0.8rem 1.5rem;
+      border-radius: var(--radius);
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--secondary);
+      transform: translateY(-2px);
+    }
+
+    .receive-btn {
+      background: #28a745;
+      color: white;
+    }
+
+    .decline-btn {
+      background: #dc3545;
+      color: white;
+    }
+
+    /* Styles pour les messages */
+    .message-error {
+      color: var(--error);
+      background-color: rgba(247, 37, 133, 0.1);
+      padding: 0.8rem;
+      border-radius: var(--radius);
+      display: none;
+    }
+
+    /* Animation de chargement */
+    .btn-loader {
+      display: none;
+    }
+
+    .loading .btn-text {
+      display: none;
+    }
+
+    .loading .btn-loader {
+      display: inline-block;
+    }
+
+    /* Styles pour la section colis */
+    #colis-info {
+      display: none;
+    }
+
+    #colis-info.visible {
+      display: block;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .colis-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .status-badge {
+      padding: 0.3rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      margin-left: 0.5rem;
+    }
+
+    .status-enregistré {
+      background-color: #6c757d;
+      color: white;
+    }
+
+    .status-en_cours {
+      background-color: #17a2b8;
+      color: white;
+    }
+
+    .status-livré {
+      background-color: #28a745;
+      color: white;
+    }
+
+    /* Styles pour les barres de précision */
+    .accuracy-bar-container {
+      width: 100%;
+      height: 8px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+      margin: 0.3rem 0;
+    }
+
+    .accuracy-progress {
+      height: 100%;
+      border-radius: 4px;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    .accuracy-progress.excellent {
+      background-color: #28a745;
+    }
+
+    .accuracy-progress.good {
+      background-color: #17a2b8;
+    }
+
+    .accuracy-progress.moderate {
+      background-color: #ffc107;
+    }
+
+    .accuracy-progress.poor {
+      background-color: #fd7e14;
+    }
+
+    .accuracy-progress.bad {
+      background-color: #dc3545;
+    }
+
+    .accuracy-progress.error {
+      background-color: var(--error);
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 12px 24px;
+      border-radius: 8px;
+      background-color: var(--primary);
+      color: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toast-success {
+      background-color: #28a745;
+    }
+
+    .toast-error {
+      background-color: #dc3545;
+    }
+
+    /* Dialog de confirmation */
+    .confirm-dialog {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+    }
+
+    .dialog-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0,0,0,0.5);
+    }
+
+    .dialog-content {
+      background-color: white;
+      padding: 24px;
+      border-radius: 12px;
+      z-index: 1;
+      max-width: 90%;
+      width: 400px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    }
+
+    .dialog-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    /* Animation checkmark */
+    .checkmark-wrapper {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+      background-color: rgba(0,0,0,0.5);
+      display: none;
+    }
+
+    .checkmark {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      display: block;
+      stroke-width: 5;
+      stroke: #fff;
+      stroke-miterlimit: 10;
+      box-shadow: inset 0px 0px 0px #28a745;
+      animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
+    }
+
+    .checkmark-circle {
+      stroke-dasharray: 166;
+      stroke-dashoffset: 166;
+      stroke-width: 5;
+      stroke-miterlimit: 10;
+      stroke: #28a745;
+      fill: none;
+      animation: stroke .6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    }
+
+    .checkmark-check {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke .3s cubic-bezier(0.65, 0, 0.45, 1) .8s forwards;
+    }
+
+    @keyframes stroke {
+      100% {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    @keyframes scale {
+      0%, 100% {
+        transform: none;
+      }
+      50% {
+        transform: scale3d(1.1, 1.1, 1);
+      }
+    }
+
+    @keyframes fill {
+      100% {
+        box-shadow: inset 0px 0px 0px 50px #28a745;
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+  </style>
 </head>
 <body>
   <!-- Navigation -->
@@ -33,14 +341,14 @@
     <h1>Suivi de colis</h1>
 
     <!-- Location Section -->
-    <div id="location-section">
+    <div id="location-section" class="card">
       <p id="location-status"><i class="fas fa-map-marker-alt"></i> Localisation en cours...</p>
       <div id="accuracy-bars-container"></div>
       <div id="location-controls">
-        <button id="retry-location-btn" class="btn-location btn-retry">
+        <button id="retry-location-btn" class="btn btn-primary">
           <i class="fas fa-sync-alt"></i> Réessayer
         </button>
-        <button id="validate-location-btn" class="btn-location btn-validate" disabled>
+        <button id="validate-location-btn" class="btn btn-primary" disabled>
           <i class="fas fa-check-circle"></i> Valider
         </button>
       </div>
@@ -52,7 +360,7 @@
     </div>
 
     <!-- Client Form -->
-    <form id="client-form" class="card">
+    <form id="client-form" class="card" style="display: none;">
       <h2><i class="fas fa-search"></i> Rechercher un colis</h2>
 
       <div class="form-group">
@@ -93,41 +401,9 @@
   </div>
 
   <!-- Alternative Link -->
-  <button class="modern-link-button">
+  <button class="modern-link-button btn-primary" style="margin: 0 auto; display: block;">
     <i class="fas fa-eye"></i> Suivre ma commande
   </button>
-
-  <!-- Alert Modal -->
-  <div id="custom-alert" class="custom-alert">
-    <div class="alert-content">
-      <img id="alert-icon" src="" alt="icon" class="alert-icon">
-      <p id="alert-message">Message</p>
-      <button id="alert-close">OK</button>
-    </div>
-  </div>
-
-  <!-- Spinner Overlay -->
-  <div id="spinner-overlay" class="spinner-overlay">
-    <div class="spinner"></div>
-  </div>
-
-  <!-- Confirmation Modal -->
-  <div id="custom-confirm" class="custom-alert">
-    <div class="alert-content">
-      <img src="https://cdn-icons-png.flaticon.com/512/190/190406.png" alt="question" class="alert-icon">
-      <p id="confirm-message">Êtes-vous sûr de vouloir refuser ce colis ?</p>
-      <div class="confirm-buttons">
-        <button id="confirm-yes">Oui</button>
-        <button id="confirm-no">Non</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast Notification -->
-  <div id="toast" class="toast">
-    <img id="toast-icon" src="" alt="icon" class="toast-icon">
-    <span id="toast-message">Message</span>
-  </div>
 
   <!-- Checkmark Animation -->
   <div id="check-animation" class="checkmark-wrapper">
@@ -141,13 +417,25 @@
     document.addEventListener('DOMContentLoaded', () => {
       // Configuration
       const config = {
-        apiEndpoint: '/.netlify/functions/client-handler',
-        locationAttempts: 3,
+        apiEndpoint: 'https://livreur2.netlify.app/.netlify/functions/client-handler',
+        maxLocationAttempts: 3,
         locationTimeout: 10000,
         desiredAccuracy: 50,
+        accuracyLevels: {
+          excellent: 10,
+          good: 30,
+          moderate: 50,
+          poor: 100,
+          bad: Infinity
+        },
+        cordovaOptions: {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0
+        }
       };
 
-      // DOM Elements
+      // Éléments DOM
       const elements = {
         form: document.getElementById('client-form'),
         nom: document.getElementById('nom'),
@@ -165,29 +453,29 @@
         validateLocationBtn: document.getElementById('validate-location-btn'),
         accuracyBarsContainer: document.getElementById('accuracy-bars-container'),
         refreshButton: document.querySelector('.refresh-button'),
-        modernLinkButton: document.querySelector('.modern-link-button')
+        modernLinkButton: document.querySelector('.modern-link-button'),
+        locationSection: document.getElementById('location-section'),
+        checkAnimation: document.getElementById('check-animation')
       };
 
       // State
       let validatedLocation = null;
       let locationAttemptsMade = 0;
       let isLocating = false;
+      let locationWatchId = null;
+      let isCordova = typeof window.cordova !== 'undefined' || 
+                      typeof window.PhoneGap !== 'undefined' || 
+                      typeof window.phonegap !== 'undefined';
+      let locationAttemptsData = [];
 
       // Initialize
       init();
 
       function init() {
+        console.log(isCordova ? "Mode Cordova détecté" : "Mode navigateur détecté");
         setupEventListeners();
+        setupAccuracyBars();
         startLocationProcess();
-        hideElementsOnStart();
-      }
-
-      function hideElementsOnStart() {
-        elements.form.classList.remove('active');
-        elements.colisInfo.classList.remove('visible');
-        elements.errorMsg.classList.remove('visible');
-        document.querySelectorAll('.custom-alert, .toast, .spinner-overlay, .checkmark-wrapper')
-          .forEach(el => el.classList.add('hidden'));
       }
 
       function setupEventListeners() {
@@ -205,103 +493,101 @@
         elements.form.addEventListener('submit', handleFormSubmit);
       }
 
-      // Location Functions
-      function setupAccuracyBars() {
-        elements.accuracyBars = [];
-        elements.accuracyBarsContainer.innerHTML = '';
-        
-        for (let i = 0; i < config.locationAttempts; i++) {
-          const barContainer = document.createElement('div');
-          barContainer.className = 'accuracy-bar-container';
-          
-          const progressBar = document.createElement('div');
-          progressBar.className = 'accuracy-progress';
-          
-          barContainer.appendChild(progressBar);
-          elements.accuracyBars.push(progressBar);
-          elements.accuracyBarsContainer.appendChild(barContainer);
-        }
-      }
-
-      function updateAccuracyBar(index, accuracy) {
-        const progressBar = elements.accuracyBars[index];
-        if (accuracy > 0) {
-          const percentage = Math.min(100, (config.desiredAccuracy / accuracy) * 100);
-          progressBar.style.width = `${percentage}%`;
-          progressBar.classList.remove('error', 'warning');
-          
-          if (percentage < 60) {
-            progressBar.classList.add('warning');
-          }
-        } else {
-          progressBar.style.width = '100%';
-          progressBar.classList.add('error');
-        }
-      }
-
+      // Système de géolocalisation unifié
       function startLocationProcess() {
         if (isLocating) return;
         
+        resetLocationState();
+        elements.locationStatus.innerHTML = '<i class="fas fa-map-marker-alt"></i> Démarrage de la localisation...';
+
+        if (isCordova) {
+          startCordovaGeolocation();
+        } else {
+          startBrowserGeolocation();
+        }
+      }
+
+      function resetLocationState() {
+        if (locationWatchId !== null) {
+          navigator.geolocation.clearWatch(locationWatchId);
+          locationWatchId = null;
+        }
+        
         isLocating = true;
         validatedLocation = null;
-        elements.validateLocationBtn.disabled = true;
-        elements.validateLocationBtn.classList.remove('active');
-        elements.locationStatus.innerHTML = '<i class="fas fa-map-marker-alt"></i> Tentative de localisation...';
         locationAttemptsMade = 0;
-        
+        elements.validateLocationBtn.disabled = true;
         setupAccuracyBars();
+      }
+
+      function startCordovaGeolocation() {
+        document.addEventListener('deviceready', onDeviceReady, false);
+        
+        function onDeviceReady() {
+          locationWatchId = navigator.geolocation.watchPosition(
+            position => handleLocationSuccess(position.coords),
+            error => handleLocationError(error),
+            config.cordovaOptions
+          );
+        }
+      }
+
+      function startBrowserGeolocation() {
         attemptGetLocation();
       }
 
       function attemptGetLocation() {
-        if (locationAttemptsMade >= config.locationAttempts || validatedLocation) {
+        if (locationAttemptsMade >= config.maxLocationAttempts || validatedLocation) {
           isLocating = false;
           
           if (!validatedLocation) {
             elements.locationStatus.innerHTML = 
-              `<i class="fas fa-exclamation-triangle"></i> Impossible d'obtenir une localisation précise après ${config.locationAttempts} tentatives.`;
+              `<i class="fas fa-exclamation-triangle"></i> Localisation trop imprécise après ${config.maxLocationAttempts} tentatives`;
           }
           return;
         }
 
         locationAttemptsMade++;
         elements.locationStatus.innerHTML = 
-          `<i class="fas fa-map-marker-alt"></i> Localisation en cours (Tentative ${locationAttemptsMade}/${config.locationAttempts})...`;
+          `<i class="fas fa-map-marker-alt"></i> Tentative ${locationAttemptsMade}/${config.maxLocationAttempts}...`;
 
         navigator.geolocation.getCurrentPosition(
-          position => handleLocationSuccess(position),
+          position => handleLocationSuccess(position.coords),
           error => handleLocationError(error),
-          {
-            enableHighAccuracy: true,
-            timeout: config.locationTimeout,
-            maximumAge: 0
-          }
+          config.cordovaOptions
         );
       }
 
-      function handleLocationSuccess(position) {
-        const { latitude, longitude, accuracy } = position.coords;
+      function handleLocationSuccess(coords) {
+        const { latitude, longitude, accuracy } = coords;
         updateAccuracyBar(locationAttemptsMade - 1, accuracy);
 
         if (accuracy <= config.desiredAccuracy) {
           validatedLocation = { latitude, longitude, accuracy };
           elements.locationStatus.innerHTML = 
-            `<i class="fas fa-check-circle"></i> Localisation précise obtenue (Précision: ${accuracy.toFixed(0)}m).`;
+            `<i class="fas fa-check-circle"></i> Précision: ${accuracy.toFixed(0)}m`;
           elements.validateLocationBtn.disabled = false;
-          elements.validateLocationBtn.classList.add('active');
           isLocating = false;
+          
+          if (isCordova && locationWatchId !== null) {
+            navigator.geolocation.clearWatch(locationWatchId);
+            locationWatchId = null;
+          }
         } else {
           elements.locationStatus.innerHTML = 
-            `<i class="fas fa-exclamation-circle"></i> Précision actuelle : ${accuracy.toFixed(0)}m (Souhaitée: ${config.desiredAccuracy}m). Tentative suivante...`;
-          setTimeout(attemptGetLocation, 1500);
+            `<i class="fas fa-exclamation-circle"></i> Précision actuelle: ${accuracy.toFixed(0)}m`;
+              
+          if (!isCordova && locationAttemptsMade < config.maxLocationAttempts) {
+            setTimeout(attemptGetLocation, 1500);
+          }
         }
       }
 
       function handleLocationError(error) {
-        let message = 'Erreur de localisation';
+        let message = 'Erreur';
         let icon = 'fa-exclamation-circle';
-        
-        switch (error.code) {
+
+        switch(error.code) {
           case error.PERMISSION_DENIED:
             message = 'Permission refusée';
             icon = 'fa-ban';
@@ -314,26 +600,111 @@
             message = 'Délai dépassé';
             icon = 'fa-clock';
             break;
-          case error.UNKNOWN_ERROR:
-            message = 'Erreur inconnue';
-            icon = 'fa-question-circle';
-            break;
+          default:
+            message = 'Erreur technique';
+            icon = 'fa-bug';
         }
-        
+
         elements.locationStatus.innerHTML = 
-          `<i class="fas ${icon}"></i> Erreur (Tentative ${locationAttemptsMade}): ${message}.`;
+          `<i class="fas ${icon}"></i> ${message} (Tentative ${locationAttemptsMade})`;
         updateAccuracyBar(locationAttemptsMade - 1, -1);
-        setTimeout(attemptGetLocation, 2000);
+        
+        if (!isCordova && locationAttemptsMade < config.maxLocationAttempts) {
+          setTimeout(attemptGetLocation, 2000);
+        } else {
+          isLocating = false;
+        }
       }
 
-      function validateLocation() {
-        if (validatedLocation) {
-          elements.form.classList.add('active');
-          document.getElementById('location-section').style.display = 'none';
-          showToast('Localisation validée avec succès', 'success');
-        } else {
-          showAlert('Veuillez obtenir une localisation valide avant de continuer', 'warning');
+      // Système de barres de précision
+      function setupAccuracyBars() {
+        elements.accuracyBarsContainer.innerHTML = '';
+        locationAttemptsData = [];
+        
+        for (let i = 0; i < config.maxLocationAttempts; i++) {
+          const attemptDiv = document.createElement('div');
+          attemptDiv.className = 'accuracy-attempt';
+          
+          const label = document.createElement('span');
+          label.className = 'attempt-label';
+          label.textContent = `Tentative ${i + 1}`;
+          
+          const barContainer = document.createElement('div');
+          barContainer.className = 'accuracy-bar-container';
+          
+          const progressBar = document.createElement('div');
+          progressBar.className = 'accuracy-progress';
+          
+          const valueSpan = document.createElement('span');
+          valueSpan.className = 'accuracy-value';
+          valueSpan.textContent = '-';
+          
+          barContainer.appendChild(progressBar);
+          attemptDiv.appendChild(label);
+          attemptDiv.appendChild(barContainer);
+          attemptDiv.appendChild(valueSpan);
+          
+          elements.accuracyBarsContainer.appendChild(attemptDiv);
+          
+          locationAttemptsData.push({
+            element: attemptDiv,
+            bar: progressBar,
+            value: valueSpan,
+            accuracy: null
+          });
         }
+      }
+
+      function updateAccuracyBar(index, accuracy) {
+        if (index < 0 || index >= locationAttemptsData.length) return;
+        
+        const attempt = locationAttemptsData[index];
+        attempt.accuracy = accuracy;
+        
+        if (accuracy > 0) {
+          const accuracyClass = getAccuracyClass(accuracy);
+          const percentage = Math.min(100, (config.desiredAccuracy / accuracy) * 100);
+          
+          attempt.bar.style.width = `${percentage}%`;
+          attempt.bar.className = `accuracy-progress ${accuracyClass}`;
+          
+          attempt.value.textContent = `${accuracy.toFixed(0)}m`;
+          attempt.value.className = `accuracy-value ${accuracyClass}`;
+        } else {
+          attempt.bar.style.width = '100%';
+          attempt.bar.className = 'accuracy-progress error';
+          
+          attempt.value.textContent = 'Erreur';
+          attempt.value.className = 'accuracy-value error';
+        }
+      }
+
+      function getAccuracyClass(accuracy) {
+        if (accuracy <= config.accuracyLevels.excellent) return 'excellent';
+        if (accuracy <= config.accuracyLevels.good) return 'good';
+        if (accuracy <= config.accuracyLevels.moderate) return 'moderate';
+        if (accuracy <= config.accuracyLevels.poor) return 'poor';
+        return 'bad';
+      }
+
+      // Validation et affichage
+      function validateLocation() {
+        if (!validatedLocation) {
+          showError('Veuillez obtenir une localisation valide');
+          return;
+        }
+
+        // Transition UI
+        elements.form.style.display = 'block';
+        elements.locationSection.style.display = 'none';
+        
+        elements.form.style.opacity = '0';
+        elements.form.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+          elements.form.style.transition = 'opacity 0.3s, transform 0.3s';
+          elements.form.style.opacity = '1';
+          elements.form.style.transform = 'translateY(0)';
+        }, 10);
       }
 
       // Form Handling
@@ -341,13 +712,14 @@
         e.preventDefault();
 
         if (!validatedLocation) {
-          showAlert('La localisation doit être validée avant de rechercher un colis', 'warning');
+          showError('La localisation doit être validée avant de rechercher un colis');
           return;
         }
 
         // Reset UI
-        elements.errorMsg.classList.remove('visible');
-        elements.colisInfo.classList.remove('visible');
+        elements.errorMsg.textContent = '';
+        elements.errorMsg.style.display = 'none';
+        elements.colisInfo.style.display = 'none';
         setLoadingState(true);
 
         try {
@@ -399,12 +771,10 @@
           elements.btnText.style.display = 'none';
           elements.btnLoader.style.display = 'inline-block';
           elements.submitBtn.disabled = true;
-          elements.submitBtn.classList.add('loading');
         } else {
           elements.btnText.style.display = 'inline-block';
           elements.btnLoader.style.display = 'none';
           elements.submitBtn.disabled = false;
-          elements.submitBtn.classList.remove('loading');
         }
       }
 
@@ -413,10 +783,10 @@
         const statusClass = `status-${(colis.status || 'enregistré').toLowerCase()}`;
         
         elements.colisContent.innerHTML = `
-          <div class="colis-header">
+          <div class="colis-header animate__animated animate__fadeIn">
             <h2>
               Colis #${colis.colisID}
-              <span class="status-badge ${statusClass}">
+              <span class="status-badge ${statusClass} animate__animated animate__pulse">
                 ${(colis.status || 'enregistré').toUpperCase()}
               </span>
             </h2>
@@ -425,7 +795,7 @@
             </p>
           </div>
 
-          <div class="colis-grid">
+          <div class="colis-grid animate__animated animate__fadeInUp">
             <div class="colis-section">
               <h3><i class="fas fa-user-tie"></i> Expéditeur</h3>
               <p><i class="fas fa-user"></i> ${escapeHTML(colis.sender)}</p>
@@ -447,7 +817,7 @@
           </div>
 
           ${colis.photos?.length > 0 ? `
-            <div class="colis-photos">
+            <div class="colis-photos animate__animated animate__fadeInUp">
               <h3><i class="fas fa-camera"></i> Photos</h3>
               <div class="photos-grid">
                 ${colis.photos.slice(0, 2).map(photo => `
@@ -458,7 +828,7 @@
           ` : ''}
 
           ${colis.history?.length > 0 ? `
-            <div class="colis-timeline">
+            <div class="colis-timeline animate__animated animate__fadeInUp">
               <h3><i class="fas fa-history"></i> Historique</h3>
               <div class="timeline">
                 ${colis.history.map(item => `
@@ -477,7 +847,7 @@
             </div>
           ` : ''}
 
-          <div class="action-buttons">
+          <div class="action-buttons animate__animated animate__fadeInUp">
             <button id="btn-recevoir" class="btn receive-btn">
               <i class="fas fa-check"></i> Recevoir
             </button>
@@ -487,6 +857,7 @@
           </div>
         `;
 
+        elements.colisInfo.style.display = 'block';
         elements.colisInfo.classList.add('visible');
         setupColisActionHandlers(colis);
       }
@@ -494,154 +865,199 @@
       function setupColisActionHandlers(colis) {
         const recevoirButton = document.getElementById('btn-recevoir');
         const declinerButton = document.getElementById('btn-decliner');
-        let recevoirClicked = false;
+        let isProcessing = false;
 
         recevoirButton.addEventListener('click', async () => {
-          if (recevoirClicked) return;
-          recevoirClicked = true;
+          if (isProcessing) return;
+          isProcessing = true;
+          
+          // Animation de chargement
+          recevoirButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
           recevoirButton.disabled = true;
-          recevoirButton.classList.add('disabled');
-
+          
           try {
-            showSpinner();
-            const response = await fetch('/.netlify/functions/recevoir', {
+            const response = await fetch('https://livreur2.netlify.app/.netlify/functions/recevoir', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                codeID: colis.colisID,
+                clientLocation: validatedLocation 
+              })
+            });
+
+            const data = await response.json();
+            
+            if (!response.ok) {
+              throw new Error(data.error || 'Erreur lors de la réception');
+            }
+
+            // Succès - Animation et masquage du bouton
+            recevoirButton.innerHTML = '<i class="fas fa-check"></i> Reçu !';
+            recevoirButton.classList.add('success');
+            
+            // Afficher l'animation de validation
+            showCheckmark();
+            
+            // Message de succès
+            showToast(data.message || 'Colis marqué comme reçu avec succès', 'success');
+            
+            // Désactiver complètement après succès
+            setTimeout(() => {
+              recevoirButton.style.display = 'none';
+            }, 2000);
+            
+          } catch (error) {
+            // Réinitialiser en cas d'erreur
+            recevoirButton.innerHTML = '<i class="fas fa-check"></i> Recevoir';
+            recevoirButton.disabled = false;
+            isProcessing = false;
+            
+            showToast(error.message || 'Erreur lors de la confirmation', 'error');
+          }
+        });
+
+        declinerButton.addEventListener('click', async () => {
+          if (isProcessing) return;
+          
+          const confirmed = await showConfirmDialog(
+            "Confirmer le refus",
+            "Êtes-vous sûr de vouloir refuser ce colis ? Cette action est irréversible."
+          );
+          
+          if (!confirmed) return;
+          
+          isProcessing = true;
+          declinerButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
+          declinerButton.disabled = true;
+          
+          try {
+            const response = await fetch('https://livreur2.netlify.app/.netlify/functions/decliner', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ codeID: colis.colisID })
             });
 
             const data = await response.json();
-            hideSpinner();
-
-            if (response.ok) {
-              showCheckmark();
-              showToast(data.message || 'Colis marqué comme reçu', 'success');
-              recevoirButton.disabled = true;
-            } else {
-              throw new Error(data.error || 'Erreur lors de la réception');
+            
+            if (!response.ok) {
+              throw new Error(data.error || 'Erreur lors du refus');
             }
-          } catch (err) {
-            showAlert(err.message || 'Erreur de connexion', 'error');
-            recevoirClicked = false;
-            recevoirButton.disabled = false;
-            recevoirButton.classList.remove('disabled');
-          }
-        });
 
-        declinerButton.addEventListener('click', async () => {
-          const confirmed = await showConfirm("Êtes-vous sûr de vouloir refuser ce colis ?");
-          if (!confirmed) return;
-
-          try {
-            showSpinner();
-            const response = await fetch('/.netlify/functions/decliner', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ codeID: colis.colisID })
-            });
-
-            const result = await response.json();
-            hideSpinner();
-
-            if (response.ok) {
-              showAlert(result.message || "Colis refusé avec succès", 'success');
+            // Animation de succès
+            declinerButton.innerHTML = '<i class="fas fa-times"></i> Refusé !';
+            declinerButton.classList.add('declined');
+            
+            showToast(data.message || 'Colis refusé avec succès', 'success');
+            
+            // Masquer toute la section après 2 secondes
+            setTimeout(() => {
               elements.colisInfo.classList.remove('visible');
-            } else {
-              throw new Error(result.error || 'Erreur lors du refus');
-            }
+              elements.colisInfo.classList.add('animate__animated', 'animate__fadeOut');
+              
+              setTimeout(() => {
+                elements.colisInfo.style.display = 'none';
+                // Réinitialiser le formulaire
+                elements.form.reset();
+                elements.form.style.display = 'block';
+              }, 500);
+            }, 2000);
+            
           } catch (error) {
-            showAlert(error.message || 'Erreur de connexion', 'error');
+            declinerButton.innerHTML = '<i class="fas fa-times"></i> Décliner';
+            declinerButton.disabled = false;
+            isProcessing = false;
+            
+            showToast(error.message || 'Erreur lors du refus', 'error');
           }
         });
       }
 
-      // UI Helpers
+      // Fonction de confirmation
+      function showConfirmDialog(title, message) {
+        return new Promise((resolve) => {
+          const dialog = document.createElement('div');
+          dialog.className = 'confirm-dialog animate__animated animate__fadeIn';
+          dialog.innerHTML = `
+            <div class="dialog-content animate__animated animate__zoomIn">
+              <h3>${title}</h3>
+              <p>${message}</p>
+              <div class="dialog-buttons">
+                <button id="confirm-yes" class="btn receive-btn">
+                  <i class="fas fa-check"></i> Oui
+                </button>
+                <button id="confirm-no" class="btn decline-btn">
+                  <i class="fas fa-times"></i> Non
+                </button>
+              </div>
+            </div>
+            <div class="dialog-overlay"></div>
+          `;
+          
+          document.body.appendChild(dialog);
+          
+          document.getElementById('confirm-yes').addEventListener('click', () => {
+            dialog.classList.add('animate__fadeOut');
+            setTimeout(() => {
+              dialog.remove();
+              resolve(true);
+            }, 300);
+          });
+          
+          document.getElementById('confirm-no').addEventListener('click', () => {
+            dialog.classList.add('animate__fadeOut');
+            setTimeout(() => {
+              dialog.remove();
+              resolve(false);
+            }, 300);
+          });
+        });
+      }
+
+      // Fonction toast
+      function showToast(message, type = 'info', duration = 3000) {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type} animate__animated animate__fadeInUp`;
+        toast.innerHTML = `
+          <i class="fas ${type === 'success' ? 'fa-check-circle' : 
+                         type === 'error' ? 'fa-exclamation-circle' : 
+                         'fa-info-circle'}"></i>
+          <span>${message}</span>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+          toast.classList.remove('animate__fadeInUp');
+          toast.classList.add('animate__fadeOutDown');
+          
+          setTimeout(() => {
+            toast.remove();
+          }, 500);
+        }, duration);
+      }
+
+      // Afficher l'animation de validation
+      function showCheckmark() {
+        elements.checkAnimation.style.display = 'flex';
+        
+        setTimeout(() => {
+          elements.checkAnimation.style.display = 'none';
+        }, 2000);
+      }
+
+      // Afficher une erreur
       function showError(message) {
         elements.errorMsg.textContent = message;
-        elements.errorMsg.classList.add('visible');
+        elements.errorMsg.style.display = 'block';
+        elements.errorMsg.classList.add('animate__animated', 'animate__fadeIn');
       }
 
+      // Échapper les caractères HTML
       function escapeHTML(str) {
         if (!str) return '';
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
-      }
-
-      // UI Components
-      function showAlert(message, type = 'info') {
-        const alertBox = document.getElementById('custom-alert');
-        const alertMessage = document.getElementById('alert-message');
-        const alertIcon = document.getElementById('alert-icon');
-
-        alertMessage.textContent = message;
-        alertIcon.src = getIconForType(type);
-        alertBox.classList.remove('hidden');
-
-        document.getElementById('alert-close').onclick = () => {
-          alertBox.classList.add('hidden');
-        };
-      }
-
-      function showConfirm(message) {
-        return new Promise((resolve) => {
-          const confirmBox = document.getElementById('custom-confirm');
-          const confirmMessage = document.getElementById('confirm-message');
-
-          confirmMessage.textContent = message;
-          confirmBox.classList.remove('hidden');
-
-          document.getElementById('confirm-yes').onclick = () => {
-            confirmBox.classList.add('hidden');
-            resolve(true);
-          };
-
-          document.getElementById('confirm-no').onclick = () => {
-            confirmBox.classList.add('hidden');
-            resolve(false);
-          };
-        });
-      }
-
-      function showToast(message, type = 'info', duration = 3000) {
-        const toast = document.getElementById('toast');
-        const toastMessage = document.getElementById('toast-message');
-        const toastIcon = document.getElementById('toast-icon');
-
-        toastMessage.textContent = message;
-        toastIcon.src = getIconForType(type);
-        toast.classList.remove('hidden');
-
-        setTimeout(() => {
-          toast.classList.add('hidden');
-        }, duration);
-      }
-
-      function showSpinner() {
-        document.getElementById('spinner-overlay').classList.remove('hidden');
-      }
-
-      function hideSpinner() {
-        document.getElementById('spinner-overlay').classList.add('hidden');
-      }
-
-      function showCheckmark(duration = 2000) {
-        const wrapper = document.getElementById('check-animation');
-        wrapper.classList.remove('hidden');
-
-        setTimeout(() => {
-          wrapper.classList.add('hidden');
-        }, duration);
-      }
-
-      function getIconForType(type) {
-        const icons = {
-          info: 'https://cdn-icons-png.flaticon.com/512/3564/3564509.png',
-          success: 'https://cdn-icons-png.flaticon.com/512/845/845646.png',
-          error: 'https://cdn-icons-png.flaticon.com/512/463/463612.png',
-          warning: 'https://cdn-icons-png.flaticon.com/512/3161/3161837.png'
-        };
-        return icons[type] || icons.info;
       }
     });
   </script>

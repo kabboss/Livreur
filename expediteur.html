@@ -497,6 +497,7 @@
         width: 150px; /* Ajustez la largeur pour espacer les boutons */
         margin-left: auto;
         margin-right: auto;
+        margin-top: -21px;
     }
 
     .arrow {
@@ -622,7 +623,7 @@
         <span class="close-button-expedition" id="closeExpeditionIdModal">&times;</span>
       </div>
       <div class="modal-body-expedition">
-        <p>ℹ️ Pour que la distance soit correctement calculée et que le processus d’expédition puisse démarrer, le client doit impérativement se connecter à son compte, rechercher le colis, puis cliquer sur <strong>« Recevoir »</strong>. Ce n’est qu’à partir de cette action que le système déclenchera l’expédition. Une fois un livreur assigné, vous pourrez suivre l’acheminement du colis grâce au code fourni.</p>
+        <p>ℹ️ Le code d’expédition doit être envoyé au client : il permet de retrouver et suivre le colis, aussi bien pour le client que pour l’expéditeur. Une fois un livreur assigné, vous pourrez suivre l’acheminement du colis grâce au code fourni.</p>
         <p id="expedition-code"></p>
         <button class="copy-button" id="copyExpeditionId">Copier l'ID</button>
         <p id="copy-message" style="display:none; color: green;">Copié !</p>
@@ -642,6 +643,11 @@ document.addEventListener('DOMContentLoaded', () => {
         locationAttempts: 3, // Nombre maximum de tentatives de localisation par cycle
         locationTimeout: 30000, // Délai pour chaque tentative (en ms)
         desiredAccuracy: 50, // Précision souhaitée en mètres
+        cordovaOptions: {
+            enableHighAccuracy: true,
+            timeout: 30000,
+            maximumAge: 0
+        }
     };
 
     // Éléments DOM
@@ -651,7 +657,6 @@ document.addEventListener('DOMContentLoaded', () => {
         form: document.getElementById('form'),
         locationStatus: document.getElementById('location-status'),
         locationInput: document.getElementById('location'),
-        refreshLocationBtn: document.getElementById('refresh-location'),
         photosInput: document.getElementById('photos'),
         previewContainer: document.getElementById('preview-container'),
         successMsg: document.getElementById('success-msg'),
@@ -663,17 +668,21 @@ document.addEventListener('DOMContentLoaded', () => {
         copyMessage: document.getElementById('copy-message'),
         toastContainer: document.getElementById('toast-container'),
         submitButton: document.querySelector('#form button[type="submit"]'),
-        locationControls: document.createElement('div'), // Container pour les boutons de localisation
+        locationControls: document.createElement('div'),
         retryLocationBtn: document.createElement('button'),
         validateLocationBtn: document.createElement('button'),
-        accuracyBars: [] // Tableau pour stocker les éléments de barre de précision
+        accuracyBars: []
     };
 
     let validatedLocation = null;
     let locationAttemptsMade = 0;
     let isLocating = false;
+    let locationWatchId = null;
+    let isCordova = typeof window.cordova !== 'undefined' || 
+                    typeof window.PhoneGap !== 'undefined' || 
+                    typeof window.phonegap !== 'undefined';
 
-    // Styles pour les barres de précision (inchangés)
+    // Styles pour les barres de précision
     const accuracyBarStyle = `
         width: 80%;
         height: 8px;
@@ -692,28 +701,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Cacher le formulaire initialement
     elements.formContainer.style.display = 'none';
-    elements.showFormBtn.style.display = 'none'; // Cacher le bouton initial
+    elements.showFormBtn.style.display = 'none';
 
-    // Créer et insérer les contrôles de localisation en haut
+    // Initialisation de la géolocalisation
     function setupLocationControls() {
-        elements.locationControls.style.marginTop = '1rem';
-        elements.locationControls.style.marginBottom = '1rem'; // Ajouter un peu d'espace après
+        console.log(isCordova ? "Mode Cordova détecté" : "Mode navigateur détecté");
 
+        elements.locationControls.style.marginTop = '1rem';
+        elements.locationControls.style.marginBottom = '1rem';
+
+        // Bouton de réessai
         elements.retryLocationBtn.textContent = 'Réessayer la localisation';
         elements.retryLocationBtn.className = 'btn-primary';
         elements.retryLocationBtn.style.marginRight = '0.5rem';
         elements.retryLocationBtn.addEventListener('click', startLocationProcess);
 
+        // Bouton de validation
         elements.validateLocationBtn.textContent = 'Valider la localisation';
         elements.validateLocationBtn.className = 'btn-primary';
-        elements.validateLocationBtn.disabled = true; // Désactivé initialement
+        elements.validateLocationBtn.disabled = true;
         elements.validateLocationBtn.addEventListener('click', () => {
             if (validatedLocation) {
                 elements.locationInput.value = `Lat: ${validatedLocation.latitude.toFixed(5)}, Lon: ${validatedLocation.longitude.toFixed(5)} (Précision: ${validatedLocation.accuracy.toFixed(0)}m)`;
                 elements.locationStatus.textContent = '✅ Localisation validée. Vous pouvez maintenant créer votre expédition.';
                 elements.retryLocationBtn.style.display = 'none';
                 elements.validateLocationBtn.style.display = 'none';
-                elements.showFormBtn.style.display = 'block'; // Afficher le bouton pour montrer le formulaire
+                elements.showFormBtn.style.display = 'block';
             } else {
                 showToast('Aucune localisation valide à enregistrer.', 'error');
             }
@@ -721,9 +734,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         elements.locationControls.appendChild(elements.retryLocationBtn);
         elements.locationControls.appendChild(elements.validateLocationBtn);
-        elements.container.insertBefore(elements.locationControls, elements.container.firstChild); // Insérer en haut du container
+        elements.container.insertBefore(elements.locationControls, elements.container.firstChild);
 
-        // Créer et insérer les barres de précision
+        // Barres de précision
         for (let i = 0; i < config.locationAttempts; i++) {
             const barContainer = document.createElement('div');
             barContainer.style.cssText = accuracyBarStyle;
@@ -731,18 +744,46 @@ document.addEventListener('DOMContentLoaded', () => {
             progressBar.style.cssText = accuracyProgressStyle;
             barContainer.appendChild(progressBar);
             elements.accuracyBars.push(progressBar);
-            elements.container.insertBefore(barContainer, elements.container.firstChild); // Insérer en haut
+            elements.container.insertBefore(barContainer, elements.container.firstChild);
         }
+
+        // Démarrer automatiquement la localisation
+        startLocationProcess();
     }
 
+    // Gestion de la géolocalisation
     function startLocationProcess() {
         if (isLocating) return;
+        
         isLocating = true;
         validatedLocation = null;
         elements.validateLocationBtn.disabled = true;
         elements.locationStatus.textContent = '🔄 Démarrage du processus de localisation...';
         locationAttemptsMade = 0;
         elements.accuracyBars.forEach(bar => bar.style.width = '0%');
+
+        if (isCordova) {
+            startCordovaGeolocation();
+        } else {
+            startBrowserGeolocation();
+        }
+    }
+
+    // Version pour Cordova
+    function startCordovaGeolocation() {
+        document.addEventListener('deviceready', onDeviceReady, false);
+        
+        function onDeviceReady() {
+            locationWatchId = navigator.geolocation.watchPosition(
+                position => handleLocationSuccess(position.coords),
+                error => handleLocationError(error),
+                config.cordovaOptions
+            );
+        }
+    }
+
+    // Version pour navigateur
+    function startBrowserGeolocation() {
         attemptGetLocation();
     }
 
@@ -750,7 +791,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (locationAttemptsMade >= config.locationAttempts || validatedLocation) {
             isLocating = false;
             if (!validatedLocation) {
-              elements.locationStatus.textContent = `⚠️ La localisation actuelle est trop imprécise pour autoriser une expédition après ${config.locationAttempts} tentatives. Veuillez réessayer, s'il vous plaît.`;
+                elements.locationStatus.textContent = `⚠️ La localisation actuelle est trop imprécise après ${config.locationAttempts} tentatives. Veuillez réessayer.`;
             }
             return;
         }
@@ -768,32 +809,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     elements.locationStatus.textContent = `✅ Localisation précise obtenue (Précision: ${accuracy.toFixed(0)}m). Validez pour continuer.`;
                     elements.validateLocationBtn.disabled = false;
                     isLocating = false;
+                    
+                    // Arrêter le watchPosition si on est en mode Cordova
+                    if (isCordova && locationWatchId !== null) {
+                        navigator.geolocation.clearWatch(locationWatchId);
+                        locationWatchId = null;
+                    }
                 } else {
-                    elements.locationStatus.textContent = `⚠️ Précision actuelle : ${accuracy.toFixed(0)}m (Précision souhaitée: ${config.desiredAccuracy}m). Tentative suivante...`;
-                    setTimeout(attemptGetLocation, 1500); // Petit délai avant la prochaine tentative
+                    elements.locationStatus.textContent = `⚠️ Précision actuelle : ${accuracy.toFixed(0)}m (souhaitée: ${config.desiredAccuracy}m). Tentative suivante...`;
+                    setTimeout(attemptGetLocation, 1500);
                 }
             },
             error => {
                 let message = '';
                 switch (error.code) {
-                    case error.PERMISSION_DENIED:
-                        message = "🚫 L'accès à la localisation a été refusé.";
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        message = "🛰️ Informations de localisation non disponibles.";
-                        break;
-                    case error.TIMEOUT:
-                        message = "⏳ Délai d'attente dépassé.";
-                        break;
-                    case error.UNKNOWN_ERROR:
-                        message = "❓ Erreur inconnue.";
-                        break;
+                    case error.PERMISSION_DENIED: message = "🚫 Accès à la localisation refusé"; break;
+                    case error.POSITION_UNAVAILABLE: message = "🛰️ Position indisponible"; break;
+                    case error.TIMEOUT: message = "⏳ Délai dépassé"; break;
+                    default: message = "❓ Erreur inconnue";
                 }
-                elements.locationStatus.textContent = `❌ Erreur lors de la tentative ${locationAttemptsMade}: ${message}. Tentative suivante...`;
-                updateAccuracyBar(locationAttemptsMade - 1, -1); // Indiquer une erreur sur la barre
-                setTimeout(attemptGetLocation, 2000);
+                elements.locationStatus.textContent = `❌ Erreur (tentative ${locationAttemptsMade}): ${message}`;
+                updateAccuracyBar(locationAttemptsMade - 1, -1);
+                
+                if (locationAttemptsMade < config.locationAttempts) {
+                    setTimeout(attemptGetLocation, 2000);
+                } else {
+                    isLocating = false;
+                }
             },
-            { enableHighAccuracy: true, timeout: config.locationTimeout, maximumAge: 0 }
+            config.cordovaOptions
         );
     }
 
@@ -805,7 +849,7 @@ document.addEventListener('DOMContentLoaded', () => {
             progressBar.style.backgroundColor = percentage < 100 ? 'orange' : 'var(--success)';
         } else {
             progressBar.style.width = '100%';
-            progressBar.style.backgroundColor = 'var(--error)'; // Indiquer une erreur
+            progressBar.style.backgroundColor = 'var(--error)';
         }
     }
 
@@ -1003,7 +1047,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             elements.form.querySelector('button[type="submit"]').disabled = true;
 
-            const response = await fetch('/.netlify/functions/expedi', {
+            const response = await fetch('https://livreur2.netlify.app/.netlify/functions/expedi', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
