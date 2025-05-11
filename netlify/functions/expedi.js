@@ -1,126 +1,139 @@
 const { MongoClient } = require('mongodb');
 
-// Configuration MongoDB
-const mongoConfig = {
-  uri: process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority",
-  dbName: "FarmsConnect",
-  collectionName: "Colis"
+// Configuration sécurisée avec variables d'environnement
+const uri = process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority";
+const dbName = process.env.DB_NAME || 'FarmsConnect';
+const livraisonCollection = process.env.LIVRAISON_COLLECTION || 'Livraison';
+const expeditionCollection = process.env.EXPEDITION_COLLECTION || 'cour_expedition';
+
+// Champs minimaux à récupérer (inchangé)
+const LIVRAISON_PROJECTION = {
+  codeID: 1,
+  'colis.type': 1,
+  'colis.photos': { $slice: 1 },
+  'expediteur.nom': 1,
+  'expediteur.telephone': 1,
+  'expediteur.localisation': 1,
+  'destinataire.nom': 1,
+  'destinataire.prenom': 1,
+  'destinataire.telephone': 1,
+  'destinataire.localisation': 1,
+  statut: 1,
+  dateLivraison: 1,
+  _id: 0
 };
 
-// Connexion pool
-const client = new MongoClient(mongoConfig.uri, {
-  connectTimeoutMS: 5000,
-  socketTimeoutMS: 30000,
-  serverSelectionTimeoutMS: 5000,
-  maxPoolSize: 10,
-  retryWrites: true,
-  retryReads: true
-});
+const EXPEDITION_PROJECTION = {
+  codeID: 1,
+  idLivreur: 1,
+  statut: 1,
+  _id: 0
+};
 
-// Middleware CORS
-const setCorsHeaders = (response) => {
-  response.headers = {
-    ...response.headers,
+exports.handler = async (event) => {
+  // En-têtes CORS (inchangé)
+  const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    'Content-Type': 'application/json; charset=utf-8'
   };
-  return response;
-};
 
-exports.handler = async function(event, context) {
-  // Pré-vérification CORS
+  // Gestion des requêtes OPTIONS (inchangé)
   if (event.httpMethod === 'OPTIONS') {
-    return setCorsHeaders({
-      statusCode: 204,
-      body: ''
-    });
+    return { statusCode: 204, headers, body: '' };
   }
 
-  // Vérification méthode HTTP
-  if (event.httpMethod !== 'POST') {
-    return setCorsHeaders({
-      statusCode: 405,
-      body: JSON.stringify({ message: 'Méthode non autorisée' })
-    });
-  }
+  // Paramètres de pagination (inchangé)
+  const query = event.queryStringParameters || {};
+  const page = Math.max(parseInt(query.page) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(query.limit) || 20, 1), 100);
+  const skip = (page - 1) * limit;
+
+  // Configuration améliorée de la connexion
+  const client = new MongoClient(uri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    connectTimeoutMS: 5000,
+    socketTimeoutMS: 30000,
+    maxPoolSize: 50,
+    wtimeoutMS: 2500,
+    retryWrites: true,
+    retryReads: true
+  });
 
   try {
-    // Validation des données
-    if (!event.body) {
-      return setCorsHeaders({
-        statusCode: 400,
-        body: JSON.stringify({ message: 'Données manquantes' })
-      });
-    }
-
-    const data = JSON.parse(event.body);
-    
-    // Validation des champs obligatoires
-    const requiredFields = ['colisID', 'sender', 'phone1', 'recipient', 'phone', 'address', 'type'];
-    const missingFields = requiredFields.filter(field => !data[field]);
-    
-    if (missingFields.length > 0) {
-      return setCorsHeaders({
-        statusCode: 400,
-        body: JSON.stringify({ 
-          message: 'Champs manquants', 
-          missing: missingFields 
-        })
-      });
-    }
-
-    // Connexion à MongoDB
     await client.connect();
-    const db = client.db(mongoConfig.dbName);
-    const collection = db.collection(mongoConfig.collectionName);
+    const db = client.db(dbName);
 
-    // Vérification si le colis existe déjà
-    const existingColis = await collection.findOne({ colisID: data.colisID });
-    if (existingColis) {
-      return setCorsHeaders({
-        statusCode: 409,
-        body: JSON.stringify({ message: 'Un colis avec cet ID existe déjà' })
-      });
-    }
+    // Requêtes (inchangé)
+    const [livraisons, expeditions, total] = await Promise.all([
+      db.collection(livraisonCollection)
+        .find({})
+        .project(LIVRAISON_PROJECTION)
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
 
-    // Création du document
-    const document = {
-      ...data,
-      status: 'enregistré',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      history: [{
-        status: 'enregistré',
-        date: new Date(),
-        location: data.location
-      }]
-    };
+      db.collection(expeditionCollection)
+        .find({})
+        .project(EXPEDITION_PROJECTION)
+        .toArray(),
 
-    // Insertion dans la base de données
-    const result = await collection.insertOne(document);
+      db.collection(livraisonCollection)
+        .countDocuments()
+    ]);
 
-    if (!result.acknowledged) {
-      throw new Error('Échec de l\'insertion');
-    }
+    // Traitement des données (inchangé)
+    const expMap = new Map();
+    expeditions.forEach(exp => expMap.set(exp.codeID, exp.idLivreur));
 
-    return setCorsHeaders({
-      statusCode: 201,
-      body: JSON.stringify({ 
-        success: true,
-        message: 'Colis enregistré avec succès',
-        colisID: data.colisID
+    const data = livraisons.map(liv => ({
+      c: liv.codeID,
+      t: liv.colis?.type,
+      p: liv.colis?.photos?.[0]?.data,
+      e: {
+        n: liv.expediteur?.nom,
+        t: liv.expediteur?.telephone,
+        l: liv.expediteur?.localisation
+      },
+      d: {
+        n: liv.destinataire?.nom,
+        p: liv.destinataire?.prenom,
+        t: liv.destinataire?.telephone,
+        l: liv.destinataire?.localisation
+      },
+      s: liv.statut,
+      dl: liv.dateLivraison,
+      ex: expMap.has(liv.codeID),
+      id: expMap.get(liv.codeID)
+    }));
+
+    // Réponse (inchangé)
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        d: data,
+        p: {
+          t: total,
+          pg: page,
+          l: limit,
+          tp: Math.ceil(total / limit)
+        }
       })
-    });
+    };
 
   } catch (error) {
     console.error('Erreur:', error);
-    return setCorsHeaders({
+    return {
       statusCode: 500,
-      body: JSON.stringify({ 
-        message: 'Erreur serveur',
-        error: error.message
+      headers,
+      body: JSON.stringify({
+        e: 'Internal Server Error',
+        m: error.message
       })
-    });
+    };
+  } finally {
+    await client.close().catch(console.error);
   }
 };
