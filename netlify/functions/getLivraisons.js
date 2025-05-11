@@ -1,56 +1,140 @@
 const { MongoClient } = require('mongodb');
 
-const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+// Configuration avec variables d'environnement pour plus de sécurité
+const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
 const livraisonCollectionName = 'Livraison';
-const expeditionCollectionName = 'cour_expedition'; // Utilisation du nom fourni
+const expeditionCollectionName = 'cour_expedition';
 
-exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': 'https://livreur2.netlify.app',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  };
+exports.handler = async (event, context) => {
+    // En-têtes CORS complets
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Content-Type': 'application/json'
+    };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers, body: '' };
-  }
-  if (event.httpMethod !== 'GET') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Méthode non autorisée' }) };
-  }
+    // Gestion des requêtes OPTIONS (preflight)
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204,
+            headers,
+            body: ''
+        };
+    }
 
-  const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+    // Vérification de la méthode HTTP
+    if (event.httpMethod !== 'GET') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ 
+                error: 'Méthode non autorisée',
+                message: 'Seules les requêtes GET sont acceptées'
+            })
+        };
+    }
 
-  try {
-    await client.connect();
-    const db = client.db(dbName);
-    const livraisonCollection = db.collection(livraisonCollectionName);
-    const expeditionCollection = db.collection(expeditionCollectionName);
-
-    const livraisons = await livraisonCollection.find({}).toArray();
-    const expeditions = await expeditionCollection.find({}).toArray();
-    const expeditionsMap = new Map(expeditions.map(exp => [exp.codeID, exp.idLivreur]));
-
-    const formatted = livraisons.map(l => {
-      const idLivreur = expeditionsMap.get(l.codeID);
-      return {
-        codeID: l.codeID || 'Code ID manquant',
-        colis: { ...l.colis },
-        expediteur: { ...l.expediteur },
-        destinataire: { ...l.destinataire },
-        statut: l.statut || 'Statut inconnu',
-        dateLivraison: l.dateLivraison || null,
-        estExpedie: expeditionsMap.has(l.codeID),
-        idLivreurEnCharge: idLivreur || null,
-      };
+    const client = new MongoClient(uri, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        connectTimeoutMS: 5000,
+        socketTimeoutMS: 30000
     });
 
-    return { statusCode: 200, headers, body: JSON.stringify(formatted) };
+    try {
+        await client.connect();
+        const db = client.db(dbName);
 
-  } catch (err) {
-    console.error('Erreur de récupération des livraisons :', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Erreur interne du serveur' }) };
-  } finally {
-    await client.close();
-  }
+        // Récupération en parallèle pour meilleure performance
+        const [livraisons, expeditions] = await Promise.all([
+            db.collection(livraisonCollectionName)
+                .find({})
+                .project({
+                    codeID: 1,
+                    colis: 1,
+                    expediteur: 1,
+                    destinataire: 1,
+                    statut: 1,
+                    dateLivraison: 1
+                })
+                .toArray(),
+            db.collection(expeditionCollectionName)
+                .find({})
+                .project({
+                    codeID: 1,
+                    idLivreur: 1,
+                    statut: 1,
+                    dateDebut: 1
+                })
+                .toArray()
+        ]);
+
+        // Création d'un map pour les expéditions
+        const expeditionsMap = new Map(
+            expeditions.map(exp => [
+                exp.codeID, 
+                {
+                    idLivreur: exp.idLivreur,
+                    statut: exp.statut || 'En cours',
+                    dateDebut: exp.dateDebut
+                }
+            ])
+        );
+
+        // Formatage des données avec valeurs par défaut
+        const formattedData = livraisons.map(livraison => {
+            const expedition = expeditionsMap.get(livraison.codeID) || {};
+            
+            return {
+                codeID: livraison.codeID,
+                colis: {
+                    type: livraison.colis?.type || 'Non spécifié',
+                    details: livraison.colis?.details || 'Aucun détail',
+                    photos: livraison.colis?.photos || []
+                },
+                expediteur: {
+                    nom: livraison.expediteur?.nom || 'Non spécifié',
+                    telephone: livraison.expediteur?.telephone || '',
+                    localisation: livraison.expediteur?.localisation || null
+                },
+                destinataire: {
+                    nom: livraison.destinataire?.nom || 'Non spécifié',
+                    prenom: livraison.destinataire?.prenom || '',
+                    telephone: livraison.destinataire?.telephone || '',
+                    adresse: livraison.destinataire?.adresse || '',
+                    localisation: livraison.destinataire?.localisation || null
+                },
+                statut: expedition.statut || livraison.statut || 'En attente',
+                dateLivraison: livraison.dateLivraison,
+                dateDebutExpedition: expedition.dateDebut,
+                estExpedie: expeditionsMap.has(livraison.codeID),
+                idLivreurEnCharge: expedition.idLivreur
+            };
+        });
+
+        // Cache-Control pour améliorer les performances
+        headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
+
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify(formattedData)
+        };
+
+    } catch (error) {
+        console.error('Erreur MongoDB:', error);
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({
+                error: 'Erreur serveur',
+                message: 'Impossible de récupérer les livraisons',
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            })
+        };
+    } finally {
+        await client.close().catch(err => console.error('Erreur fermeture connexion:', err));
+    }
 };
