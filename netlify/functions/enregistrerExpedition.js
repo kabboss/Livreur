@@ -6,7 +6,7 @@ const dbName = 'FarmsConnect';
 exports.handler = async function(event, context) {
     // Définir les en-têtes CORS pour autoriser toutes les origines
     const headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'https://livreur2.netlify.app',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Content-Type': 'application/json'
