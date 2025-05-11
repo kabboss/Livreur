@@ -4,51 +4,118 @@ const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/Farms
 const dbName = 'FarmsConnect';
 
 exports.handler = async function(event, context) {
-    const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+    // Définir les en-têtes CORS pour autoriser toutes les origines
+    const headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Content-Type': 'application/json'
+    };
+
+    // Gérer la requête OPTIONS (preflight)
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers,
+            body: ''
+        };
+    }
+
+    // Vérifier que la méthode est POST
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers,
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
+        };
+    }
+
+    const client = new MongoClient(uri, { 
+        useNewUrlParser: true, 
+        useUnifiedTopology: true 
+    });
 
     try {
         await client.connect();
         const db = client.db(dbName);
         const expeditionCollection = db.collection('cour_expedition');
 
-        const { codeID, localisationLivreur, telephoneLivreur1, telephoneLivreur2, idLivreur, distanceExpediteur, distanceDestinataire, distanceExpediteurDestinataire, prixLivraison } = JSON.parse(event.body);
+        // Vérifier si le corps de la requête est vide
+        if (!event.body) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'Le corps de la requête est vide' })
+            };
+        }
 
-        // Enregistrer les informations d'expédition dans la nouvelle collection
+        const { 
+            codeID, 
+            localisationLivreur, 
+            telephoneLivreur1, 
+            telephoneLivreur2, 
+            idLivreur, 
+            distanceExpediteur, 
+            distanceDestinataire, 
+            distanceExpediteurDestinataire, 
+            prixLivraison 
+        } = JSON.parse(event.body);
+
+        // Validation des données requises
+        if (!codeID || !localisationLivreur || !telephoneLivreur1 || !idLivreur) {
+            return {
+                statusCode: 400,
+                headers,
+                body: JSON.stringify({ error: 'Données requises manquantes' })
+            };
+        }
+
+        // Enregistrer les informations d'expédition
         const expeditionResult = await expeditionCollection.insertOne({
             codeID: codeID,
             localisationLivreur: localisationLivreur,
             telephoneLivreur1: telephoneLivreur1,
-            telephoneLivreur2: telephoneLivreur2,
+            telephoneLivreur2: telephoneLivreur2 || null, // Si non fourni
             idLivreur: idLivreur,
             dateDebut: new Date(),
-            statut: 'En cours', // Statut initial dans la nouvelle collection
-            distanceExpediteur: distanceExpediteur,
-            distanceDestinataire: distanceDestinataire,
-            distanceExpediteurDestinataire: distanceExpediteurDestinataire,
-            prixLivraison: prixLivraison,
-            // Vous pouvez ajouter d'autres informations ici si nécessaire
+            statut: 'En cours',
+            distanceExpediteur: distanceExpediteur || null,
+            distanceDestinataire: distanceDestinataire || null,
+            distanceExpediteurDestinataire: distanceExpediteurDestinataire || null,
+            prixLivraison: prixLivraison || null,
+            historique: [{
+                date: new Date(),
+                statut: 'En cours',
+                localisation: localisationLivreur
+            }]
         });
 
         if (!expeditionResult.acknowledged) {
             return {
                 statusCode: 500,
-                body: JSON.stringify({ error: 'Erreur lors de l\'enregistrement de l\'expédition.' }),
-                headers: { 'Access-Control-Allow-Origin': '*' },
+                headers,
+                body: JSON.stringify({ error: 'Erreur lors de l\'enregistrement de l\'expédition' })
             };
         }
 
         return {
             statusCode: 200,
-            body: JSON.stringify({ message: 'Informations d\'expédition enregistrées avec les détails de distance et de prix.' }),
-            headers: { 'Access-Control-Allow-Origin': '*' },
+            headers,
+            body: JSON.stringify({ 
+                message: 'Expédition enregistrée avec succès',
+                expeditionId: expeditionResult.insertedId 
+            })
         };
 
     } catch (error) {
-        console.error('Erreur lors de l\'enregistrement de l\'expédition :', error);
+        console.error('Erreur:', error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: 'Erreur serveur lors de l\'enregistrement de l\'expédition.' }),
-            headers: { 'Access-Control-Allow-Origin': '*' },
+            headers,
+            body: JSON.stringify({ 
+                error: 'Erreur serveur',
+                details: error.message 
+            })
         };
     } finally {
         await client.close();
