@@ -1,125 +1,74 @@
 const { MongoClient } = require('mongodb');
 
-// Configuration sécurisée avec variables d'environnement
+// Configuration sécurisée
 const uri = process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority";
 const dbName = process.env.DB_NAME || 'FarmsConnect';
-const livraisonCollection = process.env.LIVRAISON_COLLECTION || 'Livraison';
 const expeditionCollection = process.env.EXPEDITION_COLLECTION || 'cour_expedition';
 
-// Champs minimaux à récupérer (inchangé)
-const LIVRAISON_PROJECTION = {
-  codeID: 1,
-  'colis.type': 1,
-  'colis.photos': { $slice: 1 },
-  'expediteur.nom': 1,
-  'expediteur.telephone': 1,
-  'expediteur.localisation': 1,
-  'destinataire.nom': 1,
-  'destinataire.prenom': 1,
-  'destinataire.telephone': 1,
-  'destinataire.localisation': 1,
-  statut: 1,
-  dateLivraison: 1,
-  _id: 0
-};
-
-const EXPEDITION_PROJECTION = {
-  codeID: 1,
-  idLivreur: 1,
-  statut: 1,
-  _id: 0
-};
-
 exports.handler = async (event) => {
-  // En-têtes CORS (inchangé)
+  // En-têtes CORS avec Authorization
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json; charset=utf-8'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Content-Type': 'application/json'
   };
 
-  // Gestion des requêtes OPTIONS (inchangé)
+  // Gestion des requêtes OPTIONS
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers, body: '' };
   }
 
-  // Paramètres de pagination (inchangé)
-  const query = event.queryStringParameters || {};
-  const page = Math.max(parseInt(query.page) || 1, 1);
-  const limit = Math.min(Math.max(parseInt(query.limit) || 20, 1), 100);
-  const skip = (page - 1) * limit;
-
-  // Configuration améliorée de la connexion
-  const client = new MongoClient(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    connectTimeoutMS: 5000,
-    socketTimeoutMS: 30000,
-    maxPoolSize: 50,
-    wtimeoutMS: 2500,
-    retryWrites: true,
-    retryReads: true
-  });
+  // Vérification de la méthode
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method Not Allowed' })
+    };
+  }
 
   try {
+    // Parse du corps de la requête
+    const data = JSON.parse(event.body);
+    
+    // Validation des données requises
+    if (!data.sender || !data.recipient || !data.phone || !data.address || !data.type) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Missing required fields' })
+      };
+    }
+
+    // Connexion à MongoDB
+    const client = new MongoClient(uri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      connectTimeoutMS: 5000
+    });
+
     await client.connect();
     const db = client.db(dbName);
+    const collection = db.collection(expeditionCollection);
 
-    // Requêtes (inchangé)
-    const [livraisons, expeditions, total] = await Promise.all([
-      db.collection(livraisonCollection)
-        .find({})
-        .project(LIVRAISON_PROJECTION)
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
+    // Ajout de la date et du statut
+    const expeditionData = {
+      ...data,
+      dateCreation: new Date(),
+      statut: 'en_attente',
+      codeID: data.colisID || generateRandomId()
+    };
 
-      db.collection(expeditionCollection)
-        .find({})
-        .project(EXPEDITION_PROJECTION)
-        .toArray(),
+    // Insertion dans la base de données
+    const result = await collection.insertOne(expeditionData);
 
-      db.collection(livraisonCollection)
-        .countDocuments()
-    ]);
-
-    // Traitement des données (inchangé)
-    const expMap = new Map();
-    expeditions.forEach(exp => expMap.set(exp.codeID, exp.idLivreur));
-
-    const data = livraisons.map(liv => ({
-      c: liv.codeID,
-      t: liv.colis?.type,
-      p: liv.colis?.photos?.[0]?.data,
-      e: {
-        n: liv.expediteur?.nom,
-        t: liv.expediteur?.telephone,
-        l: liv.expediteur?.localisation
-      },
-      d: {
-        n: liv.destinataire?.nom,
-        p: liv.destinataire?.prenom,
-        t: liv.destinataire?.telephone,
-        l: liv.destinataire?.localisation
-      },
-      s: liv.statut,
-      dl: liv.dateLivraison,
-      ex: expMap.has(liv.codeID),
-      id: expMap.get(liv.codeID)
-    }));
-
-    // Réponse (inchangé)
     return {
-      statusCode: 200,
+      statusCode: 201,
       headers,
       body: JSON.stringify({
-        d: data,
-        p: {
-          t: total,
-          pg: page,
-          l: limit,
-          tp: Math.ceil(total / limit)
-        }
+        success: true,
+        expeditionId: result.insertedId,
+        codeID: expeditionData.codeID
       })
     };
 
@@ -128,12 +77,15 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({
-        e: 'Internal Server Error',
-        m: error.message
+      body: JSON.stringify({ 
+        error: 'Internal Server Error',
+        details: error.message 
       })
     };
-  } finally {
-    await client.close().catch(console.error);
   }
 };
+
+// Fonction pour générer un ID aléatoire
+function generateRandomId() {
+  return Math.random().toString(36).substr(2, 9);
+}
