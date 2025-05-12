@@ -51,13 +51,6 @@ exports.handler = async (event) => {
     const db = client.db(dbName);
     const collection = db.collection(expeditionCollection);
 
-    // Ajout de la date et du statut
-    const expeditionData = {
-      ...data,
-      dateCreation: new Date(),
-      statut: 'en_attente',
-      codeID: data.colisID || generateRandomId()
-    };
 
     // Insertion dans la base de données
     const result = await collection.insertOne(expeditionData);
@@ -85,7 +78,3 @@ exports.handler = async (event) => {
   }
 };
 
-// Fonction pour générer un ID aléatoire
-function generateRandomId() {
-  return Math.random().toString(36).substr(2, 9);
-}
