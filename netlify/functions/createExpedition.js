@@ -52,6 +52,7 @@ exports.handler = async (event) => {
     // Ajout de la date et du statut
     const expeditionData = {
       ...data,
+      codeID: data.colisID 
     };
 
     // Insertion dans la base de données
