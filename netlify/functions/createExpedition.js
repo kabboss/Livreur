@@ -42,8 +42,6 @@ exports.handler = async (event) => {
 
     // Connexion à MongoDB
     const client = new MongoClient(uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
       connectTimeoutMS: 5000
     });
 
@@ -51,6 +49,10 @@ exports.handler = async (event) => {
     const db = client.db(dbName);
     const collection = db.collection(expeditionCollection);
 
+    // Ajout de la date et du statut
+    const expeditionData = {
+      ...data,
+    };
 
     // Insertion dans la base de données
     const result = await collection.insertOne(expeditionData);
