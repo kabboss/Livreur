@@ -3,7 +3,7 @@ const { MongoClient } = require('mongodb');
 // Configuration sécurisée
 const uri = process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority";
 const dbName = process.env.DB_NAME || 'FarmsConnect';
-const expeditionCollection = process.env.EXPEDITION_COLLECTION || 'cour_expedition';
+const expeditionCollection = process.env.EXPEDITION_COLLECTION || 'Colis';
 
 exports.handler = async (event) => {
   // En-têtes CORS avec Authorization
