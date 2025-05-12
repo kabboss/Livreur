@@ -5,7 +5,18 @@ const dbName = 'FarmsConnect';
 
 exports.handler = async (event, context) => {
     const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
-
+    if (event.httpMethod === "OPTIONS") {
+        return {
+          statusCode: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+          },
+          body: "",
+        };
+      }
+s    
     try {
         await client.connect();
         const db = client.db(dbName);
