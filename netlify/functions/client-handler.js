@@ -150,7 +150,7 @@ if (
         details: colis.details,
         photos: colis.photos || [],
         status: colis.status || 'enregistré',
-        createdAt: colis.createdAt,
+        dateCreation: colis.dateCreation,
         history: colis.history || []
       }
     };

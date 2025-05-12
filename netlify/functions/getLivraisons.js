@@ -111,7 +111,8 @@ exports.handler = async (event, context) => {
                 dateLivraison: livraison.dateLivraison,
                 dateDebutExpedition: expedition.dateDebut,
                 estExpedie: expeditionsMap.has(livraison.codeID),
-                idLivreurEnCharge: expedition.idLivreur
+                idLivreurEnCharge: expedition.idLivreur,
+                nomLivreur: nomDuLivreur // Ajout du nom du livreur ici
             };
         });
 
