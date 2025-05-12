@@ -65,6 +65,7 @@ exports.handler = async (event, context) => {
                 .project({
                     codeID: 1,
                     idLivreur: 1,
+                    nomLivreur: 1,
                     statut: 1,
                     dateDebut: 1
                 })
