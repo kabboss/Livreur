@@ -1,13 +1,11 @@
 const { MongoClient } = require('mongodb');
 
-// Configuration avec variables d'environnement pour plus de sécurité
 const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
 const livraisonCollectionName = 'Livraison';
 const expeditionCollectionName = 'cour_expedition';
 
 exports.handler = async (event, context) => {
-    // En-têtes CORS complets
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -15,7 +13,6 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json'
     };
 
-    // Gestion des requêtes OPTIONS (preflight)
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 204,
@@ -24,7 +21,6 @@ exports.handler = async (event, context) => {
         };
     }
 
-    // Vérification de la méthode HTTP
     if (event.httpMethod !== 'GET') {
         return {
             statusCode: 405,
@@ -47,7 +43,6 @@ exports.handler = async (event, context) => {
         await client.connect();
         const db = client.db(dbName);
 
-        // Récupération en parallèle pour meilleure performance
         const [livraisons, expeditions] = await Promise.all([
             db.collection(livraisonCollectionName)
                 .find({})
@@ -67,12 +62,16 @@ exports.handler = async (event, context) => {
                     idLivreur: 1,
                     nomLivreur: 1,
                     statut: 1,
-                    dateDebut: 1
+                    dateDebut: 1,
+                    estExpedie: 1  // Ajout de ce champ
                 })
                 .toArray()
         ]);
 
-        // Création d'un map pour les expéditions
+        if (!livraisons || !expeditions) {
+            throw new Error('Données introuvables dans la base de données');
+        }
+
         const expeditionsMap = new Map(
             expeditions.map(exp => [
                 exp.codeID, 
@@ -80,12 +79,12 @@ exports.handler = async (event, context) => {
                     idLivreur: exp.idLivreur,
                     nomLivreur: exp.nomLivreur,
                     statut: exp.statut || 'En cours',
-                    dateDebut: exp.dateDebut
+                    dateDebut: exp.dateDebut,
+                    estExpedie: exp.estExpedie || false  // Valeur par défaut
                 }
             ])
         );
 
-        // Formatage des données avec valeurs par défaut
         const formattedData = livraisons.map(livraison => {
             const expedition = expeditionsMap.get(livraison.codeID) || {};
             
@@ -111,13 +110,12 @@ exports.handler = async (event, context) => {
                 statut: expedition.statut || livraison.statut || 'En attente',
                 dateLivraison: livraison.dateLivraison,
                 dateDebutExpedition: expedition.dateDebut,
-                estExpedie: expeditionsMap.has(livraison.codeID),
+                estExpedie: expedition.estExpedie || expeditionsMap.has(livraison.codeID), // Si estExpedie existe, on l'utilise, sinon on vérifie si le colis est dans la map
                 idLivreurEnCharge: expedition.idLivreur,
-                nomLivreur: nomDuLivreur // Ajout du nom du livreur ici
+                nomLivreur: expedition.nomLivreur || 'Non spécifié'
             };
         });
 
-        // Cache-Control pour améliorer les performances
         headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
 
         return {

@@ -4,7 +4,6 @@ const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/Farms
 const dbName = 'FarmsConnect';
 
 exports.handler = async function(event, context) {
-    // Définir les en-têtes CORS pour autoriser toutes les origines
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
@@ -12,7 +11,6 @@ exports.handler = async function(event, context) {
         'Content-Type': 'application/json'
     };
 
-    // Gérer la requête OPTIONS (preflight)
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
@@ -21,7 +19,6 @@ exports.handler = async function(event, context) {
         };
     }
 
-    // Vérifier que la méthode est POST
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
@@ -40,7 +37,6 @@ exports.handler = async function(event, context) {
         const db = client.db(dbName);
         const expeditionCollection = db.collection('cour_expedition');
 
-        // Vérifier si le corps de la requête est vide
         if (!event.body) {
             return {
                 statusCode: 400,
@@ -54,31 +50,37 @@ exports.handler = async function(event, context) {
             localisationLivreur, 
             telephoneLivreur1, 
             telephoneLivreur2, 
-            idLivreur, 
+            idLivreur,
+            nomLivreur, // Ajout de ce champ
             distanceExpediteur, 
             distanceDestinataire, 
             distanceExpediteurDestinataire, 
             prixLivraison 
         } = JSON.parse(event.body);
 
-        // Validation des données requises
-        if (!codeID || !localisationLivreur || !telephoneLivreur1 || !idLivreur) {
+        // Validation des données requises (ajout de nomLivreur)
+        if (!codeID || !localisationLivreur || !telephoneLivreur1 || !idLivreur || !nomLivreur) {
             return {
                 statusCode: 400,
                 headers,
-                body: JSON.stringify({ error: 'Données requises manquantes' })
+                body: JSON.stringify({ 
+                    error: 'Données requises manquantes',
+                    required: ['codeID', 'localisationLivreur', 'telephoneLivreur1', 'idLivreur', 'nomLivreur']
+                })
             };
         }
 
-        // Enregistrer les informations d'expédition
-        const expeditionResult = await expeditionCollection.insertOne({
+        // Document d'expédition complet
+        const expeditionDoc = {
             codeID: codeID,
             localisationLivreur: localisationLivreur,
             telephoneLivreur1: telephoneLivreur1,
-            telephoneLivreur2: telephoneLivreur2 || null, // Si non fourni
+            telephoneLivreur2: telephoneLivreur2 || null,
             idLivreur: idLivreur,
+            nomLivreur: nomLivreur, // Champ ajouté
             dateDebut: new Date(),
             statut: 'En cours',
+            estExpedie: true, // Champ ajouté pour indiquer que le colis est pris en charge
             distanceExpediteur: distanceExpediteur || null,
             distanceDestinataire: distanceDestinataire || null,
             distanceExpediteurDestinataire: distanceExpediteurDestinataire || null,
@@ -86,9 +88,16 @@ exports.handler = async function(event, context) {
             historique: [{
                 date: new Date(),
                 statut: 'En cours',
-                localisation: localisationLivreur
+                localisation: localisationLivreur,
+                action: 'Prise en charge',
+                livreur: {
+                    id: idLivreur,
+                    nom: nomLivreur
+                }
             }]
-        });
+        };
+
+        const expeditionResult = await expeditionCollection.insertOne(expeditionDoc);
 
         if (!expeditionResult.acknowledged) {
             return {
@@ -103,7 +112,8 @@ exports.handler = async function(event, context) {
             headers,
             body: JSON.stringify({ 
                 message: 'Expédition enregistrée avec succès',
-                expeditionId: expeditionResult.insertedId 
+                expeditionId: expeditionResult.insertedId,
+                estExpedie: true // Confirmation pour le frontend
             })
         };
 

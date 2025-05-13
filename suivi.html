@@ -436,6 +436,17 @@
                     <strong><i class="fas fa-fingerprint"></i> Identifiant :</strong>
                     <span class="code-value">${data.codeID}</span>
                 </div>
+
+                 <div class="tracking-item animate__animated animate__fadeInDown animate__delay-4s">
+                    <strong><i class="fas fa-id-card"></i> Identifiant du Livreur :</strong>
+                    <span>${data.idLivreur}</span>
+                </div>
+
+
+                <div class="tracking-item animate__animated animate__fadeInDown animate__delay-0s">
+                    <strong><i class="fas fa-user"></i> Nom du livreur :</strong>
+                    <span>${data.nomLivreur}</span>
+
                 <div class="tracking-item animate__animated animate__fadeInDown animate__delay-1s">
                     <strong><i class="fas fa-map-marked-alt"></i> Position du livreur :</strong>
                     ${data.localisationLivreur ? 
@@ -454,10 +465,7 @@
                     <strong><i class="fas fa-phone-alt"></i> Contact secondaire :</strong>
                     <a href="tel:${data.telephoneLivreur2}" style="color: var(--primary);">${data.telephoneLivreur2}</a>
                 </div>` : ''}
-                <div class="tracking-item animate__animated animate__fadeInDown animate__delay-4s">
-                    <strong><i class="fas fa-id-card"></i> Identifiant du Livreur :</strong>
-                    <span>${data.idLivreur}</span>
-                </div>
+               
                 <div class="tracking-item animate__animated animate__fadeInDown animate__delay-5s">
                     <strong><i class="fas fa-rocket"></i> Départ :</strong>
                     <span>${new Date(data.dateDebut).toLocaleString('fr-FR')}</span>
