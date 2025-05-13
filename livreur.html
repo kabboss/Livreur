@@ -660,7 +660,6 @@
             initAccuracyBars();
             setupModal();
             getLocation();
-            setupNavigation();
 
             // Fonctions d'initialisation
             function initAccuracyBars() {
@@ -692,13 +691,7 @@
                 });
             }
             
-            function setupNavigation() {
-                // Gestion du rafraîchissement
-                document.querySelector('.refresh-button').addEventListener('click', () => {
-                    showToast('🔄 Actualisation en cours...', 'info');
-                    fetchColis();
-                });
-            }
+       
             
             // Fonctions de localisation
             function getLocation() {
