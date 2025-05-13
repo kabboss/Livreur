@@ -6,6 +6,8 @@
   <meta name="description" content="Suivi de colis en temps réel - Plateforme de livraison premium">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="client.css" />
+  <script type="text/javascript" src="cordova.js"></script>
+
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
   <title>Suivi Colis | Plateforme de livraison premium</title>
@@ -791,7 +793,7 @@
               </span>
             </h2>
             <p class="colis-meta">
-              <i class="fas fa-calendar-alt"></i> Créé le : ${new Date(colis.createdAt).toLocaleString('fr-FR')}
+              <i class="fas fa-calendar-alt"></i> Créé le : ${new Date(colis.dateCreation).toLocaleString('fr-FR')}
             </p>
           </div>
 
@@ -868,66 +870,54 @@
         let isProcessing = false;
 
         recevoirButton.addEventListener('click', async () => {
-  if (isProcessing) return;
-  isProcessing = true;
-  
-  recevoirButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
-  recevoirButton.disabled = true;
-  
-  try {
-    // Ajoutez des logs pour débogage
-    console.log('Envoi des données:', { 
-      codeID: colis.colisID,
-      clientLocation: validatedLocation 
-    });
+          if (isProcessing) return;
+          isProcessing = true;
+          
+          // Animation de chargement
+          recevoirButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
+          recevoirButton.disabled = true;
+          
+          try {
+            const response = await fetch('https://livreur2.netlify.app/.netlify/functions/recevoir', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                codeID: colis.colisID,
+                clientLocation: validatedLocation 
+              })
+            });
 
-    const response = await fetch('https://livreur2.netlify.app/.netlify/functions/recevoir', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({ 
-        codeID: colis.colisID,
-        clientLocation: {
-          latitude: validatedLocation?.latitude,
-          longitude: validatedLocation?.longitude,
-          accuracy: validatedLocation?.accuracy
-        }
-      })
-    });
+            const data = await response.json();
+            
+            if (!response.ok) {
+              throw new Error(data.error || 'Erreur lors de la réception');
+            }
 
-    // Gestion améliorée des erreurs HTTP
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || 
-        `Erreur HTTP: ${response.status} ${response.statusText}`
-      );
-    }
+            // Succès - Animation et masquage du bouton
+            recevoirButton.innerHTML = '<i class="fas fa-check"></i> Reçu !';
+            recevoirButton.classList.add('success');
+            
+            // Afficher l'animation de validation
+            showCheckmark();
+            
+            // Message de succès
+            showToast(data.message || 'Colis marqué comme reçu avec succès', 'success');
+            
+            // Désactiver complètement après succès
+            setTimeout(() => {
+              recevoirButton.style.display = 'none';
+            }, 2000);
+            
+          } catch (error) {
+            // Réinitialiser en cas d'erreur
+            recevoirButton.innerHTML = '<i class="fas fa-check"></i> Recevoir';
+            recevoirButton.disabled = false;
+            isProcessing = false;
+            
+            showToast(error.message || 'Erreur lors de la confirmation', 'error');
+          }
+        });
 
-    const data = await response.json();
-    console.log('Réponse du serveur:', data);
-
-    // Succès
-    recevoirButton.innerHTML = '<i class="fas fa-check"></i> Reçu !';
-    showToast(data.message || 'Confirmation réussie', 'success');
-    showCheckmark();
-
-  } catch (error) {
-    console.error('Erreur complète:', error);
-    showToast(
-      error.message.includes('JSON') 
-        ? 'Réponse invalide du serveur' 
-        : error.message,
-      'error'
-    );
-  } finally {
-    isProcessing = false;
-    recevoirButton.disabled = false;
-    recevoirButton.innerHTML = '<i class="fas fa-check"></i> Recevoir';
-  }
-});
         declinerButton.addEventListener('click', async () => {
           if (isProcessing) return;
           
