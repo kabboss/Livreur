@@ -1,11 +1,13 @@
 const { MongoClient } = require('mongodb');
 
+// Configuration avec variables d'environnement pour plus de sécurité
 const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
 const livraisonCollectionName = 'Livraison';
 const expeditionCollectionName = 'cour_expedition';
 
 exports.handler = async (event, context) => {
+    // En-têtes CORS complets
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -13,6 +15,7 @@ exports.handler = async (event, context) => {
         'Content-Type': 'application/json'
     };
 
+    // Gestion des requêtes OPTIONS (preflight)
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 204,
@@ -21,6 +24,7 @@ exports.handler = async (event, context) => {
         };
     }
 
+    // Vérification de la méthode HTTP
     if (event.httpMethod !== 'GET') {
         return {
             statusCode: 405,
@@ -43,6 +47,7 @@ exports.handler = async (event, context) => {
         await client.connect();
         const db = client.db(dbName);
 
+        // Récupération en parallèle pour meilleure performance
         const [livraisons, expeditions] = await Promise.all([
             db.collection(livraisonCollectionName)
                 .find({})
@@ -67,10 +72,7 @@ exports.handler = async (event, context) => {
                 .toArray()
         ]);
 
-        if (!livraisons || !expeditions) {
-            throw new Error('Données introuvables dans la base de données');
-        }
-
+        // Création d'un map pour les expéditions
         const expeditionsMap = new Map(
             expeditions.map(exp => [
                 exp.codeID, 
@@ -83,6 +85,7 @@ exports.handler = async (event, context) => {
             ])
         );
 
+        // Formatage des données avec valeurs par défaut
         const formattedData = livraisons.map(livraison => {
             const expedition = expeditionsMap.get(livraison.codeID) || {};
             
@@ -110,10 +113,11 @@ exports.handler = async (event, context) => {
                 dateDebutExpedition: expedition.dateDebut,
                 estExpedie: expeditionsMap.has(livraison.codeID),
                 idLivreurEnCharge: expedition.idLivreur,
-                nomLivreur: expedition.nomLivreur || 'Non spécifié'
+                nomLivreur: nomDuLivreur // Ajout du nom du livreur ici
             };
         });
 
+        // Cache-Control pour améliorer les performances
         headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
 
         return {
