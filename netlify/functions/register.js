@@ -2,12 +2,10 @@ const { MongoClient } = require("mongodb");
 const bcrypt = require("bcryptjs");
 
 const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
-const client = new MongoClient(uri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-});
+const client = new MongoClient(uri);
 
 exports.handler = async function (event, context) {
+    // Gestion des CORS
     if (event.httpMethod === "OPTIONS") {
         return {
             statusCode: 200,
@@ -22,7 +20,7 @@ exports.handler = async function (event, context) {
 
     const headers = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Content-Type": "application/json",
     };
 
     if (event.httpMethod !== "POST") {
@@ -35,17 +33,10 @@ exports.handler = async function (event, context) {
 
     try {
         const data = JSON.parse(event.body);
-        let { whatsapp, secondNumber, type, password, confirmPassword, username, identificationCode } = data;
+        let { whatsapp, secondNumber, type, password, username, code } = data;
 
-        // Normalisation des champs
-        whatsapp = whatsapp.trim().replace(/\s+/g, '');
-        secondNumber = secondNumber ? secondNumber.trim().replace(/\s+/g, '') : null;
-        type = type.trim().toLowerCase();
-        username = username.trim();
-        identificationCode = identificationCode ? identificationCode.trim() : null;
-
-        // Vérification des champs de base
-        if (!whatsapp || !type || !password || !confirmPassword || !username) {
+        // Validation des champs obligatoires
+        if (!whatsapp || !type || !password || !username) {
             return {
                 statusCode: 400,
                 headers,
@@ -53,11 +44,18 @@ exports.handler = async function (event, context) {
             };
         }
 
-        if (password !== confirmPassword) {
+        // Nettoyage des données
+        whatsapp = whatsapp.trim().replace(/\s+/g, '');
+        secondNumber = secondNumber ? secondNumber.trim().replace(/\s+/g, '') : null;
+        username = username.trim();
+        type = type.trim().toLowerCase();
+
+        // Vérification du numéro WhatsApp
+        if (!/^\d+$/.test(whatsapp)) {
             return {
                 statusCode: 400,
                 headers,
-                body: JSON.stringify({ message: "Le mot de passe et sa confirmation ne correspondent pas." }),
+                body: JSON.stringify({ message: "Le numéro WhatsApp doit contenir uniquement des chiffres." }),
             };
         }
 
@@ -66,73 +64,84 @@ exports.handler = async function (event, context) {
         const usersCollection = db.collection("utilisateurs");
         const livreursCollection = db.collection("Res_livreur");
 
-        const existingUser = await usersCollection.findOne({ $or: [{ whatsapp, type }, { username }] });
+        // Vérifier si l'utilisateur existe déjà
+        const existingUser = await usersCollection.findOne({ 
+            $or: [
+                { whatsapp },
+                { username }
+            ] 
+        });
+
         if (existingUser) {
             return {
                 statusCode: 409,
                 headers,
-                body: JSON.stringify({ message: "Un utilisateur avec ce numéro WhatsApp/type ou ce nom d'utilisateur existe déjà." }),
+                body: JSON.stringify({ 
+                    message: existingUser.whatsapp === whatsapp 
+                        ? "Ce numéro WhatsApp est déjà utilisé." 
+                        : "Ce nom d'utilisateur est déjà pris."
+                }),
             };
         }
 
-        let registrationAllowed = true;
-        let registrationMessage = "Inscription réussie !";
-
-        if (type === 'livreur') {
-            if (!identificationCode) {
-                return {
-                    statusCode: 400,
-                    headers,
-                    body: JSON.stringify({ message: "Le code d'identification est requis pour l'inscription en tant que livreur." }),
-                };
+        // Validation spécifique selon le type de compte
+        let errorMessage = null;
+        
+        if (type === "livreur") {
+            if (!code) {
+                errorMessage = "Le code d'identification est requis pour les livreurs.";
+            } else {
+                const livreurCode = await livreursCollection.findOne({ code });
+                if (!livreurCode) {
+                    errorMessage = "Code livreur invalide. Contactez l'entreprise au 56663638 ou 61229766.";
+                }
             }
-            const livreurCode = await livreursCollection.findOne({ code: identificationCode });
-            if (!livreurCode) {
-                registrationAllowed = false;
-                registrationMessage = 'Code d\'identification invalide. Veuillez contacter l\'entreprise au 56663638 ou 61229766 ou kaboreabwa2020@gmail.com pour suivre la procédure de recrutement.';
-            }
-        } else if (type === 'admin') {
-            if (identificationCode !== 'ka23bo23re23') {
-                registrationAllowed = false;
-                registrationMessage = 'Code d\'administration invalide.';
+        } 
+        else if (type === "admin") {
+            if (code !== "ka23bo23re23") {
+                errorMessage = "Code administrateur invalide.";
             }
         }
 
-        if (registrationAllowed) {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            await usersCollection.insertOne({
-                whatsapp,
-                secondNumber,
-                type,
-                username,
-                password: hashedPassword,
-                createdAt: new Date(),
-                ...(type === 'livreur' && { livreurCode: identificationCode }), // Enregistrer le code livreur
-                ...(type === 'admin' && { adminCode: identificationCode }),   // Enregistrer le code admin (pour référence future)
-            });
-
-            return {
-                statusCode: 200,
-                headers: {
-                    ...headers,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ message: registrationMessage, redirect: "/login.html" }),
-            };
-        } else {
+        if (errorMessage) {
             return {
                 statusCode: 403,
                 headers,
-                body: JSON.stringify({ message: registrationMessage }),
+                body: JSON.stringify({ message: errorMessage }),
             };
         }
 
-    } catch (err) {
-        console.error("Erreur serveur :", err);
+        // Hash du mot de passe
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Création de l'utilisateur
+        const newUser = {
+            whatsapp,
+            secondNumber,
+            username,
+            type,
+            password: hashedPassword,
+            createdAt: new Date(),
+            ...(code && { registrationCode: code }) // Stocker le code si fourni
+        };
+
+        await usersCollection.insertOne(newUser);
+
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ 
+                message: "Inscription réussie!",
+                redirect: "/Connection.html"
+            }),
+        };
+
+    } catch (error) {
+        console.error("Erreur:", error);
         return {
             statusCode: 500,
             headers,
-            body: JSON.stringify({ message: "Erreur serveur : " + err.message }),
+            body: JSON.stringify({ message: "Une erreur est survenue lors de l'inscription." }),
         };
     } finally {
         await client.close();
