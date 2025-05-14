@@ -907,8 +907,7 @@ async function fetchColis() {
         console.error('Erreur lors du chargement des colis:', error);
         showErrorUI(error);
     }
-}
-
+}            
             function showErrorUI(error) {
                 colisList.innerHTML = `
                     <div class="error-message">
@@ -1013,124 +1012,118 @@ function displayColis(response) {
                 return result;
             }
             
-function generateColisCardHTML(colis, distances, index) {
-    const mainPhoto = colis.colis?.photos?.[0]?.data || null;
-    const hasLocationData = colis.expediteur?.localisation && colis.destinataire?.localisation;
-    
-    // Détermine si le colis est déjà expédié
-    const estDejaExpedie = colis.estExpedie || colis.idLivreurEnCharge;
-    
-    return `
-        <div class="colis-image-container">
-            ${mainPhoto ? `
-                <img src="${mainPhoto}"
-                     alt="Image du colis ${colis.codeID}"
-                     class="colis-image"
-                     loading="${index < 3 ? 'eager' : 'lazy'}">` : `
-                <div class="no-image">📦</div>`}
-        </div>
-
-        <div class="card-content">
-            <h2>Colis #${colis.codeID}</h2>
-
-            ${estDejaExpedie ? `
-                <div class="livreur-info">
-                    <p class="text-info">
-                        <i class="fas fa-truck"></i> Le livreur ${colis.nomLivreur || 'Non spécifié'} est en charge de ce colis
-                    </p>
-                </div>
-            ` : ''}
-
-            <div class="colis-details">
-                <p><strong>Type :</strong> ${colis.colis?.type || 'Non spécifié'}</p>
-                <p><strong>Détails :</strong> ${colis.colis?.details || 'Aucun détail'}</p>
-            </div>
-
-            <div class="coordonnees expediteur">
-                <h3><i class="fas fa-user"></i> Expéditeur</h3>
-                <p>👤 ${colis.expediteur?.nom || 'Non spécifié'}</p>
-                <p>📞 ${formatPhoneNumber(colis.expediteur?.telephone) || 'Non spécifié'}</p>
-                ${colis.expediteur?.localisation ? `
-                    <p>
-                        <a href="https://maps.google.com?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
-                           target="_blank" rel="noopener" class="btn btn-sm btn-secondary">
-                           <i class="fas fa-map-marker-alt"></i> Localiser
-                        </a>
-                    </p>
-                    ${distances.distanceExpediteur !== null ? `
-                        <p class="distance">
-                            <i class="fas fa-ruler-combined"></i> Distance: ${distances.distanceExpediteur.toFixed(2)} km
-                        </p>
-                    ` : ''}
-                ` : ''}
-            </div>
-
-            <div class="coordonnees destinataire">
-                <h3><i class="fas fa-user-tag"></i> Destinataire</h3>
-                <p>👤 ${colis.destinataire?.nom || 'Non spécifié'} ${colis.destinataire?.prenom || ''}</p>
-                <p>📞 ${formatPhoneNumber(colis.destinataire?.telephone) || 'Non spécifié'}</p>
-                ${colis.destinataire?.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
-                ${colis.destinataire?.localisation ? `
-                    <p>
-                        <a href="https://maps.google.com?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
-                           target="_blank" rel="noopener" class="btn btn-sm btn-secondary">
-                           <i class="fas fa-map-marker-alt"></i> Localiser
-                        </a>
-                    </p>
-                    ${distances.distanceDestinataire !== null ? `
-                        <p class="distance">
-                            <i class="fas fa-ruler-combined"></i> Distance: ${distances.distanceDestinataire.toFixed(2)} km
-                        </p>
-                    ` : ''}
-                ` : ''}
-            </div>
-
-            <div class="informations-livraison">
-                <h3><i class="fas fa-truck"></i> Informations Livraison</h3>
-                ${hasLocationData ? `
-                    <p><i class="fas fa-route"></i> Distance totale: ${distances.distanceExpediteurDestinataire?.toFixed(2) || 'N/A'} km</p>
-                    <p><i class="fas fa-coins"></i> Frais: ${distances.prixLivraison || 'N/A'}</p>
-                ` : `
-                    <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Coordonnées manquantes pour calculer la distance</p>
-                `}
-            </div>
-
-            <div class="meta-info">
-                <p><strong><i class="fas fa-info-circle"></i> Statut :</strong> 
-                    <span class="statut ${colis.statut?.toLowerCase().replace(' ', '-') || 'inconnu'}">
-                        ${colis.statut || 'Inconnu'}
-                    </span>
-                </p>
-                ${colis.dateLivraison ? `
-                    <p><strong><i class="fas fa-calendar-alt"></i> Livraison prévue :</strong> 
-                        ${formatDate(colis.dateLivraison)}
-                    </p>
-                ` : ''}
-                ${colis.dateDebutExpedition ? `
-                    <p><strong><i class="fas fa-clock"></i> Début expédition :</strong> 
-                        ${formatDate(colis.dateDebutExpedition)}
-                    </p>
-                ` : ''}
-            </div>
-
-            <div class="button-group">
-                ${estDejaExpedie ? `
-                    <button class="btn btn-info update-position-btn" data-id="${colis.codeID}">
-                        <i class="fas fa-location-arrow"></i> Actualiser position
-                    </button>
-                ` : `
-                    <button class="btn btn-primary expedier-btn" data-id="${colis.codeID}">
-                        <i class="fas fa-truck-loading"></i> Expédier
-                    </button>
-                `}
+            function generateColisCardHTML(colis, distances, index) {
+                const mainPhoto = colis.colis?.photos?.[0]?.data || null;
+                const hasLocationData = colis.expediteur?.localisation && colis.destinataire?.localisation;
                 
-                <button class="btn btn-success terminer-btn" data-id="${colis.codeID}">
-                    <i class="fas fa-check-circle"></i> Livraison terminée
-                </button>
-            </div>
-        </div>
-    `;
-}
+                return `
+                    <div class="colis-image-container">
+                        ${mainPhoto ? `
+                            <img src="${mainPhoto}"
+                                 alt="Image du colis ${colis.codeID}"
+                                 class="colis-image"
+                                 loading="${index < 3 ? 'eager' : 'lazy'}">` : `
+                            <div class="no-image">📦</div>`}
+                    </div>
+
+                    <div class="card-content">
+                        <h2>Colis #${colis.codeID}</h2>
+
+                        <div class="colis-details">
+                            <p><strong>Type :</strong> ${colis.colis?.type || 'Non spécifié'}</p>
+                            <p><strong>Détails :</strong> ${colis.colis?.details || 'Aucun détail'}</p>
+                        </div>
+
+                        <div class="coordonnees expediteur">
+                            <h3><i class="fas fa-user"></i> Expéditeur</h3>
+                            <p>👤 ${colis.expediteur?.nom || 'Non spécifié'}</p>
+                            <p>📞 ${formatPhoneNumber(colis.expediteur?.telephone) || 'Non spécifié'}</p>
+                            ${colis.expediteur?.localisation ? `
+                                <p>
+                                    <a href="https://maps.google.com?q=${colis.expediteur.localisation.latitude},${colis.expediteur.localisation.longitude}"
+                                       target="_blank" rel="noopener" class="btn btn-sm btn-secondary">
+                                       <i class="fas fa-map-marker-alt"></i> Localiser
+                                    </a>
+                                </p>
+                                ${distances.distanceExpediteur !== null ? `
+                                    <p class="distance">
+                                        <i class="fas fa-ruler-combined"></i> Distance: ${distances.distanceExpediteur.toFixed(2)} km
+                                    </p>
+                                ` : ''}
+                            ` : ''}
+                        </div>
+
+                        <div class="coordonnees destinataire">
+                            <h3><i class="fas fa-user-tag"></i> Destinataire</h3>
+                            <p>👤 ${colis.destinataire?.nom || 'Non spécifié'} ${colis.destinataire?.prenom || ''}</p>
+                            <p>📞 ${formatPhoneNumber(colis.destinataire?.telephone) || 'Non spécifié'}</p>
+                            ${colis.destinataire?.adresse ? `<p>📍 ${colis.destinataire.adresse}</p>` : ''}
+                            ${colis.destinataire?.localisation ? `
+                                <p>
+                                    <a href="https://maps.google.com?q=${colis.destinataire.localisation.latitude},${colis.destinataire.localisation.longitude}"
+                                       target="_blank" rel="noopener" class="btn btn-sm btn-secondary">
+                                       <i class="fas fa-map-marker-alt"></i> Localiser
+                                    </a>
+                                </p>
+                                ${distances.distanceDestinataire !== null ? `
+                                    <p class="distance">
+                                        <i class="fas fa-ruler-combined"></i> Distance: ${distances.distanceDestinataire.toFixed(2)} km
+                                    </p>
+                                ` : ''}
+                            ` : ''}
+                        </div>
+
+                        <div class="informations-livraison">
+                            <h3><i class="fas fa-truck"></i> Informations Livraison</h3>
+                            ${hasLocationData ? `
+                                <p><i class="fas fa-route"></i> Distance totale: ${distances.distanceExpediteurDestinataire?.toFixed(2) || 'N/A'} km</p>
+                                <p><i class="fas fa-coins"></i> Frais: ${distances.prixLivraison || 'N/A'}</p>
+                            ` : `
+                                <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Coordonnées manquantes pour calculer la distance</p>
+                            `}
+                        </div>
+
+                        <div class="meta-info">
+                            <p><strong><i class="fas fa-info-circle"></i> Statut :</strong> 
+                                <span class="statut ${colis.statut?.toLowerCase().replace(' ', '-') || 'inconnu'}">
+                                    ${colis.statut || 'Inconnu'}
+                                </span>
+                            </p>
+                            ${colis.dateLivraison ? `
+                                <p><strong><i class="fas fa-calendar-alt"></i> Livraison prévue :</strong> 
+                                    ${formatDate(colis.dateLivraison)}
+                                </p>
+                            ` : ''}
+                            ${colis.dateDebutExpedition ? `
+                                <p><strong><i class="fas fa-clock"></i> Début expédition :</strong> 
+                                    ${formatDate(colis.dateDebutExpedition)}
+                                </p>
+                            ` : ''}
+                        </div>
+
+                        <div class="button-group">
+                            ${colis.estExpedie ? `
+                                ${colis.idLivreurEnCharge ? `
+                                    <p class="text-info">
+        <i class="fas fa-truck"></i> Le livreur ${colis.nomLivreur} est en charge de ce colie
+    </p>
+                                ` : ''}
+                                <button class="btn btn-info update-position-btn" data-id="${colis.codeID}">
+                                    <i class="fas fa-location-arrow"></i> Actualiser position
+                                </button>
+                            ` : `
+                                <button class="btn btn-primary expedier-btn" data-id="${colis.codeID}">
+                                    <i class="fas fa-truck-loading"></i> Expédier
+                                </button>
+                            `}
+                            
+                            <button class="btn btn-success terminer-btn" data-id="${colis.codeID}">
+                                <i class="fas fa-check-circle"></i> Livraison terminée
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
             
             // Fonctions utilitaires
             function formatPhoneNumber(phone) {
@@ -1368,34 +1361,37 @@ function generateColisCardHTML(colis, distances, index) {
                         })
                     });
 
-// Dans confirmExpedition, remplacez toute la partie succès par :
-  if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erreur lors de l\'enregistrement');
-        }
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Erreur lors de l\'enregistrement');
+                    }
 
-        // SUCCÈS - Version corrigée
-        showToast('✅ Expédition enregistrée avec succès', 'success');
+                    // Succès
+                    showToast('✅ Expédition enregistrée avec succès', 'success');
+                    formDiv.classList.remove('animate__fadeIn');
+                    formDiv.classList.add('animate__fadeOut');
+                    
+                    setTimeout(() => {
+                        formDiv.remove();
+                        card.querySelector('.button-group').innerHTML = `
+                            <p class="text-success animate__animated animate__fadeIn">
+                                <i class="fas fa-check-double"></i> Expédition enregistrée !
+                            </p>
+                            <p class="animate__animated animate__fadeIn delay-0-5s">
+                                <i class="fas fa-info-circle"></i> Veuillez récupérer le colis
+                            </p>
+                        `;
+                        card.classList.add('en-cours-expedition');
+                        setupLocationUpdateButton(card);
+                    }, 300);
 
-        // 1. Fermer le formulaire proprement
-        formDiv.classList.remove('animate__fadeIn');
-        formDiv.classList.add('animate__fadeOut');
-
-        // 2. Supprimer le formulaire après l'animation
-        setTimeout(() => {
-            formDiv.remove();
-        }, 300);
-
-        // 3. Rafraîchir les données depuis le serveur (ceci va régénérer toute la carte)
-        fetchColis();
-
-    } catch (error) {
-        console.error('Erreur expedition:', error);
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML = '<i class="fas fa-check-circle"></i> Confirmer';
-        showToast(`❌ ${error.message}`, 'error');
-    }
-}
+                } catch (error) {
+                    console.error('Erreur expedition:', error);
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<i class="fas fa-check-circle"></i> Confirmer';
+                    showToast(`❌ ${error.message}`, 'error');
+                }
+            }
             
             function getCurrentPositionWithRetry() {
                 return new Promise((resolve, reject) => {
