@@ -4,6 +4,8 @@ const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@clust
 const dbName = 'FarmsConnect';
 const livraisonCollectionName = 'Livraison';
 const expeditionCollectionName = 'cour_expedition';
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 100;
 
 exports.handler = async (event, context) => {
     const headers = {
@@ -32,6 +34,15 @@ exports.handler = async (event, context) => {
         };
     }
 
+    // Récupération des paramètres de pagination
+    const queryParams = event.queryStringParameters || {};
+    const page = parseInt(queryParams.page) || 1;
+    let limit = parseInt(queryParams.limit) || DEFAULT_LIMIT;
+    
+    // Limiter le nombre maximum de résultats par page
+    limit = Math.min(limit, MAX_LIMIT);
+    const skip = (page - 1) * limit;
+
     const client = new MongoClient(uri, {
         useNewUrlParser: true,
         useUnifiedTopology: true,
@@ -43,9 +54,12 @@ exports.handler = async (event, context) => {
         await client.connect();
         const db = client.db(dbName);
 
-        const [livraisons, expeditions] = await Promise.all([
+        // Requêtes en parallèle pour meilleure performance
+        const [livraisons, expeditions, totalCount] = await Promise.all([
             db.collection(livraisonCollectionName)
                 .find({})
+                .skip(skip)
+                .limit(limit)
                 .project({
                     codeID: 1,
                     colis: 1,
@@ -55,6 +69,7 @@ exports.handler = async (event, context) => {
                     dateLivraison: 1
                 })
                 .toArray(),
+            
             db.collection(expeditionCollectionName)
                 .find({})
                 .project({
@@ -63,9 +78,12 @@ exports.handler = async (event, context) => {
                     nomLivreur: 1,
                     statut: 1,
                     dateDebut: 1,
-                    estExpedie: 1  // Ajout de ce champ
+                    estExpedie: 1
                 })
-                .toArray()
+                .toArray(),
+            
+            db.collection(livraisonCollectionName)
+                .countDocuments({})
         ]);
 
         if (!livraisons || !expeditions) {
@@ -80,7 +98,7 @@ exports.handler = async (event, context) => {
                     nomLivreur: exp.nomLivreur,
                     statut: exp.statut || 'En cours',
                     dateDebut: exp.dateDebut,
-                    estExpedie: exp.estExpedie || false  // Valeur par défaut
+                    estExpedie: exp.estExpedie || false
                 }
             ])
         );
@@ -110,18 +128,31 @@ exports.handler = async (event, context) => {
                 statut: expedition.statut || livraison.statut || 'En attente',
                 dateLivraison: livraison.dateLivraison,
                 dateDebutExpedition: expedition.dateDebut,
-                estExpedie: expedition.estExpedie || expeditionsMap.has(livraison.codeID), // Si estExpedie existe, on l'utilise, sinon on vérifie si le colis est dans la map
+                estExpedie: expedition.estExpedie || expeditionsMap.has(livraison.codeID),
                 idLivreurEnCharge: expedition.idLivreur,
                 nomLivreur: expedition.nomLivreur || 'Non spécifié'
             };
         });
+
+        // Métadonnées de pagination
+        const pagination = {
+            total: totalCount,
+            page,
+            limit,
+            totalPages: Math.ceil(totalCount / limit),
+            hasNextPage: page * limit < totalCount,
+            hasPrevPage: page > 1
+        };
 
         headers['Cache-Control'] = 'public, max-age=300, must-revalidate';
 
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify(formattedData)
+            body: JSON.stringify({
+                data: formattedData,
+                pagination
+            })
         };
 
     } catch (error) {
