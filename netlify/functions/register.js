@@ -2,7 +2,7 @@ const { MongoClient } = require("mongodb");
 const bcrypt = require("bcryptjs");
 
 const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
-const client = new MongoClient(mongoURI, {
+const client = new MongoClient(uri, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
 });
@@ -115,9 +115,9 @@ exports.handler = async function (event, context) {
                 statusCode: 200,
                 headers: {
                     ...headers,
-                    "Content-Type": "application/json", // S'assurer que le Content-Type est correct pour la redirection côté client
+                    "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ message: registrationMessage, redirect: "/login.html" }), // Ajouter une indication de redirection
+                body: JSON.stringify({ message: registrationMessage, redirect: "/login.html" }),
             };
         } else {
             return {
