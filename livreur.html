@@ -884,31 +884,31 @@
                 });
             }
             
-            // Fonctions de gestion des colis
-            async function fetchColis() {
-                try {
-                    colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
-                    
-                    const res = await fetch('https://livreur2.netlify.app/.netlify/functions/getLivraisons', {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    if (!res.ok) {
-                        throw new Error(`Erreur HTTP: ${res.status}`);
-                    }
-                    
-                    const data = await res.json();
-                    displayColis(data);
-                    
-                } catch (error) {
-                    console.error('Erreur fetch:', error);
-                    showErrorUI(error);
-                }
-            }
-            
+async function fetchColis() {
+    try {
+        colisList.innerHTML = '<div class="loading">Chargement des colis...</div>';
+        
+        const res = await fetch('https://livreur2.netlify.app/.netlify/functions/getLivraisons');
+        
+        if (!res.ok) {
+            throw new Error(`Erreur HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const responseData = await res.json();
+        
+        if (!responseData?.data) {
+            throw new Error('Structure de données invalide - propriété "data" manquante');
+        }
+        
+        console.log('Données reçues:', responseData.data);
+        displayColis(responseData.data);
+        
+    } catch (error) {
+        console.error('Erreur lors du chargement des colis:', error);
+        showErrorUI(error);
+    }
+}
+
             function showErrorUI(error) {
                 colisList.innerHTML = `
                     <div class="error-message">
@@ -922,11 +922,16 @@
                 showToast('Erreur de chargement des colis', 'error');
             }
             
-            function displayColis(colisArray) {
-                if (!colisArray?.length) {
-                    colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
-                    return;
-                }
+function displayColis(response) {
+    // Vérification de la structure de réponse
+    const colisArray = Array.isArray(response) ? response : response?.data || [];
+    
+    console.log('Colis à afficher:', colisArray);
+    
+    if (!colisArray.length) {
+        colisList.innerHTML = '<div class="empty-state">🎉 Aucun colis à livrer pour le moment.</div>';
+        return;
+    }
                 
                 colisList.innerHTML = '';
                 
