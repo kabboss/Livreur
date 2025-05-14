@@ -7,104 +7,125 @@
     <link rel="stylesheet" href="inscrip.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <script type="text/javascript" src="cordova.js"></script>
-
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
 </head>
 <body>
-
-
     <div class="container">
-      <div class="navigation-arrows">
-        <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
-            <svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
-            </svg>
-        </a>
-        <a href="index.html" class="arrow home-button" aria-label="Page d'accueil">
-            <svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-            </svg>
-        </a>
-        <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
-            <svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-            </svg>
-        </button>
-    </div>
-    
-    <br>
+        <div class="navigation-arrows">
+            <a href="Connection.html" class="arrow left-arrow" aria-label="Page précédente">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/>
+                </svg>
+            </a>
+            <a href="index.html" class="arrow home-button" aria-label="Page d'accueil">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                </svg>
+            </a>
+            <button class="arrow refresh-button" aria-label="Actualiser la page" onclick="location.reload();">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M17.65 6.35A7.9 7.9 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08v-4h6v4H17.65zM12 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+                </svg>
+            </button>
+        </div>
+
+        <br>
         <img src="img/ChatGPT Image 30 avr. 2025, 20_34_02.png" alt="Logo Livreur 2.0" class="logo-img">
         <form class="form">
             <label for="login-username">
                 <i class="fas fa-user"></i> Votre Nom d'utilisateur :
             </label>
             <input type="text" id="login-username" name="username" placeholder="Nom d'utilisateur" required>
-        
+
             <label for="whatsapp">
                 <i class="fab fa-whatsapp"></i> Numéro WhatsApp :
             </label>
             <input type="tel" id="whatsapp" name="whatsapp" required />
-        
+
             <label for="secondNumber">
                 <i class="fas fa-phone-alt"></i> Deuxième numéro :
             </label>
-            
+
             <input type="tel" id="secondNumber" name="secondNumber" style="display: block; opacity: 1; pointer-events: auto;" />
-        
+
             <label for="type">
                 <i class="fas fa-user-tag"></i> Type de compte :
             </label>
-            <select id="type" name="type" required>
+            <select id="type" name="type" required onchange="toggleCodeField()">
                 <option value="">-- Choisir un type --</option>
                 <option value="expediteur">Expéditeur (Commerçant ou Particulier)</option>
                 <option value="client">Client</option>
                 <option value="livreur">Livreur</option>
                 <option value="admin">Admin</option>
             </select>
-        
+
+            <div id="code-field" style="display: none;">
+                <label for="identificationCode">
+                    <i class="fas fa-key"></i> Code d'identification :
+                </label>
+                <input type="text" id="identificationCode" name="identificationCode">
+            </div>
+
             <label for="password">
                 <i class="fas fa-lock"></i> Mot de passe :
             </label>
             <input type="password" id="password" name="password" required />
-        
+
             <label for="confirmPassword">
                 <i class="fas fa-lock"></i> Confirmer le mot de passe :
             </label>
             <input type="password" id="confirmPassword" name="confirmPassword" required />
-        
+
             <button type="submit" class="btn">
                 <i class="fas fa-user-plus mr-2"></i> S'inscrire
             </button>
         </form>
-        
+
         <div id="message"></div>
     </div>
 
     <script>
         const form = document.querySelector(".form");
         const message = document.getElementById("message");
+        const codeField = document.getElementById("code-field");
+        const typeSelect = document.getElementById("type");
+
+        function toggleCodeField() {
+            if (typeSelect.value === "livreur" || typeSelect.value === "admin") {
+                codeField.style.display = "block";
+                document.getElementById("identificationCode").setAttribute("required", "");
+            } else {
+                codeField.style.display = "none";
+                document.getElementById("identificationCode").removeAttribute("required");
+                document.getElementById("identificationCode").value = ""; // Effacer le code si le type change
+            }
+        }
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
 
-            // Validation des champs
+            // Validation des champs de base
             const whatsapp = form.whatsapp.value;
             const secondNumber = form.secondNumber.value;
             const type = form.type.value;
             const username = form.username.value;
             const password = form.password.value;
             const confirmPassword = form.confirmPassword.value;
+            const identificationCode = form.identificationCode.value;
 
-            // Vérification des champs vides
             if (!whatsapp || !type || !username || !password || !confirmPassword) {
                 showToast("Tous les champs marqués d'un * sont requis.", 'warning');
                 return;
             }
 
-            // Vérification si les mots de passe correspondent
             if (password !== confirmPassword) {
                 showToast("Le mot de passe et sa confirmation ne correspondent pas.", 'error');
+                return;
+            }
+
+            // Validation spécifique pour livreur et admin
+            if ((type === "livreur" || type === "admin") && !identificationCode) {
+                showToast("Le code d'identification est requis pour ce type de compte.", 'warning');
                 return;
             }
 
@@ -115,6 +136,7 @@
                 username,
                 password,
                 confirmPassword,
+                identificationCode // Inclure le code dans les données envoyées
             };
 
             try {
@@ -125,15 +147,19 @@
                 });
 
                 const result = await res.json();
-                if (res.ok) {
-                    showToast(result.message || "Inscription réussie !", 'success');
-                    form.reset(); // Réinitialiser le formulaire après succès
-                    setTimeout(() => {
-                        window.location.href = '/Connection.html'; // Rediriger vers la page de connexion
-                    }, 1500);
-                } else {
-                    showToast(result.message || "Erreur lors de l'inscription.", 'error');
-                }
+if (res.ok) {
+    const result = await res.json();
+    showToast(result.message || "Inscription réussie !", 'success');
+    form.reset();
+    if (result.redirect) { // Vérifier si une URL de redirection est présente dans la réponse
+        setTimeout(() => {
+            window.location.href = result.redirect; // Effectuer la redirection
+        }, 1500);
+    }
+} else {
+    const result = await res.json();
+    showToast(result.message || "Erreur lors de l'inscription.", 'error');
+}
                 message.innerText = result.message || "Inscription réussie !";
                 message.style.color = res.ok ? "green" : "red";
             } catch (err) {
@@ -163,6 +189,8 @@
                 setTimeout(() => toast.remove(), 300);
             }, 4000);
         }
+        // Initialisation pour afficher/cacher le champ de code au chargement de la page
+        toggleCodeField();
     </script>
 </body>
 </html>
