@@ -10,21 +10,29 @@ const client = new MongoClient(MONGODB_URI, {
 });
 
 const COMMON_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json'
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json'
 };
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: COMMON_HEADERS,
-      body: JSON.stringify({})
-    };
-  }
-    
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({})
+        };
+    }
+
+    if (event.httpMethod !== 'POST') {
+        return {
+            statusCode: 405,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({ error: 'Method Not Allowed' })
+        };
+    }
+
     try {
         const orderData = JSON.parse(event.body);
         
@@ -40,17 +48,21 @@ exports.handler = async (event) => {
         
         return {
             statusCode: 200,
+            headers: COMMON_HEADERS,
             body: JSON.stringify({
                 success: true,
                 insertedId: result.insertedId
             })
         };
     } catch (error) {
+        console.error('Error:', error);
         return {
             statusCode: 500,
+            headers: COMMON_HEADERS,
             body: JSON.stringify({
                 success: false,
-                error: error.message
+                error: 'Internal Server Error',
+                message: error.message
             })
         };
     } finally {
