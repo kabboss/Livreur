@@ -39,7 +39,6 @@ exports.handler = async function(event, context) {
     if (
       !orderData.gasType ||
       !orderData.quantity ||
-      !orderData.deliveryAddress ||
       !orderData.phone1 ||
       !orderData.phone2 ||
       !orderData.clientPosition
