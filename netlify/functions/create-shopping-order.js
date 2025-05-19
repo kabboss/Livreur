@@ -1,6 +1,6 @@
 const { MongoClient } = require('mongodb');
 
-const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const MONGODB_URI = process.env.MONGODB_URI; // Utiliser une variable d'environnement
 const DB_NAME = 'FarmsConnect';
 const COLLECTION_NAME = 'Courses';
 
@@ -17,28 +17,34 @@ const COMMON_HEADERS = {
 };
 
 exports.handler = async (event, context) => {
-    if (event.httpMethod === 'OPTIONS') {
-        return {
-            statusCode: 200,
-            headers: COMMON_HEADERS
-        };
-    }
-
-    if (event.httpMethod !== 'POST') {
-        return {
-            statusCode: 405,
-            headers: { ...COMMON_HEADERS, 'Allow': 'POST, OPTIONS' },
-            body: JSON.stringify({ message: 'Méthode non autorisée' })
-        };
-    }
-
     try {
+        // Gestion de la méthode OPTIONS pour CORS
+        if (event.httpMethod === 'OPTIONS') {
+            return {
+                statusCode: 200,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ message: 'Preflight request successful' })
+            };
+        }
+
+        // Vérification de la méthode POST
+        if (event.httpMethod !== 'POST') {
+            return {
+                statusCode: 405,
+                headers: { ...COMMON_HEADERS, 'Allow': 'POST, OPTIONS' },
+                body: JSON.stringify({ message: 'Méthode non autorisée' })
+            };
+        }
+
+        // Connexion à MongoDB
         await client.connect();
         const db = client.db(DB_NAME);
         const coursesCollection = db.collection(COLLECTION_NAME);
 
+        // Parsing du corps de la requête
         const body = JSON.parse(event.body);
 
+        // Validation des données
         const {
             serviceType,
             shoppingList,
@@ -60,6 +66,7 @@ exports.handler = async (event, context) => {
             };
         }
 
+        // Création du nouvel objet Course
         const newCourse = {
             serviceType: serviceType || 'shopping',
             shoppingList: shoppingList,
@@ -77,6 +84,7 @@ exports.handler = async (event, context) => {
             createdAt: new Date()
         };
 
+        // Insertion dans la base de données
         const result = await coursesCollection.insertOne(newCourse);
 
         if (result.insertedId) {
@@ -86,23 +94,44 @@ exports.handler = async (event, context) => {
                 body: JSON.stringify({ message: 'Demande de courses enregistrée avec succès', orderId: result.insertedId })
             };
         } else {
+            // Erreur spécifique lors de l'insertion
             return {
                 statusCode: 500,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ message: 'Erreur lors de l\'enregistrement de la demande de courses.' })
+                body: JSON.stringify({ message: 'Erreur: Échec de l\'insertion dans la base de données.' })
             };
         }
 
     } catch (error) {
-        console.error('Erreur lors de la connexion à MongoDB ou de l\'enregistrement:', error);
+        // Gestion globale des erreurs
+        console.error('Erreur lors de l\'exécution de la fonction serverless:', error);
+        let errorMessage = 'Erreur serveur inconnue.';
+        let statusCode = 500;
+
+        if (error instanceof SyntaxError) {
+            statusCode = 400;
+            errorMessage = 'Erreur: Données JSON invalides.';
+        } else if (error instanceof Error && error.message.includes('E11000')) { // MongoDB Duplicate Key Error
+            statusCode = 409; // Conflict
+            errorMessage = 'Erreur: Cette demande de courses existe déjà.';
+        } else if (error instanceof Error && error.message.includes('ENOTFOUND')) {
+            statusCode = 503;  // Service Unavailable
+            errorMessage = 'Erreur: Impossible de se connecter à la base de données.';
+        }
+
         return {
-            statusCode: 500,
+            statusCode: statusCode,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ message: 'Erreur serveur lors de l\'enregistrement de la demande de courses.', error: error.message })
+            body: JSON.stringify({ message: errorMessage, error: error.message })
         };
     } finally {
-        if (client.isConnected()) {
-            await client.close();
+        // Fermeture de la connexion MongoDB
+        try {
+            if (client.isConnected()) {
+                await client.close();
+            }
+        } catch (closeError) {
+            console.error("Erreur lors de la fermeture de la connexion MongoDB:", closeError);
         }
     }
 };
