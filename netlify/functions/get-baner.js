@@ -1,44 +1,46 @@
-// netlify/functions/get-baner.js (note le nom du fichier pour correspondre à l'URL)
-
+// netlify/functions/update-message.js
 exports.handler = async (event, context) => {
-  const currentAppVersion = "2.0.0"; 
-  const latestVersionAvailable = "2.1.0"; 
-  const updateMessageText = "⚡ Nouvelle mise à jour (v2.1) disponible ! Optimisations de performance et corrections de bugs. Téléchargez-la maintenant !";
-  
-  // CORRECTION CRUCIALE : Le lien de téléchargement doit être une URL valide vers un fichier !
-  const downloadLinkURL = "https://send20.netlify.app/downloads/SEND_2.1.apk"; // Exemple, REMPLACE PAR TON VRAI LIEN
-
-  const hasNewUpdate = latestVersionAvailable > currentAppVersion; // Attention à la comparaison de chaînes
-
-  try {
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*", // À changer pour ton domaine de prod si possible
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-      body: JSON.stringify({
-        hasUpdate: hasNewUpdate,
-        message: updateMessageText,
-        downloadLink: downloadLinkURL,
-        latestVersion: latestVersionAvailable,
-      }),
+    // Définir les en-têtes CORS pour autoriser les requêtes depuis n'importe quelle origine
+    const headers = {
+        'Access-Control-Allow-Origin': '*', // Autorise toutes les origines
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' // Ajouter d'autres méthodes que vous pourriez utiliser
     };
-  } catch (error) {
-    console.error("Erreur dans la fonction serverless:", error);
-    return {
-      statusCode: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify({
-        hasUpdate: false,
-        message: "Erreur lors de la récupération des informations de mise à jour.",
-        error: error.message,
-      }),
-    };
-  }
+
+    // Gérer les requêtes de pré-vérification (preflight requests)
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 204, // No Content
+            headers: headers
+        };
+    }
+
+    try {
+        // --- Section de configuration ---
+        // Vous pouvez modifier ces valeurs dynamiquement selon vos besoins
+        const message = "Une nouvelle mise à jour a ete fait le 20 mai 2025 ! Téléchargez la pour profiter des dernières fonctionnalités.";
+        const downloadLink = "www.send20.netlify.app"; // Remplacez par votre lien de téléchargement réel
+        const showBanner = true; // Définir à 'false' pour masquer la bannière dynamiquement
+
+        // Vous pourriez également récupérer ces valeurs depuis une base de données, un système de gestion de contenu (CMS),
+        // ou des variables d'environnement pour un contrôle dynamique plus avancé.
+        // Exemple : const data = await fetch('https://your-cms-api.com/updates').then(res => res.json());
+
+        return {
+            statusCode: 200,
+            headers: headers,
+            body: JSON.stringify({
+                message: message,
+                downloadLink: downloadLink,
+                showBanner: showBanner
+            }),
+        };
+    } catch (error) {
+        console.error("Erreur lors de la récupération du message de mise à jour :", error);
+        return {
+            statusCode: 500,
+            headers: headers,
+            body: JSON.stringify({ error: "Échec de la récupération du message de mise à jour." }),
+        };
+    }
 };
