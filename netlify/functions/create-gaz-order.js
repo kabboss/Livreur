@@ -11,11 +11,14 @@ const mongoClient = new MongoClient(MONGODB_URI, {
 const COMMON_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, PUT, DELETE, OPTIONS',
   'Content-Type': 'application/json',
 };
 
 exports.handler = async function(event, context) {
+  console.log("Méthode HTTP reçue:", event.httpMethod);
+
+  // Toujours répondre aux requêtes OPTIONS (pré-vol CORS)
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -24,18 +27,18 @@ exports.handler = async function(event, context) {
     };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: COMMON_HEADERS,
-      body: JSON.stringify({ message: 'Méthode non autorisée' }),
-    };
-  }
+  // 🔴 SUPPRESSION de la vérification stricte de POST
+  // if (event.httpMethod !== 'POST') {
+  //   return {
+  //     statusCode: 405,
+  //     headers: COMMON_HEADERS,
+  //     body: JSON.stringify({ message: 'Méthode non autorisée' }),
+  //   };
+  // }
 
   try {
     const orderData = JSON.parse(event.body);
 
-    // Vérification des champs obligatoires
     if (
       !orderData.phone1 ||
       !orderData.phone2 ||
