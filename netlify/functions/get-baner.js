@@ -20,7 +20,7 @@ exports.handler = async (event, context) => {
   const bannerData = {
     active: true, // Activer/désactiver la bannière
     message: "🚀 Nouvelle version disponible ! Découvrez les améliorations.",
-    downloadUrl: "https://example.com/download/latest", // Lien de téléchargement
+    downloadUrl: "www.send20.netlify.app", // Lien de téléchargement
     // Optionnel: configuration avancée
     priority: "high", // 'high', 'medium', 'low'
     backgroundColor: "#f0f8ff", // Couleur de fond personnalisable
