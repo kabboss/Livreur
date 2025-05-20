@@ -15,7 +15,7 @@ const COMMON_HEADERS = {
   'Content-Type': 'application/json',
 };
 
-exports.handler = async function (event, context) {
+exports.handler = async function(event, context) {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -35,6 +35,7 @@ exports.handler = async function (event, context) {
   try {
     const orderData = JSON.parse(event.body);
 
+    // Vérification des champs obligatoires
     if (
       !orderData.phone1 ||
       !orderData.phone2 ||
@@ -45,7 +46,7 @@ exports.handler = async function (event, context) {
       return {
         statusCode: 400,
         headers: COMMON_HEADERS,
-        body: JSON.stringify({ message: 'Données incomplètes ou invalides.' }),
+        body: JSON.stringify({ message: 'Données manquantes dans la commande.' }),
       };
     }
 
@@ -78,7 +79,7 @@ exports.handler = async function (event, context) {
       }),
     };
   } catch (error) {
-    console.error('Erreur create-gaz-order:', error);
+    console.error('Erreur create-gas-order:', error);
     return {
       statusCode: 500,
       headers: COMMON_HEADERS,
