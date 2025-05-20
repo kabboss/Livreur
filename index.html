@@ -84,18 +84,17 @@
             z-index: -1;
             pointer-events: none;
         }
-    /* Contenu principal */
-    .container {
+ .container {
+      width: 100vw;
+      max-width: 100%;
+      padding: 20px;
       margin: 0 auto;
-      padding: 20px; /* Padding ajusté pour les petits écrans aussi */
-      position: relative;
+      box-sizing: border-box;
+      background-color: #eee;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height:auto; /* S'assure que le conteneur prend au moins toute la hauteur de la vue */
-      width: 369px; /* S'assure qu'il prend toute la largeur disponible */
-      margin-left: -30px;
     }
 
     .download-card {
@@ -316,6 +315,13 @@
         padding: 15px; /* Réduit le padding général */
       }
 
+
+       .container {
+    width: 100%; /* Prend toute la largeur disponible */
+    margin-left: 0; /* Supprime le décalage à gauche */
+    padding: 10px; /* Réduit le padding si nécessaire */
+  }
+
       .download-card {
         padding: 25px 15px;
         border-radius: 15px; /* Bordures légèrement plus petites */
@@ -422,7 +428,7 @@
       <p class="version-info">Version 0.0.1 | 8.3 MB</p>
       <p><i class="fas fa-shield-alt"></i> <strong>Sécurisé : </strong> Fichier vérifié sans virus</p>
       <p class="last-update">📅 Dernière mise à jour : 20 mai 2025</p>
-      
+
       <a href="APK/SEND_2.0.apk" download class="download-btn">
         <i class="fas fa-download"></i> Télécharger l'APK
       </a>

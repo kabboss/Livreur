@@ -14,15 +14,19 @@ exports.handler = async (event, context) => {
     }
 
     try {
-        const message = "Une mise à jour importante est disponible !"; // Message plus court
-        const downloadLink = "https://send20.netlify.app/";
+        // --- Vos messages à afficher dans la bannière ---
+        const updateMessage = "Veuillez cliquer sur télécharger pour une mise à jour de l'application si vous l'avez téléchargée avant le 20 mai 2025 !";
+        const infoMessage = "Merci d'utiliser notre application ! Elle est le fruit du travail passionné d’un jeune Burkinabè, votre petit frère KABORÉ. Cette application a pour but de créer de vraies opportunités pour de nombreuses personnes, ici même au Burkina Faso. 💡🇧🇫\n\nSi vous aimez ce projet, n’hésitez pas à nous soutenir et à en parler autour de vous !\n\n📞 Pour nous contacter :\n- Appelez le 56 66 36 38\n- Écrivez-nous sur WhatsApp au 61 22 97 66\n- Ou par e-mail : kaboreabwa2020@gmail.com\n\nMerci pour votre confiance et votre soutien.\n\n© Tous droits réservés.";
+
+        const downloadLink = "https://send20.netlify.app/"; // Votre lien de téléchargement
         const showBanner = true; // Définir à 'false' pour masquer la bannière dynamiquement
 
         return {
             statusCode: 200,
             headers: headers,
             body: JSON.stringify({
-                message: message,
+                updateMessage: updateMessage, // Le message lié à la mise à jour
+                infoMessage: infoMessage,     // Le message d'information générale
                 downloadLink: downloadLink,
                 showBanner: showBanner
             }),
