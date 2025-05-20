@@ -15,7 +15,7 @@ const COMMON_HEADERS = {
   'Content-Type': 'application/json',
 };
 
-exports.handler = async function(event, context) {
+exports.handler = async function (event, context) {
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -35,13 +35,12 @@ exports.handler = async function(event, context) {
   try {
     const orderData = JSON.parse(event.body);
 
-    // Vérification des champs obligatoires
     if (
-      !orderData.gasType ||
-      !orderData.quantity ||
       !orderData.phone1 ||
       !orderData.phone2 ||
-      !orderData.clientPosition
+      !orderData.clientPosition ||
+      !orderData.gasType ||
+      !orderData.quantity
     ) {
       return {
         statusCode: 400,
@@ -58,14 +57,13 @@ exports.handler = async function(event, context) {
       serviceType: 'gas',
       gasType: orderData.gasType,
       quantity: orderData.quantity,
-      deliveryAddress: orderData.deliveryAddress,
       phone1: orderData.phone1,
       phone2: orderData.phone2,
       notes: orderData.notes || '',
       clientPosition: orderData.clientPosition,
       orderDate: orderData.orderDate || new Date().toISOString(),
       status: orderData.status || 'en attente',
-      deliveryFee: 600,
+      deliveryFee: 700,
       estimatedGasPriceMargin: 1000,
     };
 
@@ -80,7 +78,7 @@ exports.handler = async function(event, context) {
       }),
     };
   } catch (error) {
-    console.error('Erreur create-gas-order:', error);
+    console.error('Erreur create-gaz-order:', error);
     return {
       statusCode: 500,
       headers: COMMON_HEADERS,
