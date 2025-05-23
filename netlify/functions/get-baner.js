@@ -15,8 +15,8 @@ exports.handler = async (event, context) => {
 
     try {
         // --- Vos messages à afficher dans la bannière ---
-        const updateMessage = "Veuillez cliquer sur télécharger pour une mise à jour de l'application si vous l'avez téléchargée avant le 20 mai 2025 !";
-        const infoMessage = "Merci d'utiliser notre application ! Elle est le fruit du travail passionné d’un jeune Burkinabè, votre petit frère KABORÉ. Cette application a pour but de créer de vraies opportunités pour de nombreuses personnes, ici même au Burkina Faso. 💡🇧🇫\n\nSi vous aimez ce projet, n’hésitez pas à nous soutenir et à en parler autour de vous !\n\n📞 Pour nous contacter :\n- Appelez le 56 66 36 38\n- Écrivez-nous sur WhatsApp au 61 22 97 66\n- Ou par e-mail : kaboreabwa2020@gmail.com\n\nMerci pour votre confiance et votre soutien.\n\n© Tous droits réservés.";
+        const updateMessage = "Mise a jour du 23 mai 2025 !";
+        const infoMessage = "Merci d’utiliser notre application. Ce service est le fruit de l’engagement d’un jeune entrepreneur burkinabè, à travers une initiative visant à promouvoir l’innovation locale et à créer des opportunités durables pour les populations du Burkina Faso. 🇧🇫\n\nNotre objectif est de vous offrir une solution fiable, accessible et conçue pour répondre aux besoins réels de notre communauté.\n\n🔹 Pour toute demande d'information, de partenariat ou de collaboration, veuillez nous contacter :\n- Téléphone : 56 66 36 38\n- WhatsApp : 61 22 97 66\n- Email : kaboreabwa2020@gmail.com\n\nNous vous remercions pour votre confiance et restons à votre disposition.\n\n© Tous droits réservés.";
 
         const downloadLink = "https://send20.netlify.app/"; // Votre lien de téléchargement
         const showBanner = true; // Définir à 'false' pour masquer la bannière dynamiquement
