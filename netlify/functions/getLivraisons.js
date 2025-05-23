@@ -1,15 +1,13 @@
-// Fonction getLivraisons (déjà existante mais améliorée)
 const { MongoClient } = require('mongodb');
 
 const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const dbName = 'FarmsConnect';
 
 exports.handler = async (event, context) => {
-    // Headers CORS améliorés
     const headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-requested-with',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Content-Type': 'application/json'
     };
 
@@ -26,9 +24,11 @@ exports.handler = async (event, context) => {
         await client.connect();
         const db = client.db(dbName);
 
-        // Récupération des données
+        // Récupération des données avec filtrage des livraisons non terminées
         const [livraisons, expeditions] = await Promise.all([
-            db.collection('Livraison').find({}).toArray(),
+            db.collection('Livraison').find({ 
+                statut: { $ne: 'livrée' } 
+            }).sort({ dateDebutExpedition: -1 }).toArray(),
             db.collection('cour_expedition').find({}).toArray()
         ]);
 
@@ -54,7 +54,10 @@ exports.handler = async (event, context) => {
         return {
             statusCode: 500,
             headers,
-            body: JSON.stringify({ error: error.message })
+            body: JSON.stringify({ 
+                error: 'Failed to fetch delivery data',
+                details: error.message 
+            })
         };
     } finally {
         await client.close();
