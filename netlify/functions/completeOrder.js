@@ -1,10 +1,8 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
-// Configuration de la base de données
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
 
-// Configuration des en-têtes HTTP
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -13,7 +11,6 @@ const COMMON_HEADERS = {
 };
 
 exports.handler = async (event) => {
-    // Gestion des requêtes OPTIONS (CORS)
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
@@ -22,7 +19,6 @@ exports.handler = async (event) => {
         };
     }
 
-    // Vérification de la méthode HTTP
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
@@ -34,19 +30,12 @@ exports.handler = async (event) => {
     let client;
 
     try {
-        // Connexion à MongoDB
-        client = await MongoClient.connect(MONGODB_URI, {
-            connectTimeoutMS: 5000,
-            serverSelectionTimeoutMS: 5000
-        });
-        const db = client.db(DB_NAME);
-
-        // Parsing des données de la requête
+        // Parser les données
         const data = JSON.parse(event.body);
-        const { orderId, serviceType, driverId, driverName, notes } = data;
+        const { orderId, serviceType, driverName, driverId, notes } = data;
 
-        // Validation des données requises
-        if (!orderId || !serviceType || !driverId) {
+        // Validation des données
+        if (!orderId || !serviceType || !driverName || !driverId) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
@@ -54,7 +43,11 @@ exports.handler = async (event) => {
             };
         }
 
-        // Détermination de la collection en fonction du type de service
+        // Connexion à MongoDB
+        client = await MongoClient.connect(MONGODB_URI);
+        const db = client.db(DB_NAME);
+
+        // Déterminer la collection
         const collectionMap = {
             packages: 'Livraison',
             food: 'Commandes',
@@ -67,60 +60,49 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: `Type de service non valide: ${serviceType}` })
+                body: JSON.stringify({ error: 'Type de service invalide' })
             };
         }
 
-        const collection = db.collection(collectionName);
-
-        // Vérification de l'existence de la commande et qu'elle est bien assignée au livreur
-        const order = await collection.findOne({ 
-            _id: new ObjectId(orderId),
-            driverId: driverId,
-            status: 'en cours'
-        });
-
-        if (!order) {
-            return {
-                statusCode: 404,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ 
-                    error: 'Commande non trouvée ou non assignée à ce livreur',
-                    suggestion: 'Vérifiez que vous êtes bien le livreur assigné à cette commande'
-                })
-            };
-        }
-
-        // Préparation des données de mise à jour
-        const updateData = {
-            status: 'livrée',
-            deliveryNotes: notes || null,
-            deliveredAt: new Date(),
-            lastUpdated: new Date()
-        };
-
-        // Mise à jour de la commande
-        const result = await collection.updateOne(
+        // Mettre à jour la commande
+        const result = await db.collection(collectionName).updateOne(
             { _id: new ObjectId(orderId) },
-            { $set: updateData }
+            { 
+                $set: { 
+                    status: 'livrée',
+                    driverName: driverName,
+                    driverId: driverId,
+                    deliveryNotes: notes || null,
+                    deliveredAt: new Date()
+                } 
+            }
         );
 
         if (result.modifiedCount === 0) {
             return {
-                statusCode: 500,
+                statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Échec de la mise à jour de la commande' })
+                body: JSON.stringify({ error: 'Commande non trouvée' })
             };
         }
 
-        // Réponse de succès
+        // Enregistrer dans la collection des livraisons
+        await db.collection('LivraisonsEffectuees').insertOne({
+            orderId: orderId,
+            serviceType: serviceType,
+            driverName: driverName,
+            driverId: driverId,
+            deliveryNotes: notes || null,
+            deliveryDate: new Date(),
+            status: 'livrée'
+        });
+
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
-                message: 'Livraison marquée comme terminée avec succès',
-                orderId,
-                deliveredAt: updateData.deliveredAt
+                message: 'Livraison enregistrée avec succès',
+                deliveryId: result.insertedId
             })
         };
 
@@ -129,11 +111,9 @@ exports.handler = async (event) => {
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: error.message || 'Erreur serveur' })
+            body: JSON.stringify({ error: error.message })
         };
     } finally {
-        if (client) {
-            await client.close();
-        }
+        if (client) await client.close();
     }
 };
