@@ -1,10 +1,8 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
-// Configuration de la base de données
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
 
-// Configuration des en-têtes HTTP
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -13,7 +11,6 @@ const COMMON_HEADERS = {
 };
 
 exports.handler = async (event) => {
-    // Gestion des requêtes OPTIONS (CORS)
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
@@ -22,7 +19,6 @@ exports.handler = async (event) => {
         };
     }
 
-    // Vérification de la méthode HTTP
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
@@ -34,19 +30,11 @@ exports.handler = async (event) => {
     let client;
 
     try {
-        // Connexion à MongoDB
-        client = await MongoClient.connect(MONGODB_URI, {
-            connectTimeoutMS: 5000,
-            serverSelectionTimeoutMS: 5000
-        });
-        const db = client.db(DB_NAME);
-
-        // Parsing des données de la requête
         const data = JSON.parse(event.body);
         const { orderId, serviceType, driverId, driverName, driverPhone1, driverPhone2, driverLocation } = data;
 
-        // Validation des données requises
-        if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1 || !driverLocation) {
+        // Validation des données
+        if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
@@ -54,7 +42,10 @@ exports.handler = async (event) => {
             };
         }
 
-        // Détermination de la collection en fonction du type de service
+        client = await MongoClient.connect(MONGODB_URI);
+        const db = client.db(DB_NAME);
+
+        // Déterminer la collection
         const collectionMap = {
             packages: 'Livraison',
             food: 'Commandes',
@@ -67,69 +58,49 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: `Type de service non valide: ${serviceType}` })
+                body: JSON.stringify({ error: 'Type de service invalide' })
             };
         }
 
-        const collection = db.collection(collectionName);
-
-        // Vérification de l'existence de la commande
-        const order = await collection.findOne({ _id: new ObjectId(orderId) });
-        if (!order) {
-            return {
-                statusCode: 404,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande non trouvée' })
-            };
+        // Convertir orderId en ObjectId seulement si c'est un format valide
+        let query;
+        try {
+            query = { _id: new ObjectId(orderId) };
+        } catch (e) {
+            // Si orderId n'est pas un ObjectId valide, chercher par un autre champ (comme codeID)
+            query = { codeID: orderId };
         }
 
-        // Vérification que la commande n'est pas déjà assignée
-        if (order.status === 'en cours' && order.driverId) {
-            return {
-                statusCode: 400,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ 
-                    error: 'Commande déjà assignée',
-                    currentDriver: order.driverName || order.driverId
-                })
-            };
-        }
-
-        // Préparation des données de mise à jour
-        const updateData = {
-            status: 'en cours',
-            driverId,
-            driverName,
-            driverPhone: driverPhone1,
-            driverPhone2: driverPhone2 || null,
-            driverLocation,
-            assignedAt: new Date(),
-            lastUpdated: new Date()
-        };
-
-        // Mise à jour de la commande
-        const result = await collection.updateOne(
-            { _id: new ObjectId(orderId) },
-            { $set: updateData }
+        // Mettre à jour la commande
+        const result = await db.collection(collectionName).updateOne(
+            query,
+            { 
+                $set: { 
+                    status: 'en cours',
+                    driverId: driverId,
+                    driverName: driverName,
+                    driverPhone: driverPhone1,
+                    driverPhone2: driverPhone2 || null,
+                    driverLocation: driverLocation,
+                    assignedAt: new Date()
+                } 
+            }
         );
 
         if (result.modifiedCount === 0) {
             return {
-                statusCode: 500,
+                statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Échec de la mise à jour de la commande' })
+                body: JSON.stringify({ error: 'Commande non trouvée ou déjà assignée' })
             };
         }
 
-        // Réponse de succès
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
                 message: 'Livreur assigné avec succès',
-                orderId,
-                driverId,
-                driverName
+                orderId: orderId
             })
         };
 
@@ -138,11 +109,12 @@ exports.handler = async (event) => {
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: error.message || 'Erreur serveur' })
+            body: JSON.stringify({ 
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            })
         };
     } finally {
-        if (client) {
-            await client.close();
-        }
+        if (client) await client.close();
     }
 };
