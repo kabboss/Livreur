@@ -23,18 +23,16 @@ exports.handler = async (event) => {
         return {
             statusCode: 405,
             headers: COMMON_HEADERS,
-            body: 'Method Not Allowed'
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
         };
     }
 
     let client;
 
     try {
-        // Parser les données
         const data = JSON.parse(event.body);
         const { orderId, serviceType, driverName, driverId, notes } = data;
 
-        // Validation des données
         if (!orderId || !serviceType || !driverName || !driverId) {
             return {
                 statusCode: 400,
@@ -43,11 +41,35 @@ exports.handler = async (event) => {
             };
         }
 
-        // Connexion à MongoDB
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Déterminer la collection
+        // Pour les colis, vérifier d'abord dans cour_expedition
+        if (serviceType === 'packages') {
+            const expedition = await db.collection('cour_expedition').findOne({ 
+                orderId: orderId,
+                serviceType: 'packages'
+            });
+
+            if (!expedition) {
+                return {
+                    statusCode: 404,
+                    headers: COMMON_HEADERS,
+                    body: JSON.stringify({ error: 'Expédition non trouvée' })
+                };
+            }
+
+            // Vérifier que le livreur correspond
+            if (expedition.driverId !== driverId) {
+                return {
+                    statusCode: 403,
+                    headers: COMMON_HEADERS,
+                    body: JSON.stringify({ error: 'Vous n\'êtes pas le livreur assigné à cette commande' })
+                };
+            }
+        }
+
+        // Déterminer la collection source
         const collectionMap = {
             packages: 'Livraison',
             food: 'Commandes',
@@ -64,50 +86,56 @@ exports.handler = async (event) => {
             };
         }
 
-        // Mettre à jour la commande
-        const result = await db.collection(collectionName).updateOne(
-            { _id: new ObjectId(orderId) },
-            { 
-                $set: { 
+        // Mise à jour de la commande originale
+        const updateResult = await db.collection(collectionName).updateOne(
+            { $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }] },
+            {
+                $set: {
                     status: 'livrée',
                     driverName: driverName,
                     driverId: driverId,
                     deliveryNotes: notes || null,
                     deliveredAt: new Date()
-                } 
+                }
             }
         );
 
-        if (result.modifiedCount === 0) {
+        if (updateResult.modifiedCount === 0) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande non trouvée' })
+                body: JSON.stringify({ error: 'Commande non trouvée ou déjà livrée' })
             };
         }
 
-        // Enregistrer dans la collection des livraisons
-        await db.collection('LivraisonsEffectuees').insertOne({
-            orderId: orderId,
-            serviceType: serviceType,
-            driverName: driverName,
-            driverId: driverId,
-            deliveryNotes: notes || null,
-            deliveryDate: new Date(),
-            status: 'livrée'
-        });
+        // Pour les colis, supprimer de cour_expedition et archiver
+        if (serviceType === 'packages') {
+            await db.collection('cour_expedition').deleteOne({ 
+                orderId: orderId,
+                serviceType: 'packages'
+            });
+
+            await db.collection('LivraisonsEffectuees').insertOne({
+                ...(await db.collection(collectionName).findOne({ 
+                    $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }] 
+                }) || {},
+                serviceType: serviceType,
+                deliveryDate: new Date(),
+                status: 'livrée'
+            });
+        }
 
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 message: 'Livraison enregistrée avec succès',
-                deliveryId: result.insertedId
+                orderId: orderId
             })
         };
 
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur :', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,

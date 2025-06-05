@@ -45,7 +45,24 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Déterminer la collection
+        // Vérifier si la commande est déjà dans cour_expedition
+        const existingExpedition = await db.collection('cour_expedition').findOne({ 
+            orderId: orderId,
+            serviceType: 'packages'
+        });
+
+        if (existingExpedition) {
+            return {
+                statusCode: 400,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ 
+                    error: `Le livreur ${existingExpedition.driverName} est déjà en charge de cette commande`,
+                    isAlreadyAssigned: true
+                })
+            };
+        }
+
+        // Déterminer la collection source
         const collectionMap = {
             packages: 'Livraison',
             food: 'Commandes',
@@ -62,17 +79,44 @@ exports.handler = async (event) => {
             };
         }
 
-        // Convertir orderId en ObjectId seulement si c'est un format valide
+        // Convertir orderId en ObjectId ou chercher par codeID
         let query;
         try {
             query = { _id: new ObjectId(orderId) };
         } catch (e) {
-            // Si orderId n'est pas un ObjectId valide, chercher par un autre champ (comme codeID)
             query = { codeID: orderId };
         }
 
-        // Mettre à jour la commande
-        const result = await db.collection(collectionName).updateOne(
+        // Récupérer la commande originale
+        const originalOrder = await db.collection(collectionName).findOne(query);
+        if (!originalOrder) {
+            return {
+                statusCode: 404,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ error: 'Commande non trouvée' })
+            };
+        }
+
+        // Créer l'objet expedition
+        const expeditionData = {
+            ...originalOrder,
+            orderId: originalOrder._id.toString() || originalOrder.codeID,
+            serviceType: serviceType,
+            driverId: driverId,
+            driverName: driverName,
+            driverPhone1: driverPhone1,
+            driverPhone2: driverPhone2 || null,
+            driverLocation: driverLocation,
+            assignedAt: new Date(),
+            status: 'en cours',
+            originalCollection: collectionName
+        };
+
+        // Insérer dans cour_expedition
+        const expeditionResult = await db.collection('cour_expedition').insertOne(expeditionData);
+
+        // Mettre à jour la commande originale
+        const updateResult = await db.collection(collectionName).updateOne(
             query,
             { 
                 $set: { 
@@ -87,11 +131,13 @@ exports.handler = async (event) => {
             }
         );
 
-        if (result.modifiedCount === 0) {
+        if (updateResult.modifiedCount === 0) {
+            // Rollback si la mise à jour échoue
+            await db.collection('cour_expedition').deleteOne({ _id: expeditionResult.insertedId });
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande non trouvée ou déjà assignée' })
+                body: JSON.stringify({ error: 'Échec de la mise à jour de la commande' })
             };
         }
 
@@ -100,7 +146,8 @@ exports.handler = async (event) => {
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
                 message: 'Livreur assigné avec succès',
-                orderId: orderId
+                orderId: orderId,
+                expeditionId: expeditionResult.insertedId
             })
         };
 
