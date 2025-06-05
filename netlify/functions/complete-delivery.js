@@ -39,39 +39,43 @@ exports.handler = async function(event, context) {
                 headers: { 'Access-Control-Allow-Origin': '*' },
                 body: JSON.stringify({ 
                     success: false, 
-                    message: 'Vous n\'êtes pas autorisé à mettre à jour cette livraison' 
+                    message: 'Vous n\'êtes pas autorisé à terminer cette livraison' 
                 }),
             };
         }
 
-        // Mettre à jour la position dans cour_expedition
-        await db.collection('cour_expedition').updateOne(
-            { codeID: data.codeID },
-            { $set: { 
-                'positionActuelle': {
-                    latitude: parseFloat(data.latitude),
-                    longitude: parseFloat(data.longitude),
-                    updatedAt: new Date()
-                }
-            } }
-        );
+        // Récupérer les infos complètes de la commande
+        const commande = await db.collection('commandes').findOne({ codeID: data.codeID });
+        
+        if (!commande) {
+            return {
+                statusCode: 404,
+                headers: { 'Access-Control-Allow-Origin': '*' },
+                body: JSON.stringify({ 
+                    success: false, 
+                    message: 'Commande non trouvée' 
+                }),
+            };
+        }
 
-        // Enregistrer dans cour_livraison pour le suivi historique
-        await db.collection('cour_livraison').insertOne({
-            codeID: data.codeID,
+        // Enregistrer dans LivraisonsEffectuees
+        await db.collection('LivraisonsEffectuees').insertOne({
+            ...commande,
             livreurId: data.livreurId,
-            position: {
-                latitude: parseFloat(data.latitude),
-                longitude: parseFloat(data.longitude)
-            },
-            datePosition: new Date(),
-            statut: 'en_route'
+            livreurNom: delivery.livreurNom,
+            dateLivraisonReelle: new Date(),
+            statut: 'livree',
+            commentaires: data.commentaires || ''
         });
+
+        // Supprimer des collections courantes
+        await db.collection('cour_expedition').deleteOne({ codeID: data.codeID });
+        await db.collection('commandes').deleteOne({ codeID: data.codeID });
 
         return {
             statusCode: 200,
             headers: { 'Access-Control-Allow-Origin': '*' },
-            body: JSON.stringify({ success: true, message: 'Position mise à jour avec succès' }),
+            body: JSON.stringify({ success: true, message: 'Livraison terminée avec succès' }),
         };
     } catch (error) {
         console.error('Error:', error);

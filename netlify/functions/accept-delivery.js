@@ -4,7 +4,6 @@ const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/Farms
 const dbName = 'FarmsConnect';
 
 exports.handler = async function(event, context) {
-    // Handle OPTIONS request for CORS preflight
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 204,
