@@ -1,11 +1,11 @@
 const { MongoClient } = require('mongodb');
 
-// Définissez vos en-têtes CORS pour autoriser toutes les origines
+// Assurez-vous que COMMON_HEADERS est défini globalement dans ce fichier de fonction
 const COMMON_HEADERS = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*', // Autorise toutes les origines
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', // Autorise les méthodes HTTP
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization' // Autorise les en-têtes spécifiques
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
 };
 
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
@@ -17,14 +17,16 @@ exports.handler = async (event) => {
         return { statusCode: 204, headers: COMMON_HEADERS };
     }
 
+    let client; // Déclarez client ici pour qu'il soit accessible dans finally
     try {
-        const client = new MongoClient(MONGODB_URI, { useUnifiedTopology: true });
-        await client.connect();
+        client = new MongoClient(MONGODB_URI, { useUnifiedTopology: true });
+        await client.connect(); // Tente de se connecter à MongoDB
         
         const db = client.db(DB_NAME);
         const orders = await db.collection('Livraison')
             .find({ 
                 statut: { $in: ['En attente', 'En cours'] },
+                // Vérifie si livreur.idLivreur n'existe pas OU correspond à driverId
                 $or: [
                     { 'livreur.idLivreur': { $exists: false } },
                     { 'livreur.idLivreur': event.queryStringParameters?.driverId || '' }
@@ -34,19 +36,19 @@ exports.handler = async (event) => {
 
         return {
             statusCode: 200,
-            headers: COMMON_HEADERS, // Utilisez les en-têtes communs ici
+            headers: COMMON_HEADERS,
             body: JSON.stringify(orders)
         };
     } catch (error) {
+        console.error("Erreur dans getPackageOrders:", error); // Très important pour le débogage sur Netlify
         return {
-            statusCode: 500,
-            headers: COMMON_HEADERS, // Utilisez les en-têtes communs ici
-            body: JSON.stringify({ error: error.message })
+            statusCode: 500, // Utilisez 500 pour les erreurs internes
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({ error: error.message || "Erreur interne du serveur lors de la récupération des commandes." })
         };
     } finally {
-        // Assurez-vous de fermer la connexion à la base de données
         if (client) {
-            await client.close();
+            await client.close(); // Ferme la connexion MongoDB
         }
     }
 };
