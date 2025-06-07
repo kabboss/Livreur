@@ -23,7 +23,7 @@ exports.handler = async (event) => {
         return {
             statusCode: 405,
             headers: COMMON_HEADERS,
-            body: 'Method Not Allowed'
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
         };
     }
 
@@ -31,10 +31,10 @@ exports.handler = async (event) => {
 
     try {
         const data = JSON.parse(event.body);
-        const { orderId, serviceType, driverId, driverName, driverPhone1, driverPhone2, driverLocation } = data;
+        const { orderId, serviceType, driverId, driverName, driverPhone1, driverLocation } = data;
 
-        // Validation des données
-        if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1) {
+        // Validation
+        if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1 || !driverLocation) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
@@ -45,18 +45,18 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier si la commande est déjà dans cour_expedition
-        const existingExpedition = await db.collection('cour_expedition').findOne({ 
+        // Vérifier si la commande est déjà assignée
+        const existingAssignment = await db.collection('cour_expedition').findOne({ 
             orderId: orderId,
-            serviceType: 'packages'
+            serviceType: serviceType
         });
 
-        if (existingExpedition) {
+        if (existingAssignment) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
-                    error: `Le livreur ${existingExpedition.driverName} est déjà en charge de cette commande`,
+                    error: `Cette commande est déjà assignée à ${existingAssignment.driverName}`,
                     isAlreadyAssigned: true
                 })
             };
@@ -79,7 +79,7 @@ exports.handler = async (event) => {
             };
         }
 
-        // Convertir orderId en ObjectId ou chercher par codeID
+        // Trouver la commande originale
         let query;
         try {
             query = { _id: new ObjectId(orderId) };
@@ -87,7 +87,6 @@ exports.handler = async (event) => {
             query = { codeID: orderId };
         }
 
-        // Récupérer la commande originale
         const originalOrder = await db.collection(collectionName).findOne(query);
         if (!originalOrder) {
             return {
@@ -100,12 +99,11 @@ exports.handler = async (event) => {
         // Créer l'objet expedition
         const expeditionData = {
             ...originalOrder,
-            orderId: originalOrder._id.toString() || originalOrder.codeID,
+            orderId: orderId,
             serviceType: serviceType,
             driverId: driverId,
             driverName: driverName,
             driverPhone1: driverPhone1,
-            driverPhone2: driverPhone2 || null,
             driverLocation: driverLocation,
             assignedAt: new Date(),
             status: 'en cours',
@@ -113,41 +111,32 @@ exports.handler = async (event) => {
         };
 
         // Insérer dans cour_expedition
-        const expeditionResult = await db.collection('cour_expedition').insertOne(expeditionData);
+        await db.collection('cour_expedition').insertOne(expeditionData);
 
         // Mettre à jour la commande originale
-        const updateResult = await db.collection(collectionName).updateOne(
-            query,
-            { 
-                $set: { 
-                    status: 'en cours',
-                    driverId: driverId,
-                    driverName: driverName,
-                    driverPhone: driverPhone1,
-                    driverPhone2: driverPhone2 || null,
-                    driverLocation: driverLocation,
-                    assignedAt: new Date()
-                } 
-            }
-        );
+        const updateData = {
+            status: 'en cours',
+            driverId: driverId,
+            driverName: driverName,
+            driverPhone: driverPhone1,
+            assignedAt: new Date()
+        };
 
-        if (updateResult.modifiedCount === 0) {
-            // Rollback si la mise à jour échoue
-            await db.collection('cour_expedition').deleteOne({ _id: expeditionResult.insertedId });
-            return {
-                statusCode: 404,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Échec de la mise à jour de la commande' })
-            };
+        // Pour les colis, on utilise un champ différent
+        if (serviceType === 'packages') {
+            updateData.idLivreurEnCharge = driverId;
+            updateData.nomLivreur = driverName;
+            updateData.estExpedie = true;
         }
+
+        await db.collection(collectionName).updateOne(query, { $set: updateData });
 
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
                 message: 'Livreur assigné avec succès',
-                orderId: orderId,
-                expeditionId: expeditionResult.insertedId
+                orderId: orderId
             })
         };
 

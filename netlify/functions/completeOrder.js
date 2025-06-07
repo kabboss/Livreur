@@ -44,27 +44,19 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Pour les colis, vérifier d'abord dans cour_expedition
+        // Vérifier l'assignation pour les colis
         if (serviceType === 'packages') {
             const expedition = await db.collection('cour_expedition').findOne({ 
                 orderId: orderId,
-                serviceType: 'packages'
+                serviceType: 'packages',
+                driverId: driverId
             });
 
             if (!expedition) {
                 return {
                     statusCode: 404,
                     headers: COMMON_HEADERS,
-                    body: JSON.stringify({ error: 'Expédition non trouvée' })
-                };
-            }
-
-            // Vérifier que le livreur correspond
-            if (expedition.driverId !== driverId) {
-                return {
-                    statusCode: 403,
-                    headers: COMMON_HEADERS,
-                    body: JSON.stringify({ error: 'Vous n\'êtes pas le livreur assigné à cette commande' })
+                    body: JSON.stringify({ error: 'Expédition non trouvée ou non assignée à ce livreur' })
                 };
             }
         }
@@ -86,18 +78,18 @@ exports.handler = async (event) => {
             };
         }
 
-        // Mise à jour de la commande originale
+        // Mettre à jour la commande originale
+        const updateData = {
+            status: 'livrée',
+            driverName: driverName,
+            driverId: driverId,
+            deliveredAt: new Date(),
+            deliveryNotes: notes || null
+        };
+
         const updateResult = await db.collection(collectionName).updateOne(
             { $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }] },
-            {
-                $set: {
-                    status: 'livrée',
-                    driverName: driverName,
-                    driverId: driverId,
-                    deliveryNotes: notes || null,
-                    deliveredAt: new Date()
-                }
-            }
+            { $set: updateData }
         );
 
         if (updateResult.modifiedCount === 0) {
@@ -115,14 +107,18 @@ exports.handler = async (event) => {
                 serviceType: 'packages'
             });
 
-            await db.collection('LivraisonsEffectuees').insertOne({
-                ...(await db.collection(collectionName).findOne({ 
-                    $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }] 
-                }) || {},
-                serviceType: serviceType,
-                deliveryDate: new Date(),
-                status: 'livrée'
+            const deliveredOrder = await db.collection(collectionName).findOne({
+                $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }]
             });
+
+            if (deliveredOrder) {
+                await db.collection('LivraisonsEffectuees').insertOne({
+                    ...deliveredOrder,
+                    serviceType: serviceType,
+                    deliveryDate: new Date(),
+                    status: 'livrée'
+                });
+            }
         }
 
         return {
@@ -135,11 +131,14 @@ exports.handler = async (event) => {
         };
 
     } catch (error) {
-        console.error('Erreur :', error);
+        console.error('Erreur:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: error.message })
+            body: JSON.stringify({ 
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            })
         };
     } finally {
         if (client) await client.close();
