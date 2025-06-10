@@ -1,4 +1,4 @@
-const { MongoClient, ObjectId } = require('mongodb');
+const { MongoClient } = require('mongodb');
 
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
@@ -44,14 +44,14 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier l'assignation
+        // Vérifier l'assignation avec driverId court
         const expedition = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
                 { codeID: orderId }
             ],
             serviceType: serviceType,
-            driverId: driverId
+            driverId: driverId // Utilisation directe du driverId court
         });
 
         if (!expedition && serviceType === 'packages') {
@@ -83,7 +83,7 @@ exports.handler = async (event) => {
         const updateData = {
             status: 'livrée',
             driverName: driverName,
-            driverId: driverId,
+            driverId: driverId, // Conservation du driverId court
             deliveredAt: new Date(),
             deliveryNotes: notes || null
         };
@@ -91,7 +91,7 @@ exports.handler = async (event) => {
         const updateResult = await db.collection(collectionName).updateOne(
             { 
                 $or: [
-                    { _id: new ObjectId(orderId) },
+                    { _id: expedition?._id }, // Utilisation de l'ID de l'expédition si disponible
                     { codeID: orderId }
                 ]
             },
@@ -107,18 +107,14 @@ exports.handler = async (event) => {
         }
 
         // Pour les colis, supprimer de cour_expedition et archiver
-        if (serviceType === 'packages') {
+        if (serviceType === 'packages' && expedition) {
             await db.collection('cour_expedition').deleteOne({ 
-                $or: [
-                    { orderId: orderId },
-                    { codeID: orderId }
-                ],
-                serviceType: 'packages'
+                _id: expedition._id
             });
 
             const deliveredOrder = await db.collection(collectionName).findOne({
                 $or: [
-                    { _id: new ObjectId(orderId) },
+                    { _id: expedition._id },
                     { codeID: orderId }
                 ]
             });

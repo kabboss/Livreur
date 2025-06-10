@@ -1,4 +1,4 @@
-const { MongoClient, ObjectId } = require('mongodb');
+const { MongoClient } = require('mongodb');
 
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
@@ -44,14 +44,14 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier l'assignation
+        // Vérifier l'assignation (avec driverId court)
         const expedition = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
                 { codeID: orderId }
             ],
             serviceType: 'packages',
-            driverId: driverId
+            driverId: driverId // Utilisation directe du driverId court
         });
 
         if (!expedition) {
@@ -77,7 +77,7 @@ exports.handler = async (event) => {
         await db.collection(expedition.originalCollection).updateOne(
             { 
                 $or: [
-                    { _id: new ObjectId(orderId) },
+                    { _id: expedition._id }, // Utilisation de l'ID de l'expédition
                     { codeID: orderId }
                 ]
             },
