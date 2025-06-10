@@ -10,6 +10,11 @@ const COMMON_HEADERS = {
     'Content-Type': 'application/json'
 };
 
+// Fonction de validation d'ObjectId
+function isValidObjectId(id) {
+    return /^[0-9a-fA-F]{24}$/.test(id);
+}
+
 exports.handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') {
         return {
@@ -41,10 +46,19 @@ exports.handler = async (event) => {
             };
         }
 
+        // Validation des IDs
+        if (!isValidObjectId(driverId)) {
+            return {
+                statusCode: 400,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ error: 'driverId doit être un ObjectId valide (24 caractères hexa)' })
+            };
+        }
+
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier d'abord dans cour_expedition pour les colis
+        // Recherche de l'expédition
         const expedition = await db.collection('cour_expedition').findOne({ 
             orderId: orderId,
             serviceType: 'packages'
@@ -58,7 +72,7 @@ exports.handler = async (event) => {
             };
         }
 
-        // Vérifier que le livreur correspond
+        // Vérification du livreur
         if (expedition.driverId !== driverId) {
             return {
                 statusCode: 403,
@@ -67,7 +81,15 @@ exports.handler = async (event) => {
             };
         }
 
-        // Mettre à jour la position dans cour_expedition
+        // Préparation du filtre de mise à jour
+        let updateFilter;
+        if (isValidObjectId(orderId)) {
+            updateFilter = { _id: new ObjectId(orderId) };
+        } else {
+            updateFilter = { codeID: orderId };
+        }
+
+        // Mise à jour dans cour_expedition
         await db.collection('cour_expedition').updateOne(
             { _id: expedition._id },
             { 
@@ -78,9 +100,9 @@ exports.handler = async (event) => {
             }
         );
 
-        // Mettre à jour également dans la collection originale
+        // Mise à jour dans la collection originale
         await db.collection(expedition.originalCollection).updateOne(
-            { $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }] },
+            updateFilter,
             { 
                 $set: { 
                     driverLocation: location,
