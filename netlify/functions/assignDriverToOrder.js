@@ -33,7 +33,6 @@ exports.handler = async (event) => {
         const data = JSON.parse(event.body);
         const { orderId, serviceType, driverId, driverName, driverPhone1, driverLocation } = data;
 
-        // Validation
         if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1 || !driverLocation) {
             return {
                 statusCode: 400,
@@ -47,7 +46,10 @@ exports.handler = async (event) => {
 
         // Vérifier si la commande est déjà assignée
         const existingAssignment = await db.collection('cour_expedition').findOne({ 
-            orderId: orderId,
+            $or: [
+                { orderId: orderId },
+                { codeID: orderId }
+            ],
             serviceType: serviceType
         });
 
@@ -56,7 +58,7 @@ exports.handler = async (event) => {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
-                    error: `Cette commande est déjà assignée à ${existingAssignment.driverName}`,
+                    error: `Cette commande est déjà assignée à ${existingAssignment.driverName || existingAssignment.nomLivreur}`,
                     isAlreadyAssigned: true
                 })
             };
@@ -122,7 +124,7 @@ exports.handler = async (event) => {
             assignedAt: new Date()
         };
 
-        // Pour les colis, on utilise un champ différent
+        // Pour les colis, on utilise des champs spécifiques
         if (serviceType === 'packages') {
             updateData.idLivreurEnCharge = driverId;
             updateData.nomLivreur = driverName;

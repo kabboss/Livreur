@@ -10,11 +10,6 @@ const COMMON_HEADERS = {
     'Content-Type': 'application/json'
 };
 
-// Fonction de validation d'ObjectId
-function isValidObjectId(id) {
-    return /^[0-9a-fA-F]{24}$/.test(id);
-}
-
 exports.handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') {
         return {
@@ -46,50 +41,28 @@ exports.handler = async (event) => {
             };
         }
 
-        // Validation des IDs
-        if (!isValidObjectId(driverId)) {
-            return {
-                statusCode: 400,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'driverId doit être un ObjectId valide (24 caractères hexa)' })
-            };
-        }
-
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Recherche de l'expédition
+        // Vérifier l'assignation
         const expedition = await db.collection('cour_expedition').findOne({ 
-            orderId: orderId,
-            serviceType: 'packages'
+            $or: [
+                { orderId: orderId },
+                { codeID: orderId }
+            ],
+            serviceType: 'packages',
+            driverId: driverId
         });
 
         if (!expedition) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Expédition non trouvée' })
+                body: JSON.stringify({ error: 'Expédition non trouvée ou non assignée à ce livreur' })
             };
         }
 
-        // Vérification du livreur
-        if (expedition.driverId !== driverId) {
-            return {
-                statusCode: 403,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Vous n\'êtes pas le livreur assigné à cette commande' })
-            };
-        }
-
-        // Préparation du filtre de mise à jour
-        let updateFilter;
-        if (isValidObjectId(orderId)) {
-            updateFilter = { _id: new ObjectId(orderId) };
-        } else {
-            updateFilter = { codeID: orderId };
-        }
-
-        // Mise à jour dans cour_expedition
+        // Mettre à jour la position
         await db.collection('cour_expedition').updateOne(
             { _id: expedition._id },
             { 
@@ -100,9 +73,14 @@ exports.handler = async (event) => {
             }
         );
 
-        // Mise à jour dans la collection originale
+        // Mettre à jour également dans la collection originale
         await db.collection(expedition.originalCollection).updateOne(
-            updateFilter,
+            { 
+                $or: [
+                    { _id: new ObjectId(orderId) },
+                    { codeID: orderId }
+                ]
+            },
             { 
                 $set: { 
                     driverLocation: location,

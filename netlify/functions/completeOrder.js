@@ -44,21 +44,22 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier l'assignation pour les colis
-        if (serviceType === 'packages') {
-            const expedition = await db.collection('cour_expedition').findOne({ 
-                orderId: orderId,
-                serviceType: 'packages',
-                driverId: driverId
-            });
+        // Vérifier l'assignation
+        const expedition = await db.collection('cour_expedition').findOne({ 
+            $or: [
+                { orderId: orderId },
+                { codeID: orderId }
+            ],
+            serviceType: serviceType,
+            driverId: driverId
+        });
 
-            if (!expedition) {
-                return {
-                    statusCode: 404,
-                    headers: COMMON_HEADERS,
-                    body: JSON.stringify({ error: 'Expédition non trouvée ou non assignée à ce livreur' })
-                };
-            }
+        if (!expedition && serviceType === 'packages') {
+            return {
+                statusCode: 404,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ error: 'Expédition non trouvée ou non assignée à ce livreur' })
+            };
         }
 
         // Déterminer la collection source
@@ -88,7 +89,12 @@ exports.handler = async (event) => {
         };
 
         const updateResult = await db.collection(collectionName).updateOne(
-            { $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }] },
+            { 
+                $or: [
+                    { _id: new ObjectId(orderId) },
+                    { codeID: orderId }
+                ]
+            },
             { $set: updateData }
         );
 
@@ -103,12 +109,18 @@ exports.handler = async (event) => {
         // Pour les colis, supprimer de cour_expedition et archiver
         if (serviceType === 'packages') {
             await db.collection('cour_expedition').deleteOne({ 
-                orderId: orderId,
+                $or: [
+                    { orderId: orderId },
+                    { codeID: orderId }
+                ],
                 serviceType: 'packages'
             });
 
             const deliveredOrder = await db.collection(collectionName).findOne({
-                $or: [{ _id: new ObjectId(orderId) }, { codeID: orderId }]
+                $or: [
+                    { _id: new ObjectId(orderId) },
+                    { codeID: orderId }
+                ]
             });
 
             if (deliveredOrder) {
