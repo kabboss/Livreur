@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
@@ -37,14 +37,17 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Données requises manquantes' })
+                body: JSON.stringify({ 
+                    error: 'Données requises manquantes',
+                    requiredFields: ['orderId', 'serviceType', 'driverName', 'driverId']
+                })
             };
         }
 
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier l'assignation avec driverId court
+        // Vérifier l'assignation
         const expedition = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
@@ -54,11 +57,14 @@ exports.handler = async (event) => {
             driverId: driverId
         });
 
-        if (!expedition && serviceType === 'packages') {
+        if (!expedition) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Expédition non trouvée ou non assignée à ce livreur' })
+                body: JSON.stringify({ 
+                    error: 'Expédition non trouvée ou non assignée à ce livreur',
+                    details: `Order: ${orderId}, Driver: ${driverId}`
+                })
             };
         }
 
@@ -75,69 +81,93 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Type de service invalide' })
+                body: JSON.stringify({ 
+                    error: 'Type de service invalide',
+                    validTypes: Object.keys(collectionMap)
+                })
             };
         }
 
         // Trouver la commande originale
-        const originalOrder = await db.collection(collectionName).findOne({
-            $or: [
-                { _id: expedition?._id },
-                { codeID: orderId }
-            ]
-        });
+        let originalOrder;
+        try {
+            originalOrder = await db.collection(collectionName).findOne({
+                $or: [
+                    { _id: expedition._id || new ObjectId(orderId) },
+                    { codeID: orderId }
+                ]
+            });
+        } catch (e) {
+            console.error('Erreur recherche commande:', e);
+            originalOrder = null;
+        }
 
         if (!originalOrder) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande originale non trouvée' })
+                body: JSON.stringify({ 
+                    error: 'Commande originale non trouvée',
+                    collection: collectionName,
+                    searchQuery: {
+                        $or: [
+                            { _id: expedition?._id },
+                            { codeID: orderId }
+                        ]
+                    }
+                })
             };
         }
 
-        // Archiver la commande
-        await db.collection('LivraisonsEffectuees').insertOne({
-            ...originalOrder,
-            serviceType: serviceType,
+        // Mettre à jour la commande
+        const updateData = {
+            status: 'livrée',
             driverName: driverName,
             driverId: driverId,
+            deliveredAt: new Date(),
             deliveryNotes: notes || null,
-            deliveryDate: new Date(),
-            status: 'livrée'
-        });
+            lastUpdated: new Date()
+        };
 
-        // Supprimer de la collection cour_expedition
-        if (expedition) {
+        const updateResult = await db.collection(collectionName).updateOne(
+            { _id: originalOrder._id },
+            { $set: updateData }
+        );
+
+        // Pour les colis, archiver
+        if (serviceType === 'packages') {
+            await db.collection('LivraisonsEffectuees').insertOne({
+                ...originalOrder,
+                ...updateData,
+                serviceType: serviceType,
+                originalCollection: collectionName
+            });
+
             await db.collection('cour_expedition').deleteOne({ 
                 _id: expedition._id 
             });
         }
 
-        // Supprimer de la collection originale
-        await db.collection(collectionName).deleteOne({
-            $or: [
-                { _id: originalOrder._id },
-                { codeID: orderId }
-            ]
-        });
-
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
-                message: 'Livraison terminée et colis archivé',
-                orderId: orderId
+                success: true,
+                message: 'Livraison enregistrée avec succès',
+                orderId: orderId,
+                deliveredAt: new Date().toISOString()
             })
         };
 
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur complète:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
                 error: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+                eventBody: event.body
             })
         };
     } finally {
