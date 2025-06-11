@@ -116,21 +116,20 @@ exports.handler = async (event) => {
         await db.collection('cour_expedition').insertOne(expeditionData);
 
         // Mettre à jour la commande originale
-        const updateData = {
-            status: 'en cours',
-            driverId: driverId,
-            driverName: driverName,
-            driverPhone: driverPhone1,
-            assignedAt: new Date()
-        };
-
+const updateData = {
+    status: 'en cours',
+    driverId: driverId,
+    driverName: driverName,
+    nomLivreur: driverName, // Ajout de cette ligne pour les colis
+    driverPhone: driverPhone1,
+    assignedAt: new Date()
+};
         // Pour les colis, on utilise des champs spécifiques
-        if (serviceType === 'packages') {
-            updateData.idLivreurEnCharge = driverId;
-            updateData.nomLivreur = driverName;
-            updateData.estExpedie = true;
-        }
-
+if (serviceType === 'packages') {
+    updateData.idLivreurEnCharge = driverId;
+    updateData.nomLivreur = driverName; // Assurez-vous que ce champ est bien sauvegardé
+    updateData.estExpedie = true;
+}
         await db.collection(collectionName).updateOne(query, { $set: updateData });
 
         return {

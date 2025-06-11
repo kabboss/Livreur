@@ -51,7 +51,7 @@ exports.handler = async (event) => {
                 { codeID: orderId }
             ],
             serviceType: serviceType,
-            driverId: driverId // Utilisation directe du driverId court
+            driverId: driverId
         });
 
         if (!expedition && serviceType === 'packages') {
@@ -79,61 +79,53 @@ exports.handler = async (event) => {
             };
         }
 
-        // Mettre à jour la commande originale
-        const updateData = {
-            status: 'livrée',
-            driverName: driverName,
-            driverId: driverId, // Conservation du driverId court
-            deliveredAt: new Date(),
-            deliveryNotes: notes || null
-        };
+        // Trouver la commande originale
+        const originalOrder = await db.collection(collectionName).findOne({
+            $or: [
+                { _id: expedition?._id },
+                { codeID: orderId }
+            ]
+        });
 
-        const updateResult = await db.collection(collectionName).updateOne(
-            { 
-                $or: [
-                    { _id: expedition?._id }, // Utilisation de l'ID de l'expédition si disponible
-                    { codeID: orderId }
-                ]
-            },
-            { $set: updateData }
-        );
-
-        if (updateResult.modifiedCount === 0) {
+        if (!originalOrder) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande non trouvée ou déjà livrée' })
+                body: JSON.stringify({ error: 'Commande originale non trouvée' })
             };
         }
 
-        // Pour les colis, supprimer de cour_expedition et archiver
-        if (serviceType === 'packages' && expedition) {
+        // Archiver la commande
+        await db.collection('LivraisonsEffectuees').insertOne({
+            ...originalOrder,
+            serviceType: serviceType,
+            driverName: driverName,
+            driverId: driverId,
+            deliveryNotes: notes || null,
+            deliveryDate: new Date(),
+            status: 'livrée'
+        });
+
+        // Supprimer de la collection cour_expedition
+        if (expedition) {
             await db.collection('cour_expedition').deleteOne({ 
-                _id: expedition._id
+                _id: expedition._id 
             });
-
-            const deliveredOrder = await db.collection(collectionName).findOne({
-                $or: [
-                    { _id: expedition._id },
-                    { codeID: orderId }
-                ]
-            });
-
-            if (deliveredOrder) {
-                await db.collection('LivraisonsEffectuees').insertOne({
-                    ...deliveredOrder,
-                    serviceType: serviceType,
-                    deliveryDate: new Date(),
-                    status: 'livrée'
-                });
-            }
         }
+
+        // Supprimer de la collection originale
+        await db.collection(collectionName).deleteOne({
+            $or: [
+                { _id: originalOrder._id },
+                { codeID: orderId }
+            ]
+        });
 
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
-                message: 'Livraison enregistrée avec succès',
+                message: 'Livraison terminée et colis archivé',
                 orderId: orderId
             })
         };
