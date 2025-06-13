@@ -31,9 +31,9 @@ const setCorsHeaders = (response) => {
   return response;
 };
 
-// Validation des données
+// Validation des données reçues
 const validateRequest = (data) => {
-const requiredFields = ['sender', 'recipient', 'senderPhone', 'colisID'];
+  const requiredFields = ['sender', 'recipient', 'senderPhone', 'colisID'];
   const missingFields = requiredFields.filter(field => !data[field]);
 
   if (missingFields.length > 0) {
@@ -43,10 +43,10 @@ const requiredFields = ['sender', 'recipient', 'senderPhone', 'colisID'];
     };
   }
 
-  if (!data.code.match(/^[A-Z0-9]{8,20}$/)) {
+  if (typeof data.colisID !== 'string' || !data.colisID.match(/^[A-Z0-9]{8,20}$/)) {
     return {
       valid: false,
-      message: 'Code colis invalide. Le code doit contenir uniquement des lettres majuscules et des chiffres (8 à 12 caractères).'
+      message: 'Code colis invalide. Le code doit contenir uniquement des lettres majuscules et des chiffres (8 à 20 caractères).'
     };
   }
 
@@ -54,7 +54,7 @@ const requiredFields = ['sender', 'recipient', 'senderPhone', 'colisID'];
 };
 
 // Fonction principale Netlify
-exports.handler = async function(event, context) {
+exports.handler = async function (event, context) {
   // Pré-vérification CORS
   if (event.httpMethod === 'OPTIONS') {
     return setCorsHeaders({
@@ -63,7 +63,7 @@ exports.handler = async function(event, context) {
     });
   }
 
-  // Méthode non autorisée
+  // Refuser toute autre méthode que POST
   if (event.httpMethod !== 'POST') {
     return setCorsHeaders({
       statusCode: 405,
@@ -72,7 +72,6 @@ exports.handler = async function(event, context) {
   }
 
   try {
-    // Vérification du corps
     if (!event.body) {
       return setCorsHeaders({
         statusCode: 400,
@@ -94,38 +93,35 @@ exports.handler = async function(event, context) {
     await client.connect();
     const db = client.db(mongoConfig.dbName);
 
+    // Enregistrement client
     const insertResult = await db.collection(mongoConfig.collections.clients).insertOne({
-      nom: data.nom,
-      prenom: data.prenom,
-      numero: data.numero,
-      code: data.code,
+      nom: data.sender,
+      prenom: data.recipient,
+      numero: data.senderPhone,
+      code: data.colisID,
       localisation: data.location || null,
       date: new Date()
     });
-    
-    // Ensuite tu peux l'utiliser correctement ici
+
+    // Récupération info client
     const clientInfo = await db.collection(mongoConfig.collections.clients)
       .findOne({ _id: insertResult.insertedId });
-    
 
+    let clientLocation = null;
+    if (
+      clientInfo?.localisation &&
+      clientInfo.localisation.latitude &&
+      clientInfo.localisation.longitude
+    ) {
+      clientLocation = {
+        latitude: parseFloat(clientInfo.localisation.latitude),
+        longitude: parseFloat(clientInfo.localisation.longitude)
+      };
+    }
 
-let clientLocation = null;
-
-if (
-  clientInfo.localisation &&
-  clientInfo.localisation.latitude &&
-  clientInfo.localisation.longitude
-) {
-  clientLocation = {
-    latitude: parseFloat(clientInfo.localisation.latitude),
-    longitude: parseFloat(clientInfo.localisation.longitude)
-  };
-}
-
-
-    // Recherche du colis
+    // Recherche du colis correspondant
     const colis = await db.collection(mongoConfig.collections.colis)
-      .findOne({ colisID: data.code });
+      .findOne({ colisID: data.colisID });
 
     if (!colis) {
       return setCorsHeaders({
@@ -136,7 +132,7 @@ if (
       });
     }
 
-    // Formatage de la réponse
+    // Réponse formatée
     const responseData = {
       message: 'Colis trouvé',
       colis: {
