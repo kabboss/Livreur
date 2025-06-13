@@ -134,19 +134,28 @@ exports.handler = async (event) => {
             { $set: updateData }
         );
 
-        // Pour les colis, archiver
-        if (serviceType === 'packages') {
-            await db.collection('LivraisonsEffectuees').insertOne({
-                ...originalOrder,
-                ...updateData,
-                serviceType: serviceType,
-                originalCollection: collectionName
-            });
+ // Pour les colis, archiver et supprimer
+if (serviceType === 'packages') {
+    await db.collection('LivraisonsEffectuees').insertOne({
+        ...originalOrder,
+        ...updateData,
+        serviceType: serviceType,
+        originalCollection: collectionName
+    });
 
-            await db.collection('cour_expedition').deleteOne({ 
-                _id: expedition._id 
-            });
-        }
+    // Supprimer de la collection Livraison
+    await db.collection('Livraison').deleteOne({ 
+        $or: [
+            { _id: originalOrder._id },
+            { codeID: orderId }
+        ]
+    });
+
+    // Supprimer de cour_expedition
+    await db.collection('cour_expedition').deleteOne({ 
+        _id: expedition._id 
+    });
+}
 
         return {
             statusCode: 200,

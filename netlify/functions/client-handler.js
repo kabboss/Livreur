@@ -33,7 +33,7 @@ const setCorsHeaders = (response) => {
 
 // Validation des données
 const validateRequest = (data) => {
-  const requiredFields = ['nom', 'prenom', 'numero', 'code'];
+const requiredFields = ['sender', 'recipient', 'senderPhone', 'colisID'];
   const missingFields = requiredFields.filter(field => !data[field]);
 
   if (missingFields.length > 0) {

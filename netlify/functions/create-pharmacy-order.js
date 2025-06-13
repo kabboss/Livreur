@@ -62,7 +62,7 @@ exports.handler = async function(event, context) {
       clientPosition: orderData.clientPosition,
       orderDate: orderData.orderDate || new Date().toISOString(),
       status: orderData.status || 'en attente',
-      deliveryFee: 600
+      deliveryFee: 1000
     };
 
     const result = await collection.insertOne(newOrder);
