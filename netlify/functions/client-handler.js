@@ -1,6 +1,5 @@
 const { MongoClient } = require('mongodb');
 
-// Configuration MongoDB
 const mongoConfig = {
   uri: process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority",
   dbName: "FarmsConnect",
@@ -19,7 +18,6 @@ const client = new MongoClient(mongoConfig.uri, {
   retryReads: true
 });
 
-// CORS headers pour autoriser toutes les origines
 const setCorsHeaders = (response) => {
   return {
     ...response,
@@ -32,8 +30,7 @@ const setCorsHeaders = (response) => {
   };
 };
 
-// Validation des données de la requête
-const validateRequestData = (data) => {
+const validateExpeditionData = (data) => {
   const requiredFields = [
     'sender', 'senderPhone', 'recipient',
     'recipientPhone', 'address', 'packageType',
@@ -45,26 +42,16 @@ const validateRequestData = (data) => {
     return { valid: false, message: `Champs manquants: ${missingFields.join(', ')}` };
   }
 
-  const phoneRegex = /^\+?[\d\s-]{8,}$/;
-  if (!phoneRegex.test(data.senderPhone) || !phoneRegex.test(data.recipientPhone)) {
-    return { valid: false, message: 'Format de téléphone invalide' };
-  }
-
-  if (typeof data.location !== 'object' ||
-      !data.location.latitude || 
-      !data.location.longitude || 
-      !data.location.accuracy) {
-    return { valid: false, message: 'Localisation invalide' };
-  }
-
-  if (!Array.isArray(data.photos) || data.photos.length === 0) {
-    return { valid: false, message: 'Au moins une photo requise' };
-  }
-
   return { valid: true };
 };
 
-// Fonction principale
+const validateTrackingData = (data) => {
+  if (!data.code || !data.nom || !data.prenom || !data.numero) {
+    return { valid: false, message: 'Tous les champs de suivi sont requis' };
+  }
+  return { valid: true };
+};
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return setCorsHeaders({ statusCode: 204, body: '' });
@@ -86,76 +73,92 @@ exports.handler = async (event) => {
     }
 
     const requestData = JSON.parse(event.body);
-    const validation = validateRequestData(requestData);
-
-    if (!validation.valid) {
-      return setCorsHeaders({
-        statusCode: 400,
-        body: JSON.stringify({ success: false, message: validation.message })
-      });
-    }
-
+    
     await client.connect();
     const db = client.db(mongoConfig.dbName);
 
-    const colisID = requestData.colisID || generateTrackingCode();
-    const colisData = {
-      colisID,
-      sender: requestData.sender,
-      senderPhone: requestData.senderPhone,
-      recipient: requestData.recipient,
-      recipientPhone: requestData.recipientPhone,
-      address: requestData.address,
-      packageType: requestData.packageType,
-      description: requestData.description || '',
-      photos: requestData.photos.map(photo => ({
-        name: photo.name,
-        type: photo.type,
-        data: photo.data
-      })),
-      location: {
-        latitude: parseFloat(requestData.location.latitude),
-        longitude: parseFloat(requestData.location.longitude),
-        accuracy: parseFloat(requestData.location.accuracy),
-        timestamp: new Date()
-      },
-      status: 'registered',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      history: [{
-        status: 'registered',
-        date: new Date(),
-        location: {
-          latitude: parseFloat(requestData.location.latitude),
-          longitude: parseFloat(requestData.location.longitude)
-        }
-      }]
-    };
+    // Gestion des requêtes de suivi
+    if (requestData.code) {
+      const validation = validateTrackingData(requestData);
+      if (!validation.valid) {
+        return setCorsHeaders({
+          statusCode: 400,
+          body: JSON.stringify({ success: false, message: validation.message })
+        });
+      }
 
-    const session = client.startSession();
-    try {
-      await session.withTransaction(async () => {
-        await db.collection(mongoConfig.collections.colis).insertOne(colisData, { session });
-        await db.collection(mongoConfig.collections.clients).insertOne({
-          name: requestData.sender,
-          phone: requestData.senderPhone,
-          colisID,
-          createdAt: new Date()
-        }, { session });
+      const colis = await db.collection(mongoConfig.collections.colis).findOne({
+        colisID: requestData.code.toUpperCase()
       });
-    } finally {
-      await session.endSession();
+
+      if (!colis) {
+        return setCorsHeaders({
+          statusCode: 404,
+          body: JSON.stringify({ success: false, message: 'Colis non trouvé' })
+        });
+      }
+
+      return setCorsHeaders({
+        statusCode: 200,
+        body: JSON.stringify({ success: true, colis })
+      });
     }
+    // Gestion des requêtes d'expédition
+    else {
+      const validation = validateExpeditionData(requestData);
+      if (!validation.valid) {
+        return setCorsHeaders({
+          statusCode: 400,
+          body: JSON.stringify({ success: false, message: validation.message })
+        });
+      }
 
-    return setCorsHeaders({
-      statusCode: 200,
-      body: JSON.stringify({
-        success: true,
+      const colisID = generateTrackingCode();
+      const colisData = {
         colisID,
-        message: 'Expédition enregistrée avec succès'
-      })
-    });
+        sender: requestData.sender,
+        senderPhone: requestData.senderPhone,
+        recipient: requestData.recipient,
+        recipientPhone: requestData.recipientPhone,
+        address: requestData.address,
+        packageType: requestData.packageType,
+        description: requestData.description || '',
+        photos: requestData.photos,
+        location: requestData.location,
+        status: 'registered',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        history: [{
+          status: 'registered',
+          date: new Date(),
+          location: requestData.location
+        }]
+      };
 
+      const session = client.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await db.collection(mongoConfig.collections.colis).insertOne(colisData, { session });
+          await db.collection(mongoConfig.collections.clients).insertOne({
+            name: requestData.sender,
+            phone: requestData.senderPhone,
+            colisID,
+            createdAt: new Date()
+          }, { session });
+        });
+      } finally {
+        await session.endSession();
+      }
+
+      return setCorsHeaders({
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          colisID,
+          message: 'Expédition enregistrée avec succès'
+        })
+      });
+    }
   } catch (error) {
     console.error('Erreur:', error);
     return setCorsHeaders({
@@ -171,7 +174,6 @@ exports.handler = async (event) => {
   }
 };
 
-// Génération d’un code de suivi aléatoire
 function generateTrackingCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
