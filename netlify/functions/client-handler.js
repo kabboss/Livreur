@@ -19,6 +19,7 @@ const client = new MongoClient(mongoConfig.uri, {
   retryReads: true
 });
 
+// CORS headers pour autoriser toutes les origines
 const setCorsHeaders = (response) => {
   return {
     ...response,
@@ -31,9 +32,10 @@ const setCorsHeaders = (response) => {
   };
 };
 
+// Validation des données de la requête
 const validateRequestData = (data) => {
   const requiredFields = [
-    'sender', 'senderPhone', 'recipient', 
+    'sender', 'senderPhone', 'recipient',
     'recipientPhone', 'address', 'packageType',
     'photos', 'location'
   ];
@@ -43,21 +45,18 @@ const validateRequestData = (data) => {
     return { valid: false, message: `Champs manquants: ${missingFields.join(', ')}` };
   }
 
-  // Validation téléphone (format simplifié)
   const phoneRegex = /^\+?[\d\s-]{8,}$/;
   if (!phoneRegex.test(data.senderPhone) || !phoneRegex.test(data.recipientPhone)) {
     return { valid: false, message: 'Format de téléphone invalide' };
   }
 
-  // Validation location
-  if (typeof data.location !== 'object' || 
+  if (typeof data.location !== 'object' ||
       !data.location.latitude || 
-      !data.location.longitude ||
+      !data.location.longitude || 
       !data.location.accuracy) {
     return { valid: false, message: 'Localisation invalide' };
   }
 
-  // Validation photos
   if (!Array.isArray(data.photos) || data.photos.length === 0) {
     return { valid: false, message: 'Au moins une photo requise' };
   }
@@ -65,13 +64,12 @@ const validateRequestData = (data) => {
   return { valid: true };
 };
 
+// Fonction principale
 exports.handler = async (event) => {
-  // Gestion préflight CORS
   if (event.httpMethod === 'OPTIONS') {
     return setCorsHeaders({ statusCode: 204, body: '' });
   }
 
-  // Vérification méthode
   if (event.httpMethod !== 'POST') {
     return setCorsHeaders({
       statusCode: 405,
@@ -80,7 +78,6 @@ exports.handler = async (event) => {
   }
 
   try {
-    // Vérification et parsing du body
     if (!event.body) {
       return setCorsHeaders({
         statusCode: 400,
@@ -98,14 +95,10 @@ exports.handler = async (event) => {
       });
     }
 
-    // Connexion MongoDB
     await client.connect();
     const db = client.db(mongoConfig.dbName);
 
-    // Génération code colis (si non fourni)
     const colisID = requestData.colisID || generateTrackingCode();
-
-    // Données du colis
     const colisData = {
       colisID,
       sender: requestData.sender,
@@ -118,7 +111,7 @@ exports.handler = async (event) => {
       photos: requestData.photos.map(photo => ({
         name: photo.name,
         type: photo.type,
-        data: photo.data // Base64
+        data: photo.data
       })),
       location: {
         latitude: parseFloat(requestData.location.latitude),
@@ -139,14 +132,10 @@ exports.handler = async (event) => {
       }]
     };
 
-    // Transaction MongoDB pour insérer colis et client
     const session = client.startSession();
     try {
       await session.withTransaction(async () => {
-        // Insertion colis
         await db.collection(mongoConfig.collections.colis).insertOne(colisData, { session });
-        
-        // Insertion client
         await db.collection(mongoConfig.collections.clients).insertOne({
           name: requestData.sender,
           phone: requestData.senderPhone,
@@ -182,6 +171,7 @@ exports.handler = async (event) => {
   }
 };
 
+// Génération d’un code de suivi aléatoire
 function generateTrackingCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
