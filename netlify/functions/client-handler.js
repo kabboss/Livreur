@@ -10,7 +10,6 @@ const mongoConfig = {
   }
 };
 
-// Connexion MongoDB (pool)
 const client = new MongoClient(mongoConfig.uri, {
   connectTimeoutMS: 5000,
   socketTimeoutMS: 30000,
@@ -20,72 +19,82 @@ const client = new MongoClient(mongoConfig.uri, {
   retryReads: true
 });
 
-// Middleware CORS
 const setCorsHeaders = (response) => {
-  response.headers = {
-    ...(response.headers || {}),
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  return {
+    ...response,
+    headers: {
+      ...(response.headers || {}),
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS'
+    }
   };
-  return response;
 };
 
-// Validation des données reçues
-const validateRequest = (data) => {
-  const requiredFields = ['sender', 'recipient', 'senderPhone', 'colisID'];
-  const missingFields = requiredFields.filter(field => !data[field]);
+const validateRequestData = (data) => {
+  const requiredFields = [
+    'sender', 'senderPhone', 'recipient', 
+    'recipientPhone', 'address', 'packageType',
+    'photos', 'location'
+  ];
 
+  const missingFields = requiredFields.filter(field => !data[field]);
   if (missingFields.length > 0) {
-    return {
-      valid: false,
-      message: `Champs manquants : ${missingFields.join(', ')}`
-    };
+    return { valid: false, message: `Champs manquants: ${missingFields.join(', ')}` };
   }
 
-  if (typeof data.colisID !== 'string' || !data.colisID.match(/^[A-Z0-9]{8,20}$/)) {
-    return {
-      valid: false,
-      message: 'Code colis invalide. Le code doit contenir uniquement des lettres majuscules et des chiffres (8 à 20 caractères).'
-    };
+  // Validation téléphone (format simplifié)
+  const phoneRegex = /^\+?[\d\s-]{8,}$/;
+  if (!phoneRegex.test(data.senderPhone) || !phoneRegex.test(data.recipientPhone)) {
+    return { valid: false, message: 'Format de téléphone invalide' };
+  }
+
+  // Validation location
+  if (typeof data.location !== 'object' || 
+      !data.location.latitude || 
+      !data.location.longitude ||
+      !data.location.accuracy) {
+    return { valid: false, message: 'Localisation invalide' };
+  }
+
+  // Validation photos
+  if (!Array.isArray(data.photos) || data.photos.length === 0) {
+    return { valid: false, message: 'Au moins une photo requise' };
   }
 
   return { valid: true };
 };
 
-// Fonction principale Netlify
-exports.handler = async function (event, context) {
-  // Pré-vérification CORS
+exports.handler = async (event) => {
+  // Gestion préflight CORS
   if (event.httpMethod === 'OPTIONS') {
-    return setCorsHeaders({
-      statusCode: 204,
-      body: ''
-    });
+    return setCorsHeaders({ statusCode: 204, body: '' });
   }
 
-  // Refuser toute autre méthode que POST
+  // Vérification méthode
   if (event.httpMethod !== 'POST') {
     return setCorsHeaders({
       statusCode: 405,
-      body: JSON.stringify({ message: 'Méthode non autorisée' })
+      body: JSON.stringify({ success: false, message: 'Méthode non autorisée' })
     });
   }
 
   try {
+    // Vérification et parsing du body
     if (!event.body) {
       return setCorsHeaders({
         statusCode: 400,
-        body: JSON.stringify({ message: 'Données manquantes dans la requête' })
+        body: JSON.stringify({ success: false, message: 'Données manquantes' })
       });
     }
 
-    const data = JSON.parse(event.body);
-    const validation = validateRequest(data);
+    const requestData = JSON.parse(event.body);
+    const validation = validateRequestData(requestData);
 
     if (!validation.valid) {
       return setCorsHeaders({
         statusCode: 400,
-        body: JSON.stringify({ message: validation.message })
+        body: JSON.stringify({ success: false, message: validation.message })
       });
     }
 
@@ -93,77 +102,91 @@ exports.handler = async function (event, context) {
     await client.connect();
     const db = client.db(mongoConfig.dbName);
 
-    // Enregistrement client
-    const insertResult = await db.collection(mongoConfig.collections.clients).insertOne({
-      nom: data.sender,
-      prenom: data.recipient,
-      numero: data.senderPhone,
-      code: data.colisID,
-      localisation: data.location || null,
-      date: new Date()
-    });
+    // Génération code colis (si non fourni)
+    const colisID = requestData.colisID || generateTrackingCode();
 
-    // Récupération info client
-    const clientInfo = await db.collection(mongoConfig.collections.clients)
-      .findOne({ _id: insertResult.insertedId });
-
-    let clientLocation = null;
-    if (
-      clientInfo?.localisation &&
-      clientInfo.localisation.latitude &&
-      clientInfo.localisation.longitude
-    ) {
-      clientLocation = {
-        latitude: parseFloat(clientInfo.localisation.latitude),
-        longitude: parseFloat(clientInfo.localisation.longitude)
-      };
-    }
-
-    // Recherche du colis correspondant
-    const colis = await db.collection(mongoConfig.collections.colis)
-      .findOne({ colisID: data.colisID });
-
-    if (!colis) {
-      return setCorsHeaders({
-        statusCode: 404,
-        body: JSON.stringify({
-          message: 'Colis non trouvé. Vérifiez le code ou contactez l’expéditeur.'
-        })
-      });
-    }
-
-    // Réponse formatée
-    const responseData = {
-      message: 'Colis trouvé',
-      colis: {
-        colisID: colis.colisID,
-        sender: colis.sender || "Inconnu",
-        phone1: colis.phone1 || null,
-        recipient: colis.recipient,
-        phone: colis.phone,
-        address: colis.address,
-        type: colis.type,
-        details: colis.details,
-        photos: colis.photos || [],
-        status: colis.status || 'enregistré',
-        dateCreation: colis.dateCreation,
-        history: colis.history || []
-      }
+    // Données du colis
+    const colisData = {
+      colisID,
+      sender: requestData.sender,
+      senderPhone: requestData.senderPhone,
+      recipient: requestData.recipient,
+      recipientPhone: requestData.recipientPhone,
+      address: requestData.address,
+      packageType: requestData.packageType,
+      description: requestData.description || '',
+      photos: requestData.photos.map(photo => ({
+        name: photo.name,
+        type: photo.type,
+        data: photo.data // Base64
+      })),
+      location: {
+        latitude: parseFloat(requestData.location.latitude),
+        longitude: parseFloat(requestData.location.longitude),
+        accuracy: parseFloat(requestData.location.accuracy),
+        timestamp: new Date()
+      },
+      status: 'registered',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      history: [{
+        status: 'registered',
+        date: new Date(),
+        location: {
+          latitude: parseFloat(requestData.location.latitude),
+          longitude: parseFloat(requestData.location.longitude)
+        }
+      }]
     };
+
+    // Transaction MongoDB pour insérer colis et client
+    const session = client.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // Insertion colis
+        await db.collection(mongoConfig.collections.colis).insertOne(colisData, { session });
+        
+        // Insertion client
+        await db.collection(mongoConfig.collections.clients).insertOne({
+          name: requestData.sender,
+          phone: requestData.senderPhone,
+          colisID,
+          createdAt: new Date()
+        }, { session });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     return setCorsHeaders({
       statusCode: 200,
-      body: JSON.stringify(responseData)
+      body: JSON.stringify({
+        success: true,
+        colisID,
+        message: 'Expédition enregistrée avec succès'
+      })
     });
 
   } catch (error) {
-    console.error('Erreur serveur:', error);
+    console.error('Erreur:', error);
     return setCorsHeaders({
       statusCode: 500,
-      body: JSON.stringify({
-        message: 'Erreur interne du serveur',
+      body: JSON.stringify({ 
+        success: false, 
+        message: 'Erreur serveur',
         error: error.message
       })
     });
+  } finally {
+    await client.close();
   }
 };
+
+function generateTrackingCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
