@@ -121,7 +121,7 @@ exports.handler = async (event) => {
       codeID: codeID.toUpperCase(),
       dateLivraison: new Date(),
       dateReception: new Date(),
-      statut: 'livré',
+      statut: 'En cours de livraison',
       localisationReception: {
         latitude: clientLocation.latitude,
         longitude: clientLocation.longitude,

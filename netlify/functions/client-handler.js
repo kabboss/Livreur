@@ -82,11 +82,11 @@ const processPhotos = (photos) => {
     name: photo.name,
     type: photo.type,
     size: photo.size,
-    // En production, vous devriez stocker les images dans un service cloud
-    // et ne garder que l'URL ici
-    data: photo.data ? photo.data.substring(0, 100) + '...' : null // Tronquer pour économiser l'espace
+    thumbnail: photo.thumbnail || null, // Stocker la version miniature en base64
+    data: photo.data // Conserver l'original si vraiment nécessaire
   }));
 };
+
 
 exports.handler = async (event) => {
   // Gestion CORS
