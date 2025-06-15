@@ -78,13 +78,23 @@ const generateTrackingCode = () => {
 };
 
 const processPhotos = (photos) => {
-  return photos.map(photo => ({
-    name: photo.name,
-    type: 'image/jpeg', // Forcer le type JPEG pour la compression
-    size: photo.size,
-    thumbnail: photo.thumbnail ? photo.thumbnail.split(',')[1] : null, // Stocker seulement la partie base64
-    data: null // Ne pas conserver l'original pour économiser de l'espace
-  }));
+  return photos.map(photo => {
+    // Si le thumbnail est déjà un Data URL, le conserver tel quel
+    let thumbnail = photo.thumbnail;
+    
+    // Si c'est seulement du base64 (sans prefix), ajouter le prefix
+    if (thumbnail && !thumbnail.startsWith('data:')) {
+      thumbnail = `data:image/jpeg;base64,${thumbnail}`;
+    }
+    
+    return {
+      name: photo.name,
+      type: photo.type || 'image/jpeg',
+      size: photo.size,
+      thumbnail: thumbnail,
+      data: null
+    };
+  });
 };
 
 exports.handler = async (event) => {
