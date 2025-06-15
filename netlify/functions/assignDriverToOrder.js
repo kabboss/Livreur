@@ -31,7 +31,7 @@ exports.handler = async (event) => {
 
     try {
         const data = JSON.parse(event.body);
-        const { orderId, serviceType, driverId, driverName, driverPhone1, driverLocation } = data;
+        const { orderId, serviceType, driverId, driverName, driverPhone1, driverPhone2, driverLocation } = data;
 
         if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1 || !driverLocation) {
             return {
@@ -48,7 +48,7 @@ exports.handler = async (event) => {
         const existingAssignment = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
-                { codeID: orderId }
+                { colisID: orderId }
             ],
             serviceType: serviceType
         });
@@ -83,10 +83,14 @@ exports.handler = async (event) => {
 
         // Trouver la commande originale
         let query;
-        try {
-            query = { _id: new ObjectId(orderId) };
-        } catch (e) {
-            query = { codeID: orderId };
+        if (serviceType === 'packages') {
+            query = { colisID: orderId };
+        } else {
+            try {
+                query = { _id: new ObjectId(orderId) };
+            } catch (e) {
+                query = { _id: orderId };
+            }
         }
 
         const originalOrder = await db.collection(collectionName).findOne(query);
@@ -106,9 +110,10 @@ exports.handler = async (event) => {
             driverId: driverId,
             driverName: driverName,
             driverPhone1: driverPhone1,
+            driverPhone2: driverPhone2,
             driverLocation: driverLocation,
             assignedAt: new Date(),
-            status: 'en cours',
+            status: 'en_cours',
             originalCollection: collectionName
         };
 
@@ -116,20 +121,25 @@ exports.handler = async (event) => {
         await db.collection('cour_expedition').insertOne(expeditionData);
 
         // Mettre à jour la commande originale
-const updateData = {
-    status: 'en cours',
-    driverId: driverId,
-    driverName: driverName,
-    nomLivreur: driverName, // Ajout de cette ligne pour les colis
-    driverPhone: driverPhone1,
-    assignedAt: new Date()
-};
-        // Pour les colis, on utilise des champs spécifiques
-if (serviceType === 'packages') {
-    updateData.idLivreurEnCharge = driverId;
-    updateData.nomLivreur = driverName; // Assurez-vous que ce champ est bien sauvegardé
-    updateData.estExpedie = true;
-}
+        const updateData = {
+            status: 'en_cours',
+            statut: 'en_cours_de_livraison',
+            driverId: driverId,
+            driverName: driverName,
+            nomLivreur: driverName,
+            driverPhone: driverPhone1,
+            assignedAt: new Date(),
+            dateAcceptation: new Date()
+        };
+
+        // Pour les colis, champs spécifiques
+        if (serviceType === 'packages') {
+            updateData.idLivreurEnCharge = driverId;
+            updateData.estExpedie = true;
+            updateData.processusDéclenche = true;
+            updateData['mis à jour à'] = new Date();
+        }
+
         await db.collection(collectionName).updateOne(query, { $set: updateData });
 
         return {
@@ -137,7 +147,8 @@ if (serviceType === 'packages') {
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
                 message: 'Livreur assigné avec succès',
-                orderId: orderId
+                orderId: orderId,
+                driverName: driverName
             })
         };
 

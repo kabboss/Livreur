@@ -31,56 +31,62 @@ exports.handler = async (event) => {
 
     try {
         const data = JSON.parse(event.body);
-        const { orderId, driverId, location } = data;
+        const { orderId, location } = data;
 
-        if (!orderId || !driverId || !location) {
+        if (!orderId || !location || !location.latitude || !location.longitude) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Données requises manquantes' })
+                body: JSON.stringify({ 
+                    error: 'Données requises manquantes',
+                    required: ['orderId', 'location.latitude', 'location.longitude']
+                })
             };
         }
 
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier l'assignation (avec driverId court)
+        // Vérifier l'assignation dans cour_expedition
         const expedition = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
-                { codeID: orderId }
+                { colisID: orderId }
             ],
-            serviceType: 'packages',
-            driverId: driverId // Utilisation directe du driverId court
+            serviceType: 'packages'
         });
 
         if (!expedition) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Expédition non trouvée ou non assignée à ce livreur' })
+                body: JSON.stringify({ 
+                    error: 'Colis non trouvé ou non assigné',
+                    orderId: orderId
+                })
             };
         }
 
-        // Mettre à jour la position
-        await db.collection('cour_expedition').updateOne(
+        // Mettre à jour la position dans cour_expedition
+        const updateResult = await db.collection('cour_expedition').updateOne(
             { _id: expedition._id },
             { 
                 $set: { 
                     driverLocation: location,
-                    lastPositionUpdate: new Date()
+                    lastPositionUpdate: new Date(),
+                    positionHistory: {
+                        $push: {
+                            location: location,
+                            timestamp: new Date()
+                        }
+                    }
                 } 
             }
         );
 
-        // Mettre à jour également dans la collection originale
-        await db.collection(expedition.originalCollection).updateOne(
-            { 
-                $or: [
-                    { _id: expedition._id }, // Utilisation de l'ID de l'expédition
-                    { codeID: orderId }
-                ]
-            },
+        // Mettre à jour également dans la collection Livraison si elle existe encore
+        await db.collection('Livraison').updateOne(
+            { colisID: orderId },
             { 
                 $set: { 
                     driverLocation: location,
@@ -93,13 +99,17 @@ exports.handler = async (event) => {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
+                success: true,
                 message: 'Position mise à jour avec succès',
-                orderId: orderId
+                orderId: orderId,
+                location: location,
+                updatedAt: new Date().toISOString(),
+                modifiedCount: updateResult.modifiedCount
             })
         };
 
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur mise à jour position:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
