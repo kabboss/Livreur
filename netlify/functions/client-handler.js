@@ -80,13 +80,12 @@ const generateTrackingCode = () => {
 const processPhotos = (photos) => {
   return photos.map(photo => ({
     name: photo.name,
-    type: photo.type,
+    type: 'image/jpeg', // Forcer le type JPEG pour la compression
     size: photo.size,
-    thumbnail: photo.thumbnail || null, // Stocker la version miniature en base64
-    data: photo.data // Conserver l'original si vraiment nécessaire
+    thumbnail: photo.thumbnail ? photo.thumbnail.split(',')[1] : null, // Stocker seulement la partie base64
+    data: null // Ne pas conserver l'original pour économiser de l'espace
   }));
 };
-
 
 exports.handler = async (event) => {
   // Gestion CORS
