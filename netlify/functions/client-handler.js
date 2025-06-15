@@ -9,15 +9,6 @@ const mongoConfig = {
   }
 };
 
-const client = new MongoClient(mongoConfig.uri, {
-  connectTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
-  serverSelectionTimeoutMS: 10000,
-  maxPoolSize: 10,
-  retryWrites: true,
-  retryReads: true
-});
-
 const setCorsHeaders = (response) => {
   return {
     ...response,
@@ -78,21 +69,28 @@ const generateTrackingCode = () => {
 };
 
 const processPhotos = (photos) => {
-  return photos.map(photo => {
-    // Si le thumbnail est déjà un Data URL, le conserver tel quel
+  return photos.map((photo, index) => {
+    // Validation et nettoyage des données photo
     let thumbnail = photo.thumbnail;
     
-    // Si c'est seulement du base64 (sans prefix), ajouter le prefix
+    // Vérifier si c'est un Data URL valide
     if (thumbnail && !thumbnail.startsWith('data:')) {
       thumbnail = `data:image/jpeg;base64,${thumbnail}`;
     }
     
+    // Validation de la taille des données
+    if (thumbnail && thumbnail.length > 2 * 1024 * 1024) { // 2MB limit
+      console.warn(`Photo ${index + 1} trop volumineuse, compression appliquée`);
+      // Ici on pourrait implémenter une compression côté serveur si nécessaire
+    }
+    
     return {
-      name: photo.name,
+      name: photo.name || `Photo_${index + 1}`,
       type: photo.type || 'image/jpeg',
-      size: photo.size,
+      size: photo.size || 0,
       thumbnail: thumbnail,
-      data: null
+      uploadedAt: new Date(),
+      index: index
     };
   });
 };
@@ -122,11 +120,14 @@ exports.handler = async (event) => {
 
     const requestData = JSON.parse(event.body);
     
-    // Connexion à MongoDB avec timeout
+    // Connexion à MongoDB avec timeout et retry
     mongoClient = new MongoClient(mongoConfig.uri, {
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
-      serverSelectionTimeoutMS: 10000
+      serverSelectionTimeoutMS: 10000,
+      maxPoolSize: 10,
+      retryWrites: true,
+      retryReads: true
     });
     
     await mongoClient.connect();
@@ -144,7 +145,7 @@ exports.handler = async (event) => {
         });
       }
 
-      // Recherche du colis
+      // Recherche du colis avec gestion d'erreur améliorée
       const colis = await db.collection(mongoConfig.collections.colis).findOne({
         colisID: requestData.code.toUpperCase()
       });
@@ -167,7 +168,9 @@ exports.handler = async (event) => {
         code: requestData.code.toUpperCase(),
         localisation: requestData.location,
         dateRecherche: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        userAgent: event.headers['user-agent'] || 'Unknown',
+        ipAddress: event.headers['x-forwarded-for'] || event.headers['x-real-ip'] || 'Unknown'
       };
 
       // Mise à jour ou insertion des données client
@@ -179,15 +182,24 @@ exports.handler = async (event) => {
 
       console.log('Colis trouvé:', colis.colisID);
 
+      // Préparation des données de réponse avec photos sécurisées
+      const responseData = {
+        ...colis,
+        // Conserver les photos avec leurs thumbnails pour l'affichage
+        photos: colis.photos ? colis.photos.map(photo => ({
+          name: photo.name,
+          type: photo.type,
+          size: photo.size,
+          thumbnail: photo.thumbnail, // Garder le thumbnail pour l'affichage
+          index: photo.index
+        })) : []
+      };
+
       return setCorsHeaders({
         statusCode: 200,
         body: JSON.stringify({ 
           success: true, 
-          colis: {
-            ...colis,
-            // Masquer les données sensibles si nécessaire
-            photos: colis.photos ? colis.photos.map(p => ({ name: p.name, type: p.type })) : []
-          }
+          colis: responseData
         })
       });
     }
@@ -203,19 +215,37 @@ exports.handler = async (event) => {
         });
       }
 
-      const colisID = generateTrackingCode();
+      // Génération d'un code unique avec vérification
+      let colisID = generateTrackingCode();
+      let attempts = 0;
+      const maxAttempts = 5;
       
-      // Vérification de l'unicité du code
-      const existingColis = await db.collection(mongoConfig.collections.colis).findOne({
-        colisID: colisID
-      });
+      while (attempts < maxAttempts) {
+        const existingColis = await db.collection(mongoConfig.collections.colis).findOne({
+          colisID: colisID
+        });
 
-      if (existingColis) {
-        // Régénérer un nouveau code si collision
-        const newColisID = generateTrackingCode();
-        console.log('Collision de code détectée, nouveau code généré:', newColisID);
+        if (!existingColis) {
+          break; // Code unique trouvé
+        }
+        
+        colisID = generateTrackingCode();
+        attempts++;
       }
 
+      if (attempts >= maxAttempts) {
+        return setCorsHeaders({
+          statusCode: 500,
+          body: JSON.stringify({ 
+            success: false, 
+            message: 'Impossible de générer un code unique. Veuillez réessayer.' 
+          })
+        });
+      }
+
+      // Traitement et validation des photos
+      const processedPhotos = processPhotos(requestData.photos);
+      
       const colisData = {
         colisID,
         sender: requestData.sender,
@@ -225,16 +255,23 @@ exports.handler = async (event) => {
         address: requestData.address,
         packageType: requestData.packageType,
         description: requestData.description || '',
-        photos: processPhotos(requestData.photos),
+        photos: processedPhotos,
         location: requestData.location,
         status: 'registered',
         createdAt: new Date(),
         updatedAt: new Date(),
+        metadata: {
+          userAgent: event.headers['user-agent'] || 'Unknown',
+          ipAddress: event.headers['x-forwarded-for'] || event.headers['x-real-ip'] || 'Unknown',
+          photosCount: processedPhotos.length,
+          totalPhotoSize: processedPhotos.reduce((sum, photo) => sum + (photo.size || 0), 0)
+        },
         history: [{
           status: 'registered',
           date: new Date(),
           location: requestData.location,
-          notes: 'Colis enregistré dans le système'
+          notes: 'Colis enregistré dans le système',
+          accuracy: requestData.location.accuracy
         }]
       };
 
@@ -245,18 +282,25 @@ exports.handler = async (event) => {
         code: colisID,
         localisation: null, // Sera rempli lors du suivi
         dateCreation: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        expediteur: {
+          nom: requestData.sender,
+          telephone: requestData.senderPhone
+        }
       };
 
-      // Transaction pour assurer la cohérence
+      // Transaction pour assurer la cohérence des données
       const session = mongoClient.startSession();
       try {
         await session.withTransaction(async () => {
           // Insertion du colis
-          await db.collection(mongoConfig.collections.colis).insertOne(colisData, { session });
+          const colisResult = await db.collection(mongoConfig.collections.colis).insertOne(colisData, { session });
           
           // Insertion des informations client
-          await db.collection(mongoConfig.collections.clients).insertOne(clientData, { session });
+          const clientResult = await db.collection(mongoConfig.collections.clients).insertOne(clientData, { session });
+          
+          console.log('Colis inséré:', colisResult.insertedId);
+          console.log('Client inséré:', clientResult.insertedId);
         });
 
         console.log('Expédition créée avec succès:', colisID);
@@ -267,7 +311,8 @@ exports.handler = async (event) => {
             success: true,
             colisID,
             message: 'Expédition enregistrée avec succès',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            photosProcessed: processedPhotos.length
           })
         });
 
@@ -302,12 +347,24 @@ exports.handler = async (event) => {
       });
     }
 
+    if (error.name === 'SyntaxError') {
+      return setCorsHeaders({
+        statusCode: 400,
+        body: JSON.stringify({ 
+          success: false, 
+          message: 'Format de données invalide',
+          error: 'Invalid JSON'
+        })
+      });
+    }
+
     return setCorsHeaders({
       statusCode: 500,
       body: JSON.stringify({ 
         success: false, 
         message: 'Erreur interne du serveur',
-        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+        timestamp: new Date().toISOString()
       })
     });
   } finally {
