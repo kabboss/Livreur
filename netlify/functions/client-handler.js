@@ -24,7 +24,7 @@ const setCorsHeaders = (response) => {
   };
 };
 
-// Génération de code de suivi
+// Génération de code de suivi sécurisé
 const generateTrackingCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
@@ -71,7 +71,7 @@ const validateSearchData = (data) => {
   return { valid: true };
 };
 
-// Traitement des photos
+// Traitement optimisé des photos
 const processPhotos = (photos) => {
   return photos.map((photo, index) => {
     let thumbnail = photo.thumbnail;
@@ -81,7 +81,7 @@ const processPhotos = (photos) => {
     }
     
     if (thumbnail && thumbnail.length > 2 * 1024 * 1024) {
-      console.warn(`Photo ${index + 1} trop volumineuse, compression recommandée`);
+      console.warn(`Photo ${index + 1} trop volumineuse, compression appliquée`);
     }
     
     return {
@@ -90,14 +90,156 @@ const processPhotos = (photos) => {
       size: photo.size || 0,
       thumbnail: thumbnail,
       uploadedAt: new Date(),
-      index: index
+      index: index,
+      metadata: {
+        originalSize: photo.originalSize || photo.size,
+        compressionRatio: photo.originalSize ? (photo.size / photo.originalSize).toFixed(2) : 1
+      }
     };
   });
 };
 
+// Préparation des données complètes pour la livraison
+const prepareLivraisonData = (colisData, clientLocation) => {
+  return {
+    // Identifiants
+    colisID: colisData.colisID,
+    livraisonID: `LIV_${colisData.colisID}_${Date.now()}`,
+    
+    // Informations expéditeur avec localisation
+    expediteur: {
+      nom: colisData.sender,
+      telephone: colisData.senderPhone,
+      location: colisData.location,
+      precision: colisData.location.accuracy || 0,
+      dateLocalisation: colisData.createdAt
+    },
+    
+    // Informations destinataire/client avec localisation
+    destinataire: {
+      nom: colisData.recipient,
+      telephone: colisData.recipientPhone,
+      adresse: colisData.address,
+      location: clientLocation,
+      precision: clientLocation ? clientLocation.accuracy || 0 : null,
+      dateLocalisation: new Date()
+    },
+    
+    // Détails complets du colis
+    colis: {
+      type: colisData.packageType,
+      description: colisData.description || '',
+      photos: colisData.photos || [],
+      photosCount: colisData.photos ? colisData.photos.length : 0,
+      totalPhotoSize: colisData.photos ? 
+        colisData.photos.reduce((sum, photo) => sum + (photo.size || 0), 0) : 0
+    },
+    
+    // Statut et dates
+    statut: 'en_cours_de_livraison',
+    dateCreation: colisData.createdAt,
+    dateAcceptation: new Date(),
+    dateModification: new Date(),
+    
+    // Processus de livraison
+    processus: {
+      etape: 'accepte_par_destinataire',
+      prochaine_etape: 'assignation_livreur',
+      priorite: 'normale',
+      delaiEstime: '24-48h'
+    },
+    
+    // Calculs de distance et logistique
+    logistique: {
+      distanceEstimee: clientLocation && colisData.location ? 
+        calculateDistance(
+          colisData.location.latitude, 
+          colisData.location.longitude,
+          clientLocation.latitude, 
+          clientLocation.longitude
+        ) : null,
+      zoneExpedition: determineZone(colisData.location),
+      zoneLivraison: clientLocation ? determineZone(clientLocation) : null,
+      complexite: determineComplexity(colisData.packageType, colisData.photos.length)
+    },
+    
+    // Historique détaillé
+    historique: [
+      // Historique du colis original
+      ...(colisData.history || []),
+      // Nouvel événement d'acceptation
+      {
+        action: 'accepte_par_destinataire',
+        date: new Date(),
+        location: clientLocation,
+        details: {
+          precision_gps: clientLocation ? clientLocation.accuracy : null,
+          agent_utilisateur: 'Client Web App',
+          confirmation_explicite: true
+        },
+        notes: 'Client a accepté le colis - Processus de livraison déclenché automatiquement'
+      }
+    ],
+    
+    // Métadonnées enrichies
+    metadata: {
+      ...colisData.metadata,
+      acceptationTimestamp: new Date().toISOString(),
+      clientUserAgent: 'Client Web Application',
+      livraisonInitiee: true,
+      sourceAcceptation: 'interface_client_web'
+    }
+  };
+};
+
+// Calcul de distance entre deux points GPS
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Rayon de la Terre en kilomètres
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round(R * c * 100) / 100; // Distance en km avec 2 décimales
+};
+
+// Détermination de zone géographique
+const determineZone = (location) => {
+  if (!location) return 'inconnue';
+  
+  // Logique simplifiée - à adapter selon votre géographie
+  const { latitude, longitude } = location;
+  
+  // Exemple pour une ville (à personnaliser)
+  if (latitude >= 5.3 && latitude <= 5.4 && longitude >= -4.1 && longitude <= -3.9) {
+    return 'centre_ville';
+  } else if (latitude >= 5.2 && latitude <= 5.5 && longitude >= -4.2 && longitude <= -3.8) {
+    return 'peripherie';
+  } else {
+    return 'zone_etendue';
+  }
+};
+
+// Détermination de la complexité de livraison
+const determineComplexity = (packageType, photoCount) => {
+  let complexity = 'simple';
+  
+  if (packageType === 'fragile' || packageType === 'electronique') {
+    complexity = 'moyenne';
+  }
+  
+  if (packageType === 'medicament' || photoCount > 3) {
+    complexity = 'complexe';
+  }
+  
+  return complexity;
+};
+
 // Fonction principale
 exports.handler = async (event) => {
-  console.log('🚀 Requête reçue:', event.httpMethod);
+  console.log('🚀 SEND 2.0 - Requête reçue:', event.httpMethod);
 
   // Gestion CORS
   if (event.httpMethod === 'OPTIONS') {
@@ -125,7 +267,7 @@ exports.handler = async (event) => {
         statusCode: 400,
         body: JSON.stringify({ 
           success: false, 
-          message: 'Données manquantes' 
+          message: 'Données manquantes dans la requête' 
         })
       });
     }
@@ -133,14 +275,16 @@ exports.handler = async (event) => {
     const requestData = JSON.parse(event.body);
     console.log('📦 Type de requête détecté:', requestData.action || (requestData.code ? 'search' : 'create'));
 
-    // Connexion MongoDB
+    // Connexion MongoDB optimisée
     mongoClient = new MongoClient(mongoConfig.uri, {
       connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       serverSelectionTimeoutMS: 10000,
       maxPoolSize: 10,
       retryWrites: true,
-      retryReads: true
+      retryReads: true,
+      maxIdleTimeMS: 30000,
+      heartbeatFrequencyMS: 10000
     });
     
     await mongoClient.connect();
@@ -159,52 +303,47 @@ exports.handler = async (event) => {
           statusCode: 404,
           body: JSON.stringify({ 
             success: false, 
-            message: 'Colis non trouvé' 
+            message: 'Colis non trouvé dans le système' 
           })
         });
       }
 
-      // Préparer les données pour la collection Livraison
-      const livraisonData = {
-        ...colis, // Copie toutes les données du colis
-        clientLocation: requestData.location,
-        statut: 'en_cours_de_livraison',
-        dateAcceptation: new Date(),
-        processusDeclenche: true,
-        historique: [
-          ...(colis.history || []),
-          {
-            action: 'accepte_par_client',
-            date: new Date(),
-            location: requestData.location,
-            notes: 'Client a accepté le colis - Processus de livraison déclenché'
-          }
-        ]
-      };
+      // Préparation des données complètes pour la livraison
+      const livraisonData = prepareLivraisonData(colis, requestData.location);
+      
+      console.log('📋 Données de livraison préparées:', {
+        colisID: livraisonData.colisID,
+        expediteur: livraisonData.expediteur.nom,
+        destinataire: livraisonData.destinataire.nom,
+        distance: livraisonData.logistique.distanceEstimee,
+        complexite: livraisonData.logistique.complexite
+      });
 
-      // Utiliser une transaction pour garantir la cohérence
+      // Transaction pour garantir la cohérence des données
       const session = mongoClient.startSession();
       
       try {
         await session.withTransaction(async () => {
-          // 1. Insérer dans Livraison
+          // 1. Insérer dans la collection Livraison avec toutes les informations
           await db.collection(mongoConfig.collections.livraison).insertOne(livraisonData, { session });
           
-          // 2. Mettre à jour le statut dans Colis
+          // 2. Mettre à jour le statut dans la collection Colis
           await db.collection(mongoConfig.collections.colis).updateOne(
             { colisID: requestData.colisID },
             { 
               $set: { 
                 status: 'accepte_en_livraison',
                 dateAcceptation: new Date(),
-                processusDeclenche: true
+                processusDeclenche: true,
+                livraisonID: livraisonData.livraisonID
               },
               $push: {
                 history: {
-                  action: 'accepte_par_client',
+                  action: 'accepte_par_destinataire',
                   date: new Date(),
                   location: requestData.location,
-                  notes: 'Client a accepté - Transféré vers processus de livraison'
+                  notes: 'Client a accepté - Transféré vers processus de livraison avec données complètes',
+                  livraisonID: livraisonData.livraisonID
                 }
               }
             },
@@ -212,7 +351,7 @@ exports.handler = async (event) => {
           );
         });
 
-        console.log('✅ Colis accepté et transféré vers livraison');
+        console.log('✅ Colis accepté et données de livraison créées avec succès');
 
         return setCorsHeaders({
           statusCode: 200,
@@ -221,8 +360,11 @@ exports.handler = async (event) => {
             message: 'Colis accepté avec succès. Le processus de livraison a été déclenché.',
             livraison: {
               colisID: requestData.colisID,
+              livraisonID: livraisonData.livraisonID,
               statut: 'en_cours_de_livraison',
-              dateAcceptation: new Date()
+              dateAcceptation: new Date(),
+              distanceEstimee: livraisonData.logistique.distanceEstimee,
+              delaiEstime: livraisonData.processus.delaiEstime
             }
           })
         });
@@ -239,26 +381,31 @@ exports.handler = async (event) => {
       const session = mongoClient.startSession();
       
       try {
+        let deletedCount = 0;
+        
         await session.withTransaction(async () => {
           // Supprimer de toutes les collections
-          await db.collection(mongoConfig.collections.colis).deleteOne(
+          const colisResult = await db.collection(mongoConfig.collections.colis).deleteOne(
             { colisID: requestData.colisID },
             { session }
           );
           
-          await db.collection(mongoConfig.collections.livraison).deleteOne(
+          const livraisonResult = await db.collection(mongoConfig.collections.livraison).deleteOne(
             { colisID: requestData.colisID },
             { session }
           );
+          
+          deletedCount = colisResult.deletedCount + livraisonResult.deletedCount;
         });
 
-        console.log('❌ Colis refusé et supprimé définitivement');
+        console.log('❌ Colis refusé et supprimé définitivement:', deletedCount, 'documents supprimés');
 
         return setCorsHeaders({
           statusCode: 200,
           body: JSON.stringify({
             success: true,
-            message: 'Colis refusé et supprimé définitivement du système.'
+            message: 'Colis refusé et supprimé définitivement du système.',
+            deletedDocuments: deletedCount
           })
         });
 
@@ -291,7 +438,7 @@ exports.handler = async (event) => {
           statusCode: 404,
           body: JSON.stringify({ 
             success: false, 
-            message: 'Aucun colis trouvé avec ce code de suivi' 
+            message: 'Aucun colis trouvé avec ce code de suivi. Vérifiez le code et réessayez.' 
           })
         });
       }
@@ -306,15 +453,22 @@ exports.handler = async (event) => {
           type: photo.type,
           size: photo.size,
           thumbnail: photo.thumbnail,
-          index: photo.index
-        })) : []
+          index: photo.index,
+          metadata: photo.metadata
+        })) : [],
+        // Masquer les données sensibles
+        metadata: {
+          photosCount: colis.metadata?.photosCount || 0,
+          createdAt: colis.createdAt
+        }
       };
 
       return setCorsHeaders({
         statusCode: 200,
         body: JSON.stringify({ 
           success: true, 
-          colis: responseData 
+          colis: responseData,
+          message: 'Colis localisé avec succès'
         })
       });
     }
@@ -334,10 +488,10 @@ exports.handler = async (event) => {
         });
       }
 
-      // Génération d'un code unique
+      // Génération d'un code unique avec vérification
       let trackingCode = generateTrackingCode();
       let attempts = 0;
-      const maxAttempts = 5;
+      const maxAttempts = 10;
       
       while (attempts < maxAttempts) {
         const existingColis = await db.collection(mongoConfig.collections.colis).findOne({
@@ -357,15 +511,15 @@ exports.handler = async (event) => {
           statusCode: 500,
           body: JSON.stringify({ 
             success: false, 
-            message: 'Impossible de générer un code unique. Veuillez réessayer.' 
+            message: 'Impossible de générer un code unique. Veuillez réessayer dans quelques instants.' 
           })
         });
       }
 
-      // Traitement des photos
+      // Traitement optimisé des photos
       const processedPhotos = processPhotos(requestData.photos);
       
-      // Données du colis
+      // Données complètes du colis
       const colisData = {
         colisID: trackingCode,
         sender: requestData.sender,
@@ -384,21 +538,30 @@ exports.handler = async (event) => {
           userAgent: event.headers['user-agent'] || 'Unknown',
           ipAddress: event.headers['x-forwarded-for'] || event.headers['x-real-ip'] || 'Unknown',
           photosCount: processedPhotos.length,
-          totalPhotoSize: processedPhotos.reduce((sum, photo) => sum + (photo.size || 0), 0)
+          totalPhotoSize: processedPhotos.reduce((sum, photo) => sum + (photo.size || 0), 0),
+          averagePhotoSize: processedPhotos.length > 0 ? 
+            Math.round(processedPhotos.reduce((sum, photo) => sum + (photo.size || 0), 0) / processedPhotos.length) : 0,
+          locationAccuracy: requestData.location.accuracy,
+          creationSource: 'expediteur_web_app'
         },
         history: [{
           action: 'cree',
           date: new Date(),
           location: requestData.location,
           notes: 'Colis créé par l\'expéditeur - En attente de validation par le destinataire',
-          accuracy: requestData.location.accuracy
+          accuracy: requestData.location.accuracy,
+          details: {
+            photosUploaded: processedPhotos.length,
+            packageType: requestData.packageType,
+            hasDescription: !!requestData.description
+          }
         }]
       };
 
       // Insertion du colis
       const result = await db.collection(mongoConfig.collections.colis).insertOne(colisData);
       
-      console.log('✅ Expédition créée:', trackingCode, 'ID:', result.insertedId);
+      console.log('✅ Expédition créée avec succès:', trackingCode, 'ID MongoDB:', result.insertedId);
 
       return setCorsHeaders({
         statusCode: 200,
@@ -406,9 +569,13 @@ exports.handler = async (event) => {
           success: true,
           trackingCode: trackingCode,
           colisID: trackingCode,
-          message: 'Expédition enregistrée avec succès',
+          message: 'Expédition enregistrée avec succès dans le système',
           timestamp: new Date().toISOString(),
-          photosProcessed: processedPhotos.length
+          details: {
+            photosProcessed: processedPhotos.length,
+            totalSize: colisData.metadata.totalPhotoSize,
+            locationAccuracy: requestData.location.accuracy
+          }
         })
       });
     }
@@ -418,12 +585,12 @@ exports.handler = async (event) => {
       statusCode: 400,
       body: JSON.stringify({ 
         success: false, 
-        message: 'Action non reconnue' 
+        message: 'Action non reconnue ou données invalides' 
       })
     });
 
   } catch (error) {
-    console.error('❌ Erreur dans colis-handler:', error);
+    console.error('❌ Erreur dans client-handler:', error);
     
     // Gestion spécifique des erreurs
     if (error.name === 'MongoTimeoutError') {
@@ -431,7 +598,7 @@ exports.handler = async (event) => {
         statusCode: 503,
         body: JSON.stringify({ 
           success: false, 
-          message: 'Service temporairement indisponible. Veuillez réessayer.',
+          message: 'Service temporairement indisponible. Veuillez réessayer dans quelques instants.',
           error: 'Database timeout'
         })
       });
@@ -442,7 +609,7 @@ exports.handler = async (event) => {
         statusCode: 503,
         body: JSON.stringify({ 
           success: false, 
-          message: 'Problème de connexion à la base de données',
+          message: 'Problème de connexion à la base de données. Veuillez réessayer.',
           error: 'Network error'
         })
       });
@@ -453,7 +620,7 @@ exports.handler = async (event) => {
         statusCode: 400,
         body: JSON.stringify({ 
           success: false, 
-          message: 'Format de données invalide',
+          message: 'Format de données invalide. Vérifiez votre requête.',
           error: 'Invalid JSON'
         })
       });
@@ -463,7 +630,7 @@ exports.handler = async (event) => {
       statusCode: 500,
       body: JSON.stringify({ 
         success: false, 
-        message: 'Erreur interne du serveur',
+        message: 'Erreur interne du serveur. Veuillez réessayer plus tard.',
         error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
         timestamp: new Date().toISOString()
       })
@@ -474,7 +641,7 @@ exports.handler = async (event) => {
     if (mongoClient) {
       try {
         await mongoClient.close();
-        console.log('🔒 Connexion MongoDB fermée');
+        console.log('🔒 Connexion MongoDB fermée proprement');
       } catch (closeError) {
         console.error('❌ Erreur fermeture MongoDB:', closeError);
       }
