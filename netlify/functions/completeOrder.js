@@ -19,6 +19,17 @@ exports.handler = async (event) => {
         };
     }
 
+        // Dans completeOrder.js, avant de traiter la requête
+if (expedition.driverId !== driverId) {
+    return {
+        statusCode: 403,
+        headers: COMMON_HEADERS,
+        body: JSON.stringify({ 
+            error: 'Vous n\'êtes pas autorisé à finaliser cette livraison'
+        })
+    };
+}
+
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
@@ -26,6 +37,7 @@ exports.handler = async (event) => {
             body: JSON.stringify({ error: 'Méthode non autorisée' })
         };
     }
+
 
     let client;
 
@@ -157,6 +169,17 @@ exports.handler = async (event) => {
         await db.collection('cour_expedition').deleteOne({ 
             _id: expedition._id 
         });
+
+
+        // Supprimer des autres collections si nécessaire
+const collectionsToClean = ['Livraison', 'Commandes', 'pharmacyOrders', 'shopping_orders'];
+for (const collection of collectionsToClean) {
+    try {
+        await db.collection(collection).deleteOne(query);
+    } catch (e) {
+        console.log(`Pas de suppression nécessaire dans ${collection}`);
+    }
+}
 
         return {
             statusCode: 200,

@@ -6,7 +6,7 @@ const DB_NAME = 'FarmsConnect';
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Content-Type': 'application/json'
 };
 
@@ -19,43 +19,32 @@ exports.handler = async (event) => {
         };
     }
 
-    if (event.httpMethod !== 'POST') {
-        return {
-            statusCode: 405,
-            headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: 'Méthode non autorisée' })
-        };
-    }
-
     let client;
 
     try {
-        const data = JSON.parse(event.body);
-        const { serviceType } = data;
+        const { driverId } = event.queryStringParameters;
 
-        if (!serviceType) {
+        if (!driverId) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Type de service requis' })
+                body: JSON.stringify({ error: 'ID du livreur requis' })
             };
         }
 
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Récupérer toutes les commandes assignées pour ce type de service
-        const assignedOrders = await db.collection('cour_expedition').find({
-            serviceType: serviceType
-        }).toArray();
+        const assignedOrders = await db.collection('cour_expedition')
+            .find({ driverId })
+            .toArray();
 
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
-                success: true,
-                assignedOrders: assignedOrders,
-                count: assignedOrders.length
+                count: assignedOrders.length,
+                orders: assignedOrders
             })
         };
 
