@@ -4,6 +4,8 @@ const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@clust
 exports.handler = async (event, context) => {
     const headers = {
         'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Content-Type': 'application/json'
     };
 
@@ -20,7 +22,6 @@ exports.handler = async (event, context) => {
         await client.connect();
         const collection = client.db('FarmsConnect').collection('shopping_orders');
         
-        // Filtrer seulement les commandes non terminées
         const orders = await collection.find({ 
             status: { $ne: 'livrée' } 
         }).sort({ orderDate: -1 }).toArray();
