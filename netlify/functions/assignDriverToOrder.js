@@ -94,7 +94,6 @@ exports.handler = async (event) => {
         } else if (serviceType === 'food') {
             query = { identifiant: orderId };
         } else {
-            // Pour shopping et pharmacy, essayer d'abord avec ObjectId puis avec string
             try {
                 query = { _id: new ObjectId(orderId) };
             } catch (e) {

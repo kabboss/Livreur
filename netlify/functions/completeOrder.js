@@ -184,7 +184,6 @@ exports.handler = async (event) => {
                 try {
                     await db.collection(collection).deleteOne(query);
                 } catch (e) {
-                    // Ignorer les erreurs de suppression dans les autres collections
                     console.log(`Pas de suppression nécessaire dans ${collection}`);
                 }
             }
