@@ -51,7 +51,10 @@ exports.handler = async (event) => {
         const expedition = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
-                { colisID: orderId }
+                { colisID: orderId },
+                { identifiant: orderId },
+                { id: orderId },
+                { _id: orderId }
             ],
             driverId: driverId
         });
@@ -98,6 +101,8 @@ exports.handler = async (event) => {
             let query;
             if (expedition.serviceType === 'packages') {
                 query = { colisID: orderId };
+            } else if (expedition.serviceType === 'food') {
+                query = { identifiant: orderId };
             } else {
                 query = { _id: orderId };
             }

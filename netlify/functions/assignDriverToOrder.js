@@ -51,7 +51,10 @@ exports.handler = async (event) => {
         const existingAssignment = await db.collection('cour_expedition').findOne({ 
             $or: [
                 { orderId: orderId },
-                { colisID: orderId }
+                { colisID: orderId },
+                { identifiant: orderId },
+                { id: orderId },
+                { _id: orderId }
             ],
             serviceType: serviceType
         });
@@ -61,7 +64,7 @@ exports.handler = async (event) => {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
-                    error: `Cette commande/colis est déjà pris(e) en charge par un livreur: ${existingAssignment.driverName || existingAssignment.nomLivreur}`,
+                    error: `Cette commande est déjà prise en charge par un livreur: ${existingAssignment.driverName || existingAssignment.nomLivreur}`,
                     isAlreadyAssigned: true
                 })
             };
@@ -88,7 +91,10 @@ exports.handler = async (event) => {
         let query;
         if (serviceType === 'packages') {
             query = { colisID: orderId };
+        } else if (serviceType === 'food') {
+            query = { identifiant: orderId };
         } else {
+            // Pour shopping et pharmacy, essayer d'abord avec ObjectId puis avec string
             try {
                 query = { _id: new ObjectId(orderId) };
             } catch (e) {
