@@ -31,15 +31,15 @@ exports.handler = async (event) => {
 
     try {
         const data = JSON.parse(event.body);
-        const { orderId, location } = data;
+        const { orderId, driverId, location } = data;
 
-        if (!orderId || !location || !location.latitude || !location.longitude) {
+        if (!orderId || !driverId || !location || !location.latitude || !location.longitude) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
                     error: 'Données requises manquantes',
-                    required: ['orderId', 'location.latitude', 'location.longitude']
+                    required: ['orderId', 'driverId', 'location.latitude', 'location.longitude']
                 })
             };
         }
@@ -53,7 +53,7 @@ exports.handler = async (event) => {
                 { orderId: orderId },
                 { colisID: orderId }
             ],
-            serviceType: 'packages'
+            driverId: driverId
         });
 
         if (!expedition) {
@@ -61,8 +61,9 @@ exports.handler = async (event) => {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
-                    error: 'Colis non trouvé ou non assigné',
-                    orderId: orderId
+                    error: 'Commande non trouvée ou non assignée à ce livreur',
+                    orderId: orderId,
+                    driverId: driverId
                 })
             };
         }
@@ -73,27 +74,44 @@ exports.handler = async (event) => {
             { 
                 $set: { 
                     driverLocation: location,
-                    lastPositionUpdate: new Date(),
+                    lastPositionUpdate: new Date()
+                },
+                $push: {
                     positionHistory: {
-                        $push: {
-                            location: location,
-                            timestamp: new Date()
-                        }
+                        location: location,
+                        timestamp: new Date()
                     }
-                } 
+                }
             }
         );
 
-        // Mettre à jour également dans la collection Livraison si elle existe encore
-        await db.collection('Livraison').updateOne(
-            { colisID: orderId },
-            { 
-                $set: { 
-                    driverLocation: location,
-                    lastPositionUpdate: new Date()
-                } 
+        // Mettre à jour également dans la collection originale si elle existe encore
+        const collectionMap = {
+            packages: 'Livraison',
+            food: 'Commandes',
+            shopping: 'shopping_orders',
+            pharmacy: 'pharmacyOrders'
+        };
+
+        const collectionName = collectionMap[expedition.serviceType];
+        if (collectionName) {
+            let query;
+            if (expedition.serviceType === 'packages') {
+                query = { colisID: orderId };
+            } else {
+                query = { _id: orderId };
             }
-        );
+
+            await db.collection(collectionName).updateOne(
+                query,
+                { 
+                    $set: { 
+                        driverLocation: location,
+                        lastPositionUpdate: new Date()
+                    } 
+                }
+            );
+        }
 
         return {
             statusCode: 200,
@@ -102,6 +120,7 @@ exports.handler = async (event) => {
                 success: true,
                 message: 'Position mise à jour avec succès',
                 orderId: orderId,
+                driverId: driverId,
                 location: location,
                 updatedAt: new Date().toISOString(),
                 modifiedCount: updateResult.modifiedCount

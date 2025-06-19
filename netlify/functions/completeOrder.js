@@ -19,17 +19,6 @@ exports.handler = async (event) => {
         };
     }
 
-        // Dans completeOrder.js, avant de traiter la requête
-if (expedition.driverId !== driverId) {
-    return {
-        statusCode: 403,
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ 
-            error: 'Vous n\'êtes pas autorisé à finaliser cette livraison'
-        })
-    };
-}
-
     if (event.httpMethod !== 'POST') {
         return {
             statusCode: 405,
@@ -38,12 +27,11 @@ if (expedition.driverId !== driverId) {
         };
     }
 
-
     let client;
 
     try {
         const data = JSON.parse(event.body);
-        const { orderId, serviceType, driverName, driverId, notes } = data;
+        const { orderId, serviceType, driverName, driverId, notes, completionLocation } = data;
 
         if (!orderId || !serviceType || !driverName || !driverId) {
             return {
@@ -76,6 +64,17 @@ if (expedition.driverId !== driverId) {
                 body: JSON.stringify({ 
                     error: 'Expédition non trouvée ou non assignée à ce livreur',
                     details: `Order: ${orderId}, Driver: ${driverId}`
+                })
+            };
+        }
+
+        // Vérifier que c'est bien le bon livreur
+        if (expedition.driverId !== driverId) {
+            return {
+                statusCode: 403,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ 
+                    error: 'Vous n\'êtes pas autorisé à finaliser cette livraison'
                 })
             };
         }
@@ -134,6 +133,7 @@ if (expedition.driverId !== driverId) {
             deliveredAt: new Date(),
             deliveryNotes: notes || null,
             lastUpdated: new Date(),
+            completionLocation: completionLocation,
             completedBy: {
                 driverId: driverId,
                 driverName: driverName,
@@ -148,54 +148,59 @@ if (expedition.driverId !== driverId) {
             serviceType: serviceType,
             originalCollection: collectionName,
             expeditionData: expedition,
-            archivedAt: new Date()
+            archivedAt: new Date(),
+            deliveryProcess: {
+                assignedAt: expedition.assignedAt,
+                deliveredAt: new Date(),
+                driverInfo: {
+                    id: driverId,
+                    name: driverName,
+                    phone1: expedition.driverPhone1,
+                    phone2: expedition.driverPhone2
+                },
+                positionHistory: expedition.positionHistory || []
+            }
         };
 
         await db.collection('LivraisonsEffectuees').insertOne(archiveData);
-
-        // Mettre à jour la commande originale avec le statut livré
-        await db.collection(collectionName).updateOne(
-            query,
-            { $set: completionData }
-        );
-
-        // Pour les colis, supprimer complètement après archivage
-        if (serviceType === 'packages') {
-            // Supprimer de la collection Livraison
-            await db.collection('Livraison').deleteOne(query);
-        }
 
         // Supprimer de cour_expedition
         await db.collection('cour_expedition').deleteOne({ 
             _id: expedition._id 
         });
 
+        // Supprimer de la collection originale
+        await db.collection(collectionName).deleteOne(query);
 
-        // Supprimer des autres collections si nécessaire
-const collectionsToClean = ['Livraison', 'Commandes', 'pharmacyOrders', 'shopping_orders'];
-for (const collection of collectionsToClean) {
-    try {
-        await db.collection(collection).deleteOne(query);
-    } catch (e) {
-        console.log(`Pas de suppression nécessaire dans ${collection}`);
-    }
-}
+        // Nettoyer les autres collections si nécessaire
+        const collectionsToClean = ['Livraison', 'Commandes', 'pharmacyOrders', 'shopping_orders'];
+        for (const collection of collectionsToClean) {
+            if (collection !== collectionName) {
+                try {
+                    await db.collection(collection).deleteOne(query);
+                } catch (e) {
+                    // Ignorer les erreurs de suppression dans les autres collections
+                    console.log(`Pas de suppression nécessaire dans ${collection}`);
+                }
+            }
+        }
 
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
                 success: true,
-                message: 'Livraison enregistrée avec succès',
+                message: 'Livraison terminée et archivée avec succès !',
                 orderId: orderId,
                 serviceType: serviceType,
                 deliveredAt: new Date().toISOString(),
-                archived: serviceType === 'packages'
+                archived: true,
+                driverName: driverName
             })
         };
 
     } catch (error) {
-        console.error('Erreur complète:', error);
+        console.error('Erreur finalisation livraison:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,

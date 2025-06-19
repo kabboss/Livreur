@@ -37,7 +37,10 @@ exports.handler = async (event) => {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Données requises manquantes' })
+                body: JSON.stringify({ 
+                    error: 'Données requises manquantes',
+                    required: ['orderId', 'serviceType', 'driverId', 'driverName', 'driverPhone1', 'driverLocation']
+                })
             };
         }
 
@@ -58,7 +61,7 @@ exports.handler = async (event) => {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
-                    error: `Cette commande est déjà assignée à ${existingAssignment.driverName || existingAssignment.nomLivreur}`,
+                    error: `Cette commande/colis est déjà pris(e) en charge par un livreur: ${existingAssignment.driverName || existingAssignment.nomLivreur}`,
                     isAlreadyAssigned: true
                 })
             };
@@ -114,7 +117,13 @@ exports.handler = async (event) => {
             driverLocation: driverLocation,
             assignedAt: new Date(),
             status: 'en_cours',
-            originalCollection: collectionName
+            statut: 'en_cours_de_livraison',
+            originalCollection: collectionName,
+            lastPositionUpdate: new Date(),
+            positionHistory: [{
+                location: driverLocation,
+                timestamp: new Date()
+            }]
         };
 
         // Insérer dans cour_expedition
@@ -129,7 +138,8 @@ exports.handler = async (event) => {
             nomLivreur: driverName,
             driverPhone: driverPhone1,
             assignedAt: new Date(),
-            dateAcceptation: new Date()
+            dateAcceptation: new Date(),
+            driverLocation: driverLocation
         };
 
         // Pour les colis, champs spécifiques
@@ -146,14 +156,17 @@ exports.handler = async (event) => {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
-                message: 'Livreur assigné avec succès',
+                success: true,
+                message: 'Commande acceptée avec succès !',
                 orderId: orderId,
-                driverName: driverName
+                driverName: driverName,
+                serviceType: serviceType,
+                assignedAt: new Date().toISOString()
             })
         };
 
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur assignation livreur:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,

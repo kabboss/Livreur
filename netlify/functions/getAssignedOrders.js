@@ -19,10 +19,18 @@ exports.handler = async (event) => {
         };
     }
 
+    if (event.httpMethod !== 'GET') {
+        return {
+            statusCode: 405,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
+        };
+    }
+
     let client;
 
     try {
-        const { driverId } = event.queryStringParameters;
+        const { driverId } = event.queryStringParameters || {};
 
         if (!driverId) {
             return {
@@ -43,13 +51,15 @@ exports.handler = async (event) => {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
+                success: true,
                 count: assignedOrders.length,
-                orders: assignedOrders
+                orders: assignedOrders,
+                driverId: driverId
             })
         };
 
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur récupération commandes assignées:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
