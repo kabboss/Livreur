@@ -2,17 +2,11 @@ const { MongoClient } = require('mongodb');
 
 const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
-const COLLECTION_NAME = 'Commandes';
-
-const client = new MongoClient(MONGODB_URI, {
-    connectTimeoutMS: 5000,
-    serverSelectionTimeoutMS: 5000
-});
 
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Content-Type': 'application/json'
 };
 
@@ -25,47 +19,56 @@ exports.handler = async (event) => {
         };
     }
 
-    if (event.httpMethod !== 'POST') {
+    if (event.httpMethod !== 'GET') {
         return {
             statusCode: 405,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: 'Method Not Allowed' })
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
         };
     }
 
+    let client;
+
     try {
-        const orderData = JSON.parse(event.body);
-        
-        await client.connect();
+        const { driverId } = event.queryStringParameters || {};
+
+        if (!driverId) {
+            return {
+                statusCode: 400,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ error: 'ID du livreur requis' })
+            };
+        }
+
+        client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
-        const collection = db.collection(COLLECTION_NAME);
-        
-        // Ajouter la date et le statut
-        orderData.date_creation = new Date();
-        orderData.statut = 'en attente';
-        
-        const result = await collection.insertOne(orderData);
-        
+
+        const assignedOrders = await db.collection('other_service_cour')
+            .find({ driverId })
+            .toArray();
+
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
                 success: true,
-                insertedId: result.insertedId
+                count: assignedOrders.length,
+                orders: assignedOrders,
+                driverId: driverId
             })
         };
+
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Erreur récupération commandes assignées autres services:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({
-                success: false,
-                error: 'Internal Server Error',
-                message: error.message
+            body: JSON.stringify({ 
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
             })
         };
     } finally {
-        await client.close();
+        if (client) await client.close();
     }
 };
