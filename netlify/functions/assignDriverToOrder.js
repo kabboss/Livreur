@@ -87,7 +87,7 @@ exports.handler = async (event) => {
             };
         }
 
-        // Trouver la commande originale avec une recherche plus flexible
+        // Trouver la commande originale
         let query;
         let originalOrder = null;
 
@@ -95,11 +95,9 @@ exports.handler = async (event) => {
             query = { colisID: orderId };
             originalOrder = await db.collection(collectionName).findOne(query);
         } else if (serviceType === 'food') {
-            // Essayer d'abord avec identifiant
             query = { identifiant: orderId };
             originalOrder = await db.collection(collectionName).findOne(query);
             
-            // Si pas trouvé, essayer avec _id
             if (!originalOrder) {
                 try {
                     query = { _id: new ObjectId(orderId) };
@@ -110,7 +108,6 @@ exports.handler = async (event) => {
                 }
             }
         } else {
-            // Pour shopping et pharmacy
             try {
                 query = { _id: new ObjectId(orderId) };
                 originalOrder = await db.collection(collectionName).findOne(query);
@@ -119,7 +116,6 @@ exports.handler = async (event) => {
                 originalOrder = await db.collection(collectionName).findOne(query);
             }
             
-            // Si pas trouvé, essayer avec id
             if (!originalOrder) {
                 query = { id: orderId };
                 originalOrder = await db.collection(collectionName).findOne(query);
@@ -163,28 +159,26 @@ exports.handler = async (event) => {
         // Insérer dans cour_expedition
         await db.collection('cour_expedition').insertOne(expeditionData);
 
-        // Mettre à jour la commande originale (SANS LA SUPPRIMER)
-        const updateData = {
-            status: 'en_cours',
-            statut: 'en_cours_de_livraison',
-            driverId: driverId,
-            driverName: driverName,
-            nomLivreur: driverName,
-            driverPhone: driverPhone1,
-            assignedAt: new Date(),
-            dateAcceptation: new Date(),
-            driverLocation: driverLocation
-        };
-
-        // Pour les colis, champs spécifiques
+        // Mettre à jour UNIQUEMENT pour les colis
         if (serviceType === 'packages') {
-            updateData.idLivreurEnCharge = driverId;
-            updateData.estExpedie = true;
-            updateData.processusDéclenche = true;
-            updateData['mis à jour à'] = new Date();
+            const updateData = {
+                status: 'en_cours',
+                statut: 'en_cours_de_livraison',
+                driverId: driverId,
+                driverName: driverName,
+                nomLivreur: driverName,
+                driverPhone: driverPhone1,
+                assignedAt: new Date(),
+                dateAcceptation: new Date(),
+                driverLocation: driverLocation,
+                idLivreurEnCharge: driverId,
+                estExpedie: true,
+                processusDéclenche: true,
+                'mis à jour à': new Date()
+            };
+            
+            await db.collection(collectionName).updateOne(query, { $set: updateData });
         }
-
-        await db.collection(collectionName).updateOne(query, { $set: updateData });
 
         return {
             statusCode: 200,
