@@ -87,26 +87,55 @@ exports.handler = async (event) => {
             };
         }
 
-        // Trouver la commande originale
+        // Trouver la commande originale avec une recherche plus flexible
         let query;
+        let originalOrder = null;
+
         if (serviceType === 'packages') {
             query = { colisID: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
         } else if (serviceType === 'food') {
+            // Essayer d'abord avec identifiant
             query = { identifiant: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
+            
+            // Si pas trouvé, essayer avec _id
+            if (!originalOrder) {
+                try {
+                    query = { _id: new ObjectId(orderId) };
+                    originalOrder = await db.collection(collectionName).findOne(query);
+                } catch (e) {
+                    query = { _id: orderId };
+                    originalOrder = await db.collection(collectionName).findOne(query);
+                }
+            }
         } else {
+            // Pour shopping et pharmacy
             try {
                 query = { _id: new ObjectId(orderId) };
+                originalOrder = await db.collection(collectionName).findOne(query);
             } catch (e) {
                 query = { _id: orderId };
+                originalOrder = await db.collection(collectionName).findOne(query);
+            }
+            
+            // Si pas trouvé, essayer avec id
+            if (!originalOrder) {
+                query = { id: orderId };
+                originalOrder = await db.collection(collectionName).findOne(query);
             }
         }
 
-        const originalOrder = await db.collection(collectionName).findOne(query);
         if (!originalOrder) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande non trouvée' })
+                body: JSON.stringify({ 
+                    error: 'Commande non trouvée',
+                    collection: collectionName,
+                    orderId: orderId,
+                    serviceType: serviceType
+                })
             };
         }
 
@@ -134,7 +163,7 @@ exports.handler = async (event) => {
         // Insérer dans cour_expedition
         await db.collection('cour_expedition').insertOne(expeditionData);
 
-        // Mettre à jour la commande originale
+        // Mettre à jour la commande originale (SANS LA SUPPRIMER)
         const updateData = {
             status: 'en_cours',
             statut: 'en_cours_de_livraison',

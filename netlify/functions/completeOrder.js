@@ -104,19 +104,43 @@ exports.handler = async (event) => {
 
         // Trouver la commande originale
         let query;
+        let originalOrder = null;
+
         if (serviceType === 'packages') {
             query = { colisID: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
         } else if (serviceType === 'food') {
+            // Essayer d'abord avec identifiant
             query = { identifiant: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
+            
+            // Si pas trouvé, essayer avec _id
+            if (!originalOrder) {
+                try {
+                    query = { _id: new ObjectId(orderId) };
+                    originalOrder = await db.collection(collectionName).findOne(query);
+                } catch (e) {
+                    query = { _id: orderId };
+                    originalOrder = await db.collection(collectionName).findOne(query);
+                }
+            }
         } else {
+            // Pour shopping et pharmacy
             try {
                 query = { _id: new ObjectId(orderId) };
+                originalOrder = await db.collection(collectionName).findOne(query);
             } catch (e) {
                 query = { _id: orderId };
+                originalOrder = await db.collection(collectionName).findOne(query);
+            }
+            
+            // Si pas trouvé, essayer avec id
+            if (!originalOrder) {
+                query = { id: orderId };
+                originalOrder = await db.collection(collectionName).findOne(query);
             }
         }
 
-        const originalOrder = await db.collection(collectionName).findOne(query);
         if (!originalOrder) {
             return {
                 statusCode: 404,
@@ -174,20 +198,8 @@ exports.handler = async (event) => {
             _id: expedition._id 
         });
 
-        // Supprimer de la collection originale
+        // MAINTENANT SEULEMENT supprimer de la collection originale
         await db.collection(collectionName).deleteOne(query);
-
-        // Nettoyer les autres collections si nécessaire
-        const collectionsToClean = ['Livraison', 'Commandes', 'pharmacyOrders', 'shopping_orders'];
-        for (const collection of collectionsToClean) {
-            if (collection !== collectionName) {
-                try {
-                    await db.collection(collection).deleteOne(query);
-                } catch (e) {
-                    console.log(`Pas de suppression nécessaire dans ${collection}`);
-                }
-            }
-        }
 
         return {
             statusCode: 200,
