@@ -198,7 +198,7 @@ exports.handler = async (event) => {
             _id: expedition._id 
         });
 
-        // MAINTENANT SEULEMENT supprimer de la collection originale
+        // Supprimer de la collection originale
         await db.collection(collectionName).deleteOne(query);
 
         return {
