@@ -72,10 +72,10 @@ exports.handler = async (event) => {
 
         // Déterminer la collection source
         const collectionMap = {
+            packages: 'Livraison',
             food: 'Commandes',
             shopping: 'shopping_orders',
-            pharmacy: 'pharmacyOrders',
-            packages: 'Livraison'
+            pharmacy: 'pharmacyOrders'
         };
 
         const collectionName = collectionMap[serviceType];
@@ -91,7 +91,10 @@ exports.handler = async (event) => {
         let query;
         let originalOrder = null;
 
-        if (serviceType === 'food') {
+        if (serviceType === 'packages') {
+            query = { colisID: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
+        } else if (serviceType === 'food') {
             // Essayer d'abord avec identifiant
             query = { identifiant: orderId };
             originalOrder = await db.collection(collectionName).findOne(query);
@@ -106,9 +109,6 @@ exports.handler = async (event) => {
                     originalOrder = await db.collection(collectionName).findOne(query);
                 }
             }
-        } else if (serviceType === 'packages') {
-            query = { colisID: orderId };
-            originalOrder = await db.collection(collectionName).findOne(query);
         } else {
             // Pour shopping et pharmacy
             try {
@@ -139,6 +139,24 @@ exports.handler = async (event) => {
             };
         }
 
+        // Extraire la localisation client selon le type de service
+        const extractClientLocation = (order, serviceType) => {
+            switch(serviceType) {
+                case 'packages':
+                    return order.destinataire?.location;
+                case 'food':
+                    return order.clientLocation || order.location || order.adresseLivraison?.location;
+                case 'shopping':
+                    return order.deliveryLocation || order.location || order.adresse?.location;
+                case 'pharmacy':
+                    return order.deliveryLocation || order.location || order.adresse?.location;
+                default:
+                    return null;
+            }
+        };
+
+        const clientLocation = extractClientLocation(originalOrder, serviceType);
+
         // Créer l'objet expedition
         const expeditionData = {
             ...originalOrder,
@@ -149,6 +167,7 @@ exports.handler = async (event) => {
             driverPhone1: driverPhone1,
             driverPhone2: driverPhone2,
             driverLocation: driverLocation,
+            clientLocation: clientLocation, // Ajout de la localisation client
             assignedAt: new Date(),
             status: 'en_cours',
             statut: 'en_cours_de_livraison',
@@ -163,25 +182,41 @@ exports.handler = async (event) => {
         // Insérer dans cour_expedition
         await db.collection('cour_expedition').insertOne(expeditionData);
 
-        // Mettre à jour la commande originale selon le service
+        // Mettre à jour la commande originale (SANS LA SUPPRIMER)
         const updateData = {
             status: 'en_cours',
             statut: 'en_cours_de_livraison',
             driverId: driverId,
             driverName: driverName,
-            nomLivreur: driverName,
             driverPhone: driverPhone1,
             assignedAt: new Date(),
-            dateAcceptation: new Date(),
-            driverLocation: driverLocation
+            driverLocation: driverLocation,
+            lastUpdated: new Date()
         };
 
-        // Champs spécifiques selon le service
-        if (serviceType === 'packages') {
-            updateData.idLivreurEnCharge = driverId;
-            updateData.estExpedie = true;
-            updateData.processusDéclenche = true;
-            updateData['mis à jour à'] = new Date();
+        // Champs spécifiques par service
+        switch(serviceType) {
+            case 'packages':
+                updateData.idLivreurEnCharge = driverId;
+                updateData.estExpedie = true;
+                updateData.processusDéclenche = true;
+                updateData['mis à jour à'] = new Date();
+                break;
+            case 'food':
+                updateData.livreur = driverName;
+                updateData.dateAcceptation = new Date();
+                updateData.statutLivraison = 'en_cours';
+                break;
+            case 'shopping':
+                updateData.livreur = driverName;
+                updateData.telephoneLivreur = driverPhone1;
+                updateData.statut = 'en_livraison';
+                break;
+            case 'pharmacy':
+                updateData.livreur = driverName;
+                updateData.telephoneLivreur = driverPhone1;
+                updateData.statut = 'en_livraison';
+                break;
         }
 
         await db.collection(collectionName).updateOne(query, { $set: updateData });
@@ -195,7 +230,8 @@ exports.handler = async (event) => {
                 orderId: orderId,
                 driverName: driverName,
                 serviceType: serviceType,
-                assignedAt: new Date().toISOString()
+                assignedAt: new Date().toISOString(),
+                hasClientLocation: !!clientLocation
             })
         };
 
