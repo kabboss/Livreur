@@ -72,10 +72,10 @@ exports.handler = async (event) => {
 
         // Déterminer la collection source
         const collectionMap = {
-            packages: 'Livraison',
             food: 'Commandes',
             shopping: 'shopping_orders',
-            pharmacy: 'pharmacyOrders'
+            pharmacy: 'pharmacyOrders',
+            packages: 'Livraison'
         };
 
         const collectionName = collectionMap[serviceType];
@@ -91,10 +91,7 @@ exports.handler = async (event) => {
         let query;
         let originalOrder = null;
 
-        if (serviceType === 'packages') {
-            query = { colisID: orderId };
-            originalOrder = await db.collection(collectionName).findOne(query);
-        } else if (serviceType === 'food') {
+        if (serviceType === 'food') {
             // Essayer d'abord avec identifiant
             query = { identifiant: orderId };
             originalOrder = await db.collection(collectionName).findOne(query);
@@ -109,6 +106,9 @@ exports.handler = async (event) => {
                     originalOrder = await db.collection(collectionName).findOne(query);
                 }
             }
+        } else if (serviceType === 'packages') {
+            query = { colisID: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
         } else {
             // Pour shopping et pharmacy
             try {
@@ -163,7 +163,7 @@ exports.handler = async (event) => {
         // Insérer dans cour_expedition
         await db.collection('cour_expedition').insertOne(expeditionData);
 
-        // Mettre à jour la commande originale (SANS LA SUPPRIMER)
+        // Mettre à jour la commande originale selon le service
         const updateData = {
             status: 'en_cours',
             statut: 'en_cours_de_livraison',
@@ -176,7 +176,7 @@ exports.handler = async (event) => {
             driverLocation: driverLocation
         };
 
-        // Pour les colis, champs spécifiques
+        // Champs spécifiques selon le service
         if (serviceType === 'packages') {
             updateData.idLivreurEnCharge = driverId;
             updateData.estExpedie = true;

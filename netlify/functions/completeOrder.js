@@ -84,10 +84,10 @@ exports.handler = async (event) => {
 
         // Déterminer la collection source
         const collectionMap = {
-            packages: 'Livraison',
             food: 'Commandes',
             shopping: 'shopping_orders',
-            pharmacy: 'pharmacyOrders'
+            pharmacy: 'pharmacyOrders',
+            packages: 'Livraison'
         };
 
         const collectionName = collectionMap[serviceType];
@@ -106,10 +106,7 @@ exports.handler = async (event) => {
         let query;
         let originalOrder = null;
 
-        if (serviceType === 'packages') {
-            query = { colisID: orderId };
-            originalOrder = await db.collection(collectionName).findOne(query);
-        } else if (serviceType === 'food') {
+        if (serviceType === 'food') {
             // Essayer d'abord avec identifiant
             query = { identifiant: orderId };
             originalOrder = await db.collection(collectionName).findOne(query);
@@ -124,6 +121,9 @@ exports.handler = async (event) => {
                     originalOrder = await db.collection(collectionName).findOne(query);
                 }
             }
+        } else if (serviceType === 'packages') {
+            query = { colisID: orderId };
+            originalOrder = await db.collection(collectionName).findOne(query);
         } else {
             // Pour shopping et pharmacy
             try {
@@ -175,6 +175,7 @@ exports.handler = async (event) => {
             ...originalOrder,
             ...completionData,
             serviceType: serviceType,
+            original_id: originalOrder._id,
             originalCollection: collectionName,
             expeditionData: expedition,
             archivedAt: new Date(),
@@ -191,6 +192,9 @@ exports.handler = async (event) => {
             }
         };
 
+        // Supprimer l'_id original pour éviter les conflits
+        delete archiveData._id;
+
         await db.collection('LivraisonsEffectuees').insertOne(archiveData);
 
         // Supprimer de cour_expedition
@@ -198,7 +202,7 @@ exports.handler = async (event) => {
             _id: expedition._id 
         });
 
-        // MAINTENANT SEULEMENT supprimer de la collection originale
+        // Supprimer de la collection originale
         await db.collection(collectionName).deleteOne(query);
 
         return {
