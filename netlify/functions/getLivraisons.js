@@ -1,65 +1,64 @@
 const { MongoClient } = require('mongodb');
 
-const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
-const dbName = 'FarmsConnect';
+const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const DB_NAME = 'FarmsConnect';
 
-exports.handler = async (event, context) => {
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Content-Type': 'application/json'
-    };
+const COMMON_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Content-Type': 'application/json'
+};
 
+exports.handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 204, headers, body: '' };
+        return {
+            statusCode: 200,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({})
+        };
     }
 
-    const client = new MongoClient(uri, {
-        connectTimeoutMS: 5000,
-        socketTimeoutMS: 30000
-    });
+    if (event.httpMethod !== 'GET') {
+        return {
+            statusCode: 405,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
+        };
+    }
+
+    let client;
 
     try {
-        await client.connect();
-        const db = client.db(dbName);
+        client = await MongoClient.connect(MONGODB_URI);
+        const db = client.db(DB_NAME);
 
-        // Récupération des données avec filtrage des livraisons non terminées
-        const [livraisons, expeditions] = await Promise.all([
-            db.collection('Livraison').find({ 
-                statut: { $ne: 'livrée' } 
-            }).sort({ dateDebutExpedition: -1 }).toArray(),
-            db.collection('cour_expedition').find({}).toArray()
-        ]);
-
-        // Formatage des données
-        const data = livraisons.map(livraison => {
-            const expedition = expeditions.find(e => e.codeID === livraison.codeID) || {};
-            return {
-                ...livraison,
-                statut: expedition.statut || livraison.statut,
-                idLivreur: expedition.idLivreur,
-                nomLivreur: expedition.nomLivreur
-            };
-        });
+        const validStatuses = ['en_cours_de_livraison', 'accepte_par_destinataire', 'en_attente_assignation'];
+        
+        const livraisons = await db.collection('Livraison')
+            .find({ 
+                statut: { $in: validStatuses }
+            })
+            .sort({ _id: -1 })
+            .toArray();
 
         return {
             statusCode: 200,
-            headers,
-            body: JSON.stringify({ data })
+            headers: COMMON_HEADERS,
+            body: JSON.stringify(livraisons)
         };
 
     } catch (error) {
-        console.error('Erreur:', error);
+        console.error('Erreur récupération livraisons:', error);
         return {
             statusCode: 500,
-            headers,
+            headers: COMMON_HEADERS,
             body: JSON.stringify({ 
-                error: 'Failed to fetch delivery data',
-                details: error.message 
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
             })
         };
     } finally {
-        await client.close();
+        if (client) await client.close();
     }
 };

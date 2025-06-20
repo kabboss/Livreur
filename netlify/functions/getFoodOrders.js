@@ -1,47 +1,65 @@
 const { MongoClient } = require('mongodb');
-const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 
-exports.handler = async (event, context) => {
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Content-Type': 'application/json'
-    };
+const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const DB_NAME = 'FarmsConnect';
 
+const COMMON_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Content-Type': 'application/json'
+};
+
+exports.handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 204, headers, body: '' };
-    }
-
-    const client = new MongoClient(uri, {
-        connectTimeoutMS: 5000,
-        socketTimeoutMS: 30000
-    });
-    
-    try {
-        await client.connect();
-        const collection = client.db('FarmsConnect').collection('Commandes');
-        
-        // Filtrer seulement les commandes non terminées
-        const orders = await collection.find({ 
-            status: { $ne: 'livrée' } 
-        }).sort({ orderDate: -1 }).toArray();
-        
         return {
             statusCode: 200,
-            headers,
-            body: JSON.stringify({ orders })
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({})
         };
+    }
+
+    if (event.httpMethod !== 'GET') {
+        return {
+            statusCode: 405,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({ error: 'Méthode non autorisée' })
+        };
+    }
+
+    let client;
+
+    try {
+        client = await MongoClient.connect(MONGODB_URI);
+        const db = client.db(DB_NAME);
+
+        const orders = await db.collection('Commandes')
+            .find({ 
+                $or: [
+                    { statut: 'en attente' },
+                    { status: 'en attente' }
+                ]
+            })
+            .sort({ _id: -1 })
+            .toArray();
+
+        return {
+            statusCode: 200,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify(orders)
+        };
+
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Erreur récupération commandes nourriture:', error);
         return {
             statusCode: 500,
-            headers,
+            headers: COMMON_HEADERS,
             body: JSON.stringify({ 
-                error: 'Failed to fetch food orders',
-                details: error.message 
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
             })
         };
     } finally {
-        await client.close();
+        if (client) await client.close();
     }
 };
