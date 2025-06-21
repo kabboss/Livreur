@@ -27,20 +27,18 @@ exports.handler = async (event, context) => {
 
         const { codeID } = JSON.parse(event.body);
 
-        const expeditionInfo = await expeditionCollection.findOne({ codeID: codeID });
+// Chercher d'abord par colisID dans cour_expedition
+const expeditionInfo = await expeditionCollection.findOne({ 
+    $or: [
+        { colisID: codeID },
+        { orderId: codeID }
+    ] 
+});
 
-        if (expeditionInfo) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ expedition: expeditionInfo }),
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            };
-        }
-
-        const colisEnregistre = await livraisonCollection.findOne({ codeID: codeID });
+// Si non trouvé, chercher dans Livraison
+const colisEnregistre = await livraisonCollection.findOne({ 
+    codeID: codeID 
+});
 
         if (colisEnregistre) {
             return {
