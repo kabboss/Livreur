@@ -33,15 +33,15 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        const orders = await db.collection('pharmacyOrders')
-            .find({ 
-                $or: [
-                    { statut: 'en attente' },
-                    { status: 'en attente' }
-                ]
-            })
-            .sort({ _id: -1 })
-            .toArray();
+  const orders = await db.collection('pharmacyOrders')
+    .find({ 
+        $or: [
+            { statut: { $in: ['en attente', 'pending'] } },
+            { status: { $in: ['en attente', 'pending'] } }
+        ]
+    })
+    .sort({ _id: -1 })
+    .toArray();
 
         return {
             statusCode: 200,
