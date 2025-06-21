@@ -1,4 +1,3 @@
-// Fonction Netlify pour suivre l'expédition
 const { MongoClient } = require('mongodb');
 
 const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
@@ -27,23 +26,36 @@ exports.handler = async (event, context) => {
 
         const { codeID } = JSON.parse(event.body);
 
-// Chercher d'abord par colisID dans cour_expedition
-const expeditionInfo = await expeditionCollection.findOne({ 
-    $or: [
-        { colisID: codeID },
-        { orderId: codeID }
-    ] 
-});
+        // Chercher dans cour_expedition par colisID
+        const expeditionInfo = await expeditionCollection.findOne({ 
+            colisID: codeID 
+        });
 
-// Si non trouvé, chercher dans Livraison
-const colisEnregistre = await livraisonCollection.findOne({ 
-    codeID: codeID 
-});
+        if (expeditionInfo) {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ 
+                    expedition: expeditionInfo,
+                    message: 'Informations de suivi récupérées avec succès'
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            };
+        }
+
+        // Si non trouvé, chercher dans Livraison par colisID
+        const colisEnregistre = await livraisonCollection.findOne({ 
+            colisID: codeID 
+        });
 
         if (colisEnregistre) {
             return {
                 statusCode: 200,
-                body: JSON.stringify({ message: 'Le processus d\'expédition pour ce colis n\'a pas encore démarré. Veuillez réessayer de suivre son statut ultérieurement.' }),
+                body: JSON.stringify({ 
+                    message: 'Le processus d\'expédition pour ce colis n\'a pas encore démarré. Veuillez réessayer de suivre son statut ultérieurement.'
+                }),
                 headers: {
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
