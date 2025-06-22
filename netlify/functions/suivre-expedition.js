@@ -5,7 +5,7 @@ const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/Farms
 const dbName = 'FarmsConnect';
 
 // Configuration du cache et de la performance
-const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const cache = new Map();
 
 // Utilitaires de logging avancés
@@ -22,89 +22,189 @@ const logger = {
 };
 
 // Fonction de validation des données
-function validateDriverData(data) {
-    const errors = [];
-    
-    if (!data.driverId || typeof data.driverId !== 'string') {
-        errors.push('ID du livreur manquant ou invalide');
+function validateTrackingCode(codeID) {
+    if (!codeID || typeof codeID !== 'string') {
+        return { valid: false, error: 'Code de suivi manquant ou invalide' };
     }
     
-    if (!data.location || typeof data.location !== 'object') {
-        errors.push('Données de localisation manquantes');
-    } else {
-        const { latitude, longitude, accuracy } = data.location;
-        
-        if (typeof latitude !== 'number' || latitude < -90 || latitude > 90) {
-            errors.push('Latitude invalide');
-        }
-        
-        if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) {
-            errors.push('Longitude invalide');
-        }
-        
-        if (accuracy !== undefined && (typeof accuracy !== 'number' || accuracy < 0)) {
-            errors.push('Précision invalide');
-        }
+    const trimmedCode = codeID.trim();
+    if (trimmedCode.length < 8 || trimmedCode.length > 20) {
+        return { valid: false, error: 'Le code de suivi doit contenir entre 8 et 20 caractères' };
     }
     
-    return {
-        isValid: errors.length === 0,
-        errors
+    if (!/^[A-Z0-9]+$/i.test(trimmedCode)) {
+        return { valid: false, error: 'Le code de suivi ne peut contenir que des lettres et des chiffres' };
+    }
+    
+    return { valid: true, code: trimmedCode.toUpperCase() };
+}
+
+// Fonction d'enrichissement des données
+function enrichTrackingData(expeditionData) {
+    const enrichedData = { ...expeditionData };
+    
+    // Calculer la durée depuis la création
+    if (enrichedData.dateCreation) {
+        const creationDate = new Date(enrichedData.dateCreation);
+        const now = new Date();
+        enrichedData.dureeDepuisCreation = Math.floor((now - creationDate) / (1000 * 60 * 60 * 24)); // en jours
+    }
+    
+    // Enrichir les informations de statut
+    enrichedData.statutDetaille = {
+        code: enrichedData.statut,
+        libelle: getStatusLibelle(enrichedData.statut),
+        pourcentageCompletion: getCompletionPercentage(enrichedData.statut),
+        couleur: getStatusColor(enrichedData.statut)
     };
-}
-
-// Fonction de nettoyage des coordonnées
-function cleanCoordinate(coord) {
-    if (!coord && coord !== 0) return null;
-    if (typeof coord === 'string') {
-        return parseFloat(coord.replace(',', '.'));
+    
+    // Enrichir les informations de localisation
+    if (enrichedData.driverLocation) {
+        enrichedData.driverLocation.derniereMAJ = enrichedData.dateModification || enrichedData.dateAcceptation;
+        enrichedData.driverLocation.precision = enrichedData.driverLocation.accuracy ? 
+            `±${enrichedData.driverLocation.accuracy}m` : 'Non spécifiée';
     }
-    return parseFloat(coord);
+    
+    // Enrichir les informations de contact
+    if (enrichedData.nomLivreur || enrichedData.driverName) {
+        enrichedData.livreurInfo = {
+            nom: enrichedData.nomLivreur || enrichedData.driverName,
+            id: enrichedData.idLivreurEnCharge || enrichedData.driverId,
+            telephones: [
+                enrichedData.telephoneLivreur1,
+                enrichedData.driverPhone1,
+                enrichedData.driverPhone,
+                enrichedData.telephoneLivreur2,
+                enrichedData.driverPhone2
+            ].filter(Boolean),
+            statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
+        };
+    }
+    
+    // Enrichir les informations de photos
+    if (enrichedData.colis?.photos?.length) {
+        enrichedData.colis.photos = enrichedData.colis.photos.map((photo, index) => ({
+            ...photo,
+            id: `photo_${index}`,
+            taille: photo.size ? formatFileSize(photo.size) : 'Inconnue',
+            format: photo.type || 'image/jpeg',
+            dateUpload: photo.uploadedAt || enrichedData.dateCreation
+        }));
+    }
+    
+    // Calculer les métriques de performance
+    enrichedData.metriques = calculatePerformanceMetrics(enrichedData);
+    
+    return enrichedData;
 }
 
-// Fonction de validation des coordonnées
-function isValidCoordinate(lat, lng) {
-    const latitude = cleanCoordinate(lat);
-    const longitude = cleanCoordinate(lng);
-    return latitude !== null && longitude !== null && 
-           !isNaN(latitude) && !isNaN(longitude) &&
-           latitude >= -90 && latitude <= 90 &&
-           longitude >= -180 && longitude <= 180;
+// Fonctions utilitaires pour l'enrichissement
+function getStatusLibelle(statut) {
+    const statusMap = {
+        'en_cours_de_livraison': 'En cours de livraison',
+        'en_attente': 'En attente de prise en charge',
+        'en_cours': 'En cours de traitement',
+        'livre': 'Livré avec succès',
+        'retour': 'Retourné à l\'expéditeur',
+        'annule': 'Livraison annulée',
+        'en_preparation': 'En préparation',
+        'pret_pour_collecte': 'Prêt pour collecte'
+    };
+    return statusMap[statut] || 'Statut inconnu';
 }
 
-// Fonction de calcul de distance
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Rayon de la Terre en km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+function getCompletionPercentage(statut) {
+    const percentageMap = {
+        'en_attente': 10,
+        'en_preparation': 25,
+        'pret_pour_collecte': 40,
+        'en_cours': 50,
+        'en_cours_de_livraison': 75,
+        'livre': 100,
+        'retour': 90,
+        'annule': 0
+    };
+    return percentageMap[statut] || 0;
+}
+
+function getStatusColor(statut) {
+    const colorMap = {
+        'en_cours_de_livraison': '#F59E0B',
+        'en_attente': '#6B7280',
+        'en_cours': '#3B82F6',
+        'livre': '#10B981',
+        'retour': '#F97316',
+        'annule': '#EF4444'
+    };
+    return colorMap[statut] || '#6B7280';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function calculatePerformanceMetrics(data) {
+    const metrics = {
+        tempsDepuisCreation: null,
+        tempsDepuisAcceptation: null,
+        vitesseMoyenne: null,
+        estimationLivraison: null
+    };
+    
+    const now = new Date();
+    
+    if (data.dateCreation) {
+        const creation = new Date(data.dateCreation);
+        metrics.tempsDepuisCreation = Math.floor((now - creation) / (1000 * 60 * 60)); // en heures
+    }
+    
+    if (data.dateAcceptation) {
+        const acceptance = new Date(data.dateAcceptation);
+        metrics.tempsDepuisAcceptation = Math.floor((now - acceptance) / (1000 * 60 * 60)); // en heures
+    }
+    
+    // Estimation basée sur le statut et les données historiques
+    if (data.statut === 'en_cours_de_livraison') {
+        metrics.estimationLivraison = 'Dans les 2-4 heures';
+    } else if (data.statut === 'en_cours') {
+        metrics.estimationLivraison = 'Dans les 4-8 heures';
+    } else if (data.statut === 'en_attente') {
+        metrics.estimationLivraison = 'Dans les 8-24 heures';
+    }
+    
+    return metrics;
 }
 
 // Fonction de gestion du cache
-function getCacheKey(driverId, orderId = null) {
-    return orderId ? `driver_${driverId}_order_${orderId}` : `driver_${driverId}`;
+function getCacheKey(codeID) {
+    return `tracking_${codeID}`;
 }
 
-function getCachedData(key) {
+function getCachedData(codeID) {
+    const key = getCacheKey(codeID);
     const cached = cache.get(key);
+    
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        logger.info('Données récupérées depuis le cache', { codeID });
         return cached.data;
     }
+    
     return null;
 }
 
-function setCachedData(key, data) {
+function setCachedData(codeID, data) {
+    const key = getCacheKey(codeID);
     cache.set(key, {
         data,
         timestamp: Date.now()
     });
     
     // Nettoyer le cache périodiquement
-    if (cache.size > 500) {
+    if (cache.size > 1000) {
         const oldestKeys = Array.from(cache.keys()).slice(0, 100);
         oldestKeys.forEach(key => cache.delete(key));
     }
@@ -115,7 +215,7 @@ exports.handler = async (event, context) => {
     // Gestion CORS
     const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, X-Requested-With, Authorization",
+        "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Max-Age": "86400"
     };
@@ -171,52 +271,38 @@ exports.handler = async (event, context) => {
             };
         }
 
-        // Validation des données
-        const validation = validateDriverData(requestData);
-        if (!validation.isValid) {
+        // Validation du code de suivi
+        const validation = validateTrackingCode(requestData.codeID);
+        if (!validation.valid) {
             return {
                 statusCode: 400,
                 headers: corsHeaders,
                 body: JSON.stringify({ 
-                    error: 'Données invalides',
-                    details: validation.errors,
-                    code: 'INVALID_DATA'
+                    error: validation.error,
+                    code: 'INVALID_TRACKING_CODE'
                 })
             };
         }
 
-        const { driverId, location, orderId, isBackground = false } = requestData;
-        
-        logger.info('Mise à jour de position initiée', { 
-            driverId, 
-            orderId, 
-            isBackground,
-            accuracy: location.accuracy 
-        });
+        const codeID = validation.code;
+        logger.info('Recherche de suivi initiée', { codeID });
 
-        // Vérifier le cache pour éviter les mises à jour trop fréquentes
-        const cacheKey = getCacheKey(driverId, orderId);
-        const cachedData = getCachedData(cacheKey);
-        
-        if (cachedData && !orderId) {
-            // Si pas de commande spécifique et données récentes, ignorer
-            const timeDiff = Date.now() - new Date(cachedData.timestamp).getTime();
-            if (timeDiff < 60000) { // Moins d'1 minute
-                logger.info('Position récente ignorée (cache)', { driverId, timeDiff });
-                return {
-                    statusCode: 200,
-                    headers: corsHeaders,
-                    body: JSON.stringify({
-                        success: true,
-                        message: 'Position récente, mise à jour ignorée',
-                        cached: true,
-                        responseTime: Date.now() - startTime
-                    })
-                };
-            }
+        // Vérifier le cache
+        const cachedData = getCachedData(codeID);
+        if (cachedData) {
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    expedition: cachedData,
+                    message: 'Informations de suivi récupérées avec succès (cache)',
+                    cached: true,
+                    responseTime: Date.now() - startTime
+                })
+            };
         }
 
-        // Connexion à MongoDB
+        // Connexion à MongoDB avec options avancées
         client = new MongoClient(uri, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
@@ -231,204 +317,120 @@ exports.handler = async (event, context) => {
 
         const db = client.db(dbName);
         const expeditionCollection = db.collection('cour_expedition');
-        const driverLocationCollection = db.collection('driver_locations');
+        const livraisonCollection = db.collection('Livraison');
 
-        // Préparer les données de localisation
-        const locationData = {
-            driverId,
-            location: {
-                latitude: cleanCoordinate(location.latitude),
-                longitude: cleanCoordinate(location.longitude),
-                accuracy: location.accuracy || null,
-                speed: location.speed || null,
-                heading: location.heading || null,
-                timestamp: location.timestamp || new Date().toISOString()
-            },
-            isBackground,
-            updatedAt: new Date(),
-            metadata: {
-                userAgent: event.headers['user-agent'] || 'Unknown',
-                ip: event.headers['x-forwarded-for'] || event.headers['client-ip'] || 'Unknown'
-            }
-        };
-
-        // Valider les coordonnées nettoyées
-        if (!isValidCoordinate(locationData.location.latitude, locationData.location.longitude)) {
-            throw new Error('Coordonnées GPS invalides après nettoyage');
-        }
-
-        let expeditionUpdated = false;
-        let expeditionInfo = null;
-
-        // Si un orderId est fourni, mettre à jour la commande spécifique
-        if (orderId) {
-            logger.info('Mise à jour de commande spécifique', { orderId, driverId });
-            
-            // Rechercher la commande
-            expeditionInfo = await expeditionCollection.findOne({
-                $or: [
-                    { colisID: orderId },
-                    { _id: orderId }
-                ]
-            });
-
-            if (expeditionInfo) {
-                // Vérifier que le livreur est bien assigné à cette commande
-                const isAssigned = expeditionInfo.driverId === driverId || 
-                                 expeditionInfo.idLivreurEnCharge === driverId;
-
-                if (isAssigned) {
-                    // Mettre à jour la position du livreur dans la commande
-                    const updateResult = await expeditionCollection.updateOne(
-                        { _id: expeditionInfo._id },
-                        {
-                            $set: {
-                                driverLocation: locationData.location,
-                                lastLocationUpdate: new Date(),
-                                'processus.derniereMiseAJourPosition': new Date()
-                            },
-                            $push: {
-                                'processus.historiquePositions': {
-                                    position: locationData.location,
-                                    timestamp: new Date(),
-                                    accuracy: location.accuracy,
-                                    isBackground
-                                }
-                            }
-                        }
-                    );
-
-                    expeditionUpdated = updateResult.modifiedCount > 0;
-                    logger.info('Commande mise à jour', { 
-                        orderId, 
-                        driverId, 
-                        updated: expeditionUpdated 
-                    });
-                } else {
-                    logger.warn('Livreur non autorisé pour cette commande', { 
-                        orderId, 
-                        driverId,
-                        assignedDriver: expeditionInfo.driverId || expeditionInfo.idLivreurEnCharge
-                    });
+        // Recherche dans cour_expedition avec projection optimisée
+        const expeditionInfo = await expeditionCollection.findOne(
+            { colisID: codeID },
+            {
+                projection: {
+                    // Inclure tous les champs nécessaires
+                    colisID: 1,
+                    livraisonID: 1,
+                    expediteur: 1,
+                    destinataire: 1,
+                    colis: 1,
+                    statut: 1,
+                    dateCreation: 1,
+                    dateAcceptation: 1,
+                    dateModification: 1,
+                    driverLocation: 1,
+                    driverName: 1,
+                    driverPhone: 1,
+                    driverPhone1: 1,
+                    driverPhone2: 1,
+                    driverId: 1,
+                    nomLivreur: 1,
+                    telephoneLivreur1: 1,
+                    telephoneLivreur2: 1,
+                    idLivreurEnCharge: 1,
+                    prixLivraison: 1,
+                    processus: 1,
+                    historique: 1,
+                    estExpedie: 1
                 }
-            } else {
-                logger.warn('Commande non trouvée', { orderId });
             }
-        } else {
-            // Mise à jour générale - chercher toutes les commandes assignées au livreur
-            const assignedOrders = await expeditionCollection.find({
-                $or: [
-                    { driverId: driverId },
-                    { idLivreurEnCharge: driverId }
-                ],
-                statut: { $in: ['en_cours_de_livraison', 'accepte_par_destinataire'] }
-            }).toArray();
-
-            if (assignedOrders.length > 0) {
-                logger.info(`Mise à jour de ${assignedOrders.length} commandes assignées`, { driverId });
-                
-                // Mettre à jour toutes les commandes assignées
-                const bulkOps = assignedOrders.map(order => ({
-                    updateOne: {
-                        filter: { _id: order._id },
-                        update: {
-                            $set: {
-                                driverLocation: locationData.location,
-                                lastLocationUpdate: new Date(),
-                                'processus.derniereMiseAJourPosition': new Date()
-                            },
-                            $push: {
-                                'processus.historiquePositions': {
-                                    $each: [{
-                                        position: locationData.location,
-                                        timestamp: new Date(),
-                                        accuracy: location.accuracy,
-                                        isBackground
-                                    }],
-                                    $slice: -50 // Garder seulement les 50 dernières positions
-                                }
-                            }
-                        }
-                    }
-                }));
-
-                const bulkResult = await expeditionCollection.bulkWrite(bulkOps);
-                expeditionUpdated = bulkResult.modifiedCount > 0;
-                
-                logger.info('Commandes mises à jour en lot', { 
-                    driverId, 
-                    modified: bulkResult.modifiedCount 
-                });
-            }
-        }
-
-        // Enregistrer/mettre à jour la position générale du livreur
-        await driverLocationCollection.replaceOne(
-            { driverId },
-            locationData,
-            { upsert: true }
         );
 
-        // Mettre en cache
-        setCachedData(cacheKey, {
-            location: locationData.location,
-            timestamp: new Date().toISOString(),
-            expeditionUpdated
-        });
-
-        // Calculer des métriques si possible
-        let metrics = {};
-        if (expeditionInfo && expeditionInfo.destinataire?.location) {
-            const destLat = cleanCoordinate(expeditionInfo.destinataire.location.latitude);
-            const destLng = cleanCoordinate(expeditionInfo.destinataire.location.longitude);
+        if (expeditionInfo) {
+            logger.info('Expédition trouvée', { codeID, statut: expeditionInfo.statut });
             
-            if (isValidCoordinate(destLat, destLng)) {
-                const distanceToDestination = calculateDistance(
-                    locationData.location.latitude,
-                    locationData.location.longitude,
-                    destLat,
-                    destLng
-                );
-                
-                metrics.distanceToDestination = Math.round(distanceToDestination * 100) / 100;
-                metrics.estimatedArrival = distanceToDestination < 1 ? 
-                    'Moins de 5 minutes' : 
-                    `Environ ${Math.ceil(distanceToDestination * 3)} minutes`;
-            }
+            // Enrichir les données
+            const enrichedData = enrichTrackingData(expeditionInfo);
+            
+            // Mettre en cache
+            setCachedData(codeID, enrichedData);
+            
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    expedition: enrichedData,
+                    message: 'Informations de suivi récupérées avec succès',
+                    cached: false,
+                    responseTime: Date.now() - startTime
+                })
+            };
         }
 
-        const response = {
-            success: true,
-            message: 'Position mise à jour avec succès',
-            data: {
-                driverId,
-                location: locationData.location,
-                expeditionUpdated,
-                ordersUpdated: expeditionUpdated ? (orderId ? 1 : assignedOrders?.length || 0) : 0,
-                metrics,
-                isBackground
-            },
-            responseTime: Date.now() - startTime
-        };
+        // Recherche dans Livraison si non trouvé dans cour_expedition
+        logger.info('Recherche dans la collection Livraison', { codeID });
+        const colisEnregistre = await livraisonCollection.findOne(
+            { colisID: codeID },
+            { projection: { colisID: 1, dateCreation: 1, statut: 1 } }
+        );
 
-        logger.info('Position mise à jour avec succès', {
-            driverId,
-            orderId,
-            expeditionUpdated,
-            responseTime: response.responseTime
-        });
+        if (colisEnregistre) {
+            logger.info('Colis trouvé en attente', { codeID });
+            
+            const pendingData = {
+                colisID: codeID,
+                statut: 'en_attente',
+                dateCreation: colisEnregistre.dateCreation,
+                statutDetaille: {
+                    code: 'en_attente',
+                    libelle: 'En attente de prise en charge',
+                    pourcentageCompletion: 10,
+                    couleur: '#6B7280'
+                }
+            };
+            
+            // Mettre en cache avec une durée plus courte pour les colis en attente
+            setCachedData(codeID, pendingData);
+            
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    message: 'Le processus d\'expédition pour ce colis n\'a pas encore démarré. Veuillez réessayer dans quelques minutes.',
+                    expedition: pendingData,
+                    responseTime: Date.now() - startTime
+                })
+            };
+        }
 
+        // Aucun résultat trouvé
+        logger.warn('Aucun colis trouvé', { codeID });
         return {
-            statusCode: 200,
+            statusCode: 404,
             headers: corsHeaders,
-            body: JSON.stringify(response)
+            body: JSON.stringify({
+                error: 'Code de colis invalide ou inexistant. Veuillez vérifier le code de suivi.',
+                code: 'PACKAGE_NOT_FOUND',
+                suggestions: [
+                    'Vérifiez l\'orthographe du code de suivi',
+                    'Assurez-vous que le code est complet',
+                    'Contactez l\'expéditeur si le problème persiste'
+                ],
+                responseTime: Date.now() - startTime
+            })
         };
 
     } catch (error) {
-        logger.error('Erreur lors de la mise à jour de position', error);
+        logger.error('Erreur lors de la récupération des informations d\'expédition', error);
         
         // Gestion des erreurs spécifiques
-        let errorMessage = 'Erreur serveur lors de la mise à jour de position.';
+        let errorMessage = 'Erreur serveur lors de la récupération des informations d\'expédition.';
         let errorCode = 'SERVER_ERROR';
         let statusCode = 500;
         
@@ -440,10 +442,6 @@ exports.handler = async (event, context) => {
             errorMessage = 'Timeout de la base de données. Veuillez réessayer.';
             errorCode = 'DATABASE_TIMEOUT';
             statusCode = 504;
-        } else if (error.message.includes('Coordonnées GPS invalides')) {
-            errorMessage = 'Coordonnées GPS invalides fournies.';
-            errorCode = 'INVALID_COORDINATES';
-            statusCode = 400;
         }
         
         return {
