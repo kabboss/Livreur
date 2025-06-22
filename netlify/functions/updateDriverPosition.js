@@ -33,13 +33,25 @@ exports.handler = async (event) => {
         const data = JSON.parse(event.body);
         const { orderId, driverId, location } = data;
 
-        if (!orderId || !driverId || !location || !location.latitude || !location.longitude) {
+        // Validation des données
+        if (!orderId || !driverId || !location || 
+            typeof location.latitude === 'undefined' || 
+            typeof location.longitude === 'undefined') {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({ 
-                    error: 'Données requises manquantes',
-                    required: ['orderId', 'driverId', 'location.latitude', 'location.longitude']
+                    error: 'Données requises manquantes ou invalides',
+                    required: {
+                        orderId: 'string',
+                        driverId: 'string',
+                        location: {
+                            latitude: 'number',
+                            longitude: 'number',
+                            accuracy: 'number (optional)'
+                        }
+                    },
+                    received: data
                 })
             };
         }
@@ -47,19 +59,41 @@ exports.handler = async (event) => {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
 
-        // Vérifier l'assignation dans cour_expedition
-        const expedition = await db.collection('cour_expedition').findOne({ 
-            $or: [
-                { orderId: orderId },
-                { colisID: orderId },
-                { identifiant: orderId },
-                { id: orderId },
-                { _id: orderId }
-            ],
-            driverId: driverId
-        });
+        // Ajout du timestamp et normalisation des coordonnées
+        const positionData = {
+            latitude: parseFloat(location.latitude),
+            longitude: parseFloat(location.longitude),
+            accuracy: location.accuracy ? parseFloat(location.accuracy) : null,
+            timestamp: new Date()
+        };
 
-        if (!expedition) {
+        // 1. Mise à jour dans cour_expedition
+        const expeditionUpdate = await db.collection('cour_expedition').updateOne(
+            { 
+                $or: [
+                    { orderId: orderId },
+                    { colisID: orderId },
+                    { identifiant: orderId },
+                    { id: orderId },
+                    { _id: orderId }
+                ],
+                driverId: driverId 
+            },
+            { 
+                $set: { 
+                    'driverLocation': positionData,
+                    'lastPositionUpdate': new Date()
+                },
+                $push: {
+                    'positionHistory': {
+                        $each: [positionData],
+                        $slice: -100 // Garde seulement les 100 dernières positions
+                    }
+                }
+            }
+        );
+
+        if (expeditionUpdate.matchedCount === 0) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
@@ -71,24 +105,7 @@ exports.handler = async (event) => {
             };
         }
 
-        // Mettre à jour la position dans cour_expedition
-        const updateResult = await db.collection('cour_expedition').updateOne(
-            { _id: expedition._id },
-            { 
-                $set: { 
-                    driverLocation: location,
-                    lastPositionUpdate: new Date()
-                },
-                $push: {
-                    positionHistory: {
-                        location: location,
-                        timestamp: new Date()
-                    }
-                }
-            }
-        );
-
-        // Mettre à jour également dans la collection originale si elle existe encore
+        // 2. Mise à jour dans la collection d'origine si différente
         const collectionMap = {
             packages: 'Livraison',
             food: 'Commandes',
@@ -96,24 +113,33 @@ exports.handler = async (event) => {
             pharmacy: 'pharmacyOrders'
         };
 
-        const collectionName = collectionMap[expedition.serviceType];
-        if (collectionName) {
+        // Récupérer le type de service depuis cour_expedition
+        const expeditionRecord = await db.collection('cour_expedition').findOne(
+            { _id: expeditionUpdate.upsertedId || expeditionUpdate.matchedRecords?.[0]?._id }
+        );
+
+        if (expeditionRecord?.serviceType && collectionMap[expeditionRecord.serviceType]) {
+            const originalCollection = collectionMap[expeditionRecord.serviceType];
+            
             let query;
-            if (expedition.serviceType === 'packages') {
-                query = { colisID: orderId };
-            } else if (expedition.serviceType === 'food') {
-                query = { identifiant: orderId };
-            } else {
-                query = { _id: orderId };
+            switch(expeditionRecord.serviceType) {
+                case 'packages':
+                    query = { colisID: orderId };
+                    break;
+                case 'food':
+                    query = { identifiant: orderId };
+                    break;
+                default:
+                    query = { _id: orderId };
             }
 
-            await db.collection(collectionName).updateOne(
+            await db.collection(originalCollection).updateOne(
                 query,
                 { 
                     $set: { 
-                        driverLocation: location,
-                        lastPositionUpdate: new Date()
-                    } 
+                        'driverLocation': positionData,
+                        'lastPositionUpdate': new Date()
+                    }
                 }
             );
         }
@@ -126,9 +152,9 @@ exports.handler = async (event) => {
                 message: 'Position mise à jour avec succès',
                 orderId: orderId,
                 driverId: driverId,
-                location: location,
+                location: positionData,
                 updatedAt: new Date().toISOString(),
-                modifiedCount: updateResult.modifiedCount
+                expeditionUpdated: expeditionUpdate.modifiedCount > 0
             })
         };
 
@@ -138,8 +164,8 @@ exports.handler = async (event) => {
             statusCode: 500,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
-                error: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                error: 'Erreur serveur lors de la mise à jour',
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
             })
         };
     } finally {
