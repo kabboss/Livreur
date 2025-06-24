@@ -111,18 +111,25 @@ async function handleRegistration(db, data) {
 async function registerDeliveryDriver(db, data) {
     const { username, whatsapp, secondNumber, identificationCode, password } = data;
 
+    // Nettoyer et normaliser le code
+    const cleanCode = identificationCode.trim().toUpperCase();
+    
+    console.log('Recherche livreur avec code:', cleanCode); // Log pour débogage
+
     const livreur = await db.collection('Res_livreur').findOne({
         $or: [
-            { id_livreur: identificationCode },
-            { morceau: identificationCode }
+            { id_livreur: cleanCode },
+            { morceau: cleanCode }
         ],
         statut: "actif"
     });
 
+    console.log('Résultat recherche:', livreur); // Log pour débogage
+
     if (!livreur) {
         return createResponse(404, { 
             success: false, 
-            message: 'Invalid identification code or inactive driver' 
+            message: `Code d'identification invalide ou compte inactif. Code utilisé: ${cleanCode}` 
         });
     }
 
