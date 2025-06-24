@@ -79,23 +79,134 @@ exports.handler = async (event, context) => {
 
 async function handleRegistration(db, data) {
     try {
-        const validationError = validateRegistrationData(data);
-        if (validationError) {
+        const { username, whatsapp, secondNumber, type, identificationCode, password } = data;
+        
+        // Validation des données
+        if (!username || !whatsapp || !type || !password) {
             return createResponse(400, { 
                 success: false, 
-                message: validationError 
+                message: 'Tous les champs requis doivent être remplis' 
             });
         }
 
-        const { type } = data;
         if (type === 'livreur') {
-            return await registerDeliveryDriver(db, data);
+            // Vérification du code d'identification
+            const cleanCode = identificationCode?.trim().toUpperCase();
+            if (!cleanCode) {
+                return createResponse(400, { 
+                    success: false, 
+                    message: 'Code d\'identification requis' 
+                });
+            }
+
+            // Nettoie le code pour gérer les espaces
+            const livreur = await db.collection('Res_livreur').findOne({
+                $or: [
+                    { id_livreur: cleanCode },
+                    { morceau: cleanCode }
+                ],
+                statut: "actif"
+            });
+
+            if (!livreur) {
+                return createResponse(404, { 
+                    success: false, 
+                    message: `Code d'identification invalide. Contactez-nous : 56 66 36 38 | 61 22 97 66 | kaboreabwa2020@gmail.com` 
+                });
+            }
+
+            // Vérification des doublons
+            const existing = await db.collection('compte_livreur').findOne({
+                $or: [
+                    { id_livreur: livreur.id_livreur },
+                    { username: username.toLowerCase().trim() },
+                    { whatsapp: cleanPhoneNumber(whatsapp) }
+                ]
+            });
+
+            if (existing) {
+                return createResponse(409, { 
+                    success: false, 
+                    message: 'Un compte existe déjà pour ces identifiants' 
+                });
+            }
+
+            // Création du compte
+            const hashedPassword = await bcrypt.hash(password, 12);
+            const compte = {
+                id_livreur: livreur.id_livreur,
+                username: username.toLowerCase().trim(),
+                nom: livreur.nom,
+                prenom: livreur['prénom'] || livreur.prenom,
+                whatsapp: cleanPhoneNumber(whatsapp),
+                secondNumber: secondNumber ? cleanPhoneNumber(secondNumber) : null,
+                telephone: livreur.téléphone || livreur.telephone,
+                quartier: livreur.quartier,
+                morceau: livreur.morceau,
+                contact_urgence: livreur.contact_urgence,
+                date_inscription: livreur.date_inscription || new Date(),
+                statut: "actif",
+                type_compte: "livreur",
+                password: hashedPassword,
+                photo: livreur.données_photo ? {
+                    nom: livreur.photo_nom,
+                    type: livreur.phototype,
+                    taille: livreur.photo_taille,
+                    données: livreur.données_photo
+                } : null,
+                derniere_connexion: null,
+                created_at: new Date(),
+                updated_at: new Date()
+            };
+
+            await db.collection('compte_livreur').insertOne(compte);
+            return createResponse(201, { 
+                success: true,
+                message: 'Inscription réussie ! Redirection vers la connexion...' 
+            });
+
         } else if (type === 'admin') {
-            return await registerAdmin(db, data);
+            if (identificationCode !== ADMIN_CODE) {
+                return createResponse(403, { 
+                    success: false, 
+                    message: 'Code administrateur invalide' 
+                });
+            }
+
+            // Vérification des doublons admin
+            const existing = await db.collection('compte_admin').findOne({
+                username: username.toLowerCase().trim()
+            });
+
+            if (existing) {
+                return createResponse(409, { 
+                    success: false, 
+                    message: 'Nom d\'utilisateur admin déjà utilisé' 
+                });
+            }
+
+            // Création du compte admin
+            const hashedPassword = await bcrypt.hash(password, 12);
+            await db.collection('compte_admin').insertOne({
+                username: username.toLowerCase().trim(),
+                password: hashedPassword,
+                role: "admin",
+                permissions: ["full_access"],
+                statut: "actif",
+                derniere_connexion: null,
+                created_at: new Date(),
+                updated_at: new Date()
+            });
+
+            return createResponse(201, { 
+                success: true,
+                message: 'Compte admin créé avec succès' 
+            });
+
         } else {
             return createResponse(400, { 
                 success: false, 
-                message: 'Invalid account type' 
+                message: 'Type de compte invalide' 
             });
         }
 
@@ -103,165 +214,9 @@ async function handleRegistration(db, data) {
         console.error('Registration error:', error);
         return createResponse(500, { 
             success: false, 
-            message: 'Error during registration' 
+            message: 'Erreur lors de l\'inscription' 
         });
     }
-}
-
-async function registerDeliveryDriver(db, data) {
-    const { username, whatsapp, secondNumber, identificationCode, password } = data;
-
-    // Nettoyer et normaliser le code
-    const cleanCode = identificationCode.trim().toUpperCase();
-    
-    console.log('Recherche livreur avec code:', cleanCode); // Log pour débogage
-
-    const livreur = await db.collection('Res_livreur').findOne({
-        $or: [
-            { id_livreur: cleanCode },
-            { morceau: cleanCode }
-        ],
-        statut: "actif"
-    });
-
-    console.log('Résultat recherche:', livreur); // Log pour débogage
-
-    if (!livreur) {
-        return createResponse(404, { 
-            success: false, 
-            message: `Code d'identification invalide ou compte inactif. Code utilisé: ${cleanCode}` 
-        });
-    }
-
-    const existingAccount = await db.collection('compte_livreur').findOne({
-        $or: [
-            { id_livreur: livreur.id_livreur },
-            { whatsapp: cleanPhoneNumber(whatsapp) },
-            { username: username.toLowerCase().trim() }
-        ]
-    });
-
-    if (existingAccount) {
-        let conflictMessage = 'An account already exists for ';
-        if (existingAccount.id_livreur === livreur.id_livreur) {
-            conflictMessage += 'this driver';
-        } else if (existingAccount.whatsapp === cleanPhoneNumber(whatsapp)) {
-            conflictMessage += 'this WhatsApp number';
-        } else {
-            conflictMessage += 'this username';
-        }
-        
-        return createResponse(409, { 
-            success: false, 
-            message: conflictMessage 
-        });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const nouveauCompte = {
-        id_livreur: livreur.id_livreur,
-        username: username.toLowerCase().trim(),
-        nom: livreur.nom,
-        prenom: livreur.prénom || livreur.prenom,
-        whatsapp: cleanPhoneNumber(whatsapp),
-        secondNumber: secondNumber ? cleanPhoneNumber(secondNumber) : null,
-        telephone: livreur.téléphone || livreur.telephone,
-        quartier: livreur.quartier,
-        morceau: livreur.morceau,
-        contact_urgence: livreur.contact_urgence,
-        date_inscription: new Date(),
-        statut: "actif",
-        type_compte: "livreur",
-        password: hashedPassword,
-        photo: livreur.données_photo ? {
-            nom: livreur.photo_nom,
-            type: livreur.phototype,
-            taille: livreur.photo_taille,
-            données: livreur.données_photo
-        } : null,
-        derniere_connexion: null,
-        created_at: new Date(),
-        updated_at: new Date()
-    };
-
-    const result = await db.collection('compte_livreur').insertOne(nouveauCompte);
-
-    await logActivity(db, {
-        type: 'registration',
-        user_type: 'livreur',
-        user_id: result.insertedId,
-        details: {
-            id_livreur: nouveauCompte.id_livreur,
-            username: nouveauCompte.username
-        }
-    });
-
-    return createResponse(201, { 
-        success: true,
-        message: 'Delivery driver account created successfully',
-        data: {
-            id: result.insertedId,
-            id_livreur: nouveauCompte.id_livreur,
-            username: nouveauCompte.username,
-            nom: nouveauCompte.nom,
-            prenom: nouveauCompte.prenom
-        }
-    });
-}
-
-async function registerAdmin(db, data) {
-    const { username, identificationCode, password } = data;
-
-    if (!identificationCode || identificationCode !== ADMIN_CODE) {
-        return createResponse(403, { 
-            success: false, 
-            message: 'Invalid administrator code' 
-        });
-    }
-
-    const existingAdmin = await db.collection('compte_admin').findOne({
-        username: username.toLowerCase().trim()
-    });
-
-    if (existingAdmin) {
-        return createResponse(409, { 
-            success: false, 
-            message: 'Admin username already exists' 
-        });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const nouvelAdmin = {
-        username: username.toLowerCase().trim(),
-        password: hashedPassword,
-        role: "admin",
-        permissions: ["full_access"],
-        statut: "actif",
-        derniere_connexion: null,
-        created_at: new Date(),
-        updated_at: new Date()
-    };
-
-    const result = await db.collection('compte_admin').insertOne(nouvelAdmin);
-
-    await logActivity(db, {
-        type: 'registration',
-        user_type: 'admin',
-        user_id: result.insertedId,
-        details: {
-            username: nouvelAdmin.username
-        }
-    });
-
-    return createResponse(201, { 
-        success: true,
-        message: 'Admin account created successfully',
-        data: {
-            id: result.insertedId,
-            username: nouvelAdmin.username,
-            role: nouvelAdmin.role
-        }
-    });
 }
 
 async function handleLogin(db, data) {
@@ -271,7 +226,7 @@ async function handleLogin(db, data) {
         if (!username || !type || !password) {
             return createResponse(400, { 
                 success: false, 
-                message: 'All fields are required' 
+                message: 'Tous les champs sont requis' 
             });
         }
 
@@ -282,7 +237,7 @@ async function handleLogin(db, data) {
         } else {
             return createResponse(400, { 
                 success: false, 
-                message: 'Invalid account type' 
+                message: 'Type de compte invalide' 
             });
         }
 
@@ -290,7 +245,7 @@ async function handleLogin(db, data) {
         console.error('Login error:', error);
         return createResponse(500, { 
             success: false, 
-            message: 'Error during login' 
+            message: 'Erreur lors de la connexion' 
         });
     }
 }
@@ -306,7 +261,7 @@ async function loginDeliveryDriver(db, data) {
     if (!compte) {
         return createResponse(401, { 
             success: false, 
-            message: 'Invalid credentials' 
+            message: 'Identifiants invalides' 
         });
     }
 
@@ -314,7 +269,7 @@ async function loginDeliveryDriver(db, data) {
     if (!passwordValid) {
         return createResponse(401, { 
             success: false, 
-            message: 'Invalid credentials' 
+            message: 'Identifiants invalides' 
         });
     }
 
@@ -327,16 +282,6 @@ async function loginDeliveryDriver(db, data) {
             } 
         }
     );
-
-    await logActivity(db, {
-        type: 'login',
-        user_type: 'livreur',
-        user_id: compte._id,
-        details: {
-            id_livreur: compte.id_livreur,
-            username: compte.username
-        }
-    });
 
     const userData = {
         id: compte._id,
@@ -355,7 +300,7 @@ async function loginDeliveryDriver(db, data) {
 
     return createResponse(200, { 
         success: true,
-        message: 'Login successful',
+        message: 'Connexion réussie',
         user: userData,
         token: generateSimpleToken(compte._id, 'livreur')
     });
@@ -372,7 +317,7 @@ async function loginAdmin(db, data) {
     if (!compte) {
         return createResponse(401, { 
             success: false, 
-            message: 'Invalid credentials' 
+            message: 'Identifiants invalides' 
         });
     }
 
@@ -380,7 +325,7 @@ async function loginAdmin(db, data) {
     if (!passwordValid) {
         return createResponse(401, { 
             success: false, 
-            message: 'Invalid credentials' 
+            message: 'Identifiants invalides' 
         });
     }
 
@@ -394,15 +339,6 @@ async function loginAdmin(db, data) {
         }
     );
 
-    await logActivity(db, {
-        type: 'login',
-        user_type: 'admin',
-        user_id: compte._id,
-        details: {
-            username: compte.username
-        }
-    });
-
     const userData = {
         id: compte._id,
         username: compte.username,
@@ -414,7 +350,7 @@ async function loginAdmin(db, data) {
 
     return createResponse(200, { 
         success: true,
-        message: 'Admin login successful',
+        message: 'Connexion admin réussie',
         user: userData,
         token: generateSimpleToken(compte._id, 'admin')
     });
@@ -424,27 +360,27 @@ function validateRegistrationData(data) {
     const { username, whatsapp, type, password, identificationCode } = data;
 
     if (!username || username.length < 3) {
-        return 'Username must be at least 3 characters';
+        return 'Nom d\'utilisateur doit comporter au moins 3 caractères';
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-        return 'Username can only contain letters, numbers and underscores';
+        return 'Le nom d\'utilisateur ne peut contenir que des lettres, des chiffres et des tirets bas';
     }
 
     if (!whatsapp || !isValidPhoneNumber(whatsapp)) {
-        return 'Invalid WhatsApp number';
+        return 'Numéro WhatsApp invalide';
     }
 
     if (!type || !['livreur', 'admin'].includes(type)) {
-        return 'Invalid account type';
+        return 'Type de compte invalide';
     }
 
     if (!password || password.length < 8) {
-        return 'Password must be at least 8 characters';
+        return 'Le mot de passe doit comporter au moins 8 caractères';
     }
 
     if ((type === 'livreur' || type === 'admin') && !identificationCode) {
-        return 'Identification code required';
+        return 'Code d\'identification requis';
     }
 
     return null;
@@ -463,21 +399,6 @@ function generateSimpleToken(userId, userType) {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2);
     return Buffer.from(`${userId}:${userType}:${timestamp}:${randomString}`).toString('base64');
-}
-
-async function logActivity(db, activity) {
-    try {
-        const logEntry = {
-            ...activity,
-            timestamp: new Date(),
-            ip_address: null,
-            user_agent: null
-        };
-        
-        await db.collection('activity_logs').insertOne(logEntry);
-    } catch (error) {
-        console.error('Activity log error:', error);
-    }
 }
 
 function createResponse(statusCode, body) {
