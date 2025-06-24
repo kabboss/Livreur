@@ -146,14 +146,22 @@ async function registerDeliveryDriver(db, data) {
         console.log('Recherche du livreur avec le code:', cleanCode);
 
         // Rechercher le livreur dans la collection Res_livreur
-        const livreur = await db.collection('Res_livreur').findOne({
-            $or: [
-                { id_livreur: cleanCode },
-                { morceau: cleanCode }
-            ],
-            statut: "actif"
-        });
+const livreur = await db.collection('Res_livreur').findOne({
+    $or: [
+        { id_livreur: { $regex: new RegExp(`^${cleanCode}$`, 'i') } },
+        { morceau: { $regex: new RegExp(`^${cleanCode}$`, 'i') } }
+    ],
+    status: "actif" // Notez le nom correct du champ dans vos données
+});
 
+
+console.log('Recherche avec:', {
+    $or: [
+        { id_livreur: cleanCode },
+        { morceau: cleanCode }
+    ],
+    statut: "actif"
+});
         if (!livreur) {
             console.log('Code d\'identification non trouvé:', cleanCode);
             return createResponse(404, { 
