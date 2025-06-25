@@ -39,8 +39,8 @@ function validateTrackingCode(codeID) {
     return { valid: true, code: trimmedCode.toUpperCase() };
 }
 
-// Fonction d'enrichissement des données
-function enrichTrackingData(expeditionData) {
+// Fonction d'enrichissement des données avec informations livreur
+async function enrichTrackingData(expeditionData, livreurCollection) {
     const enrichedData = { ...expeditionData };
     
     // Calculer la durée depuis la création
@@ -65,8 +65,77 @@ function enrichTrackingData(expeditionData) {
             `±${enrichedData.driverLocation.accuracy}m` : 'Non spécifiée';
     }
     
-    // Enrichir les informations de contact
-    if (enrichedData.nomLivreur || enrichedData.driverName) {
+    // Récupérer et enrichir les informations du livreur
+    const livreurId = enrichedData.idLivreurEnCharge || enrichedData.driverId;
+    if (livreurId && livreurCollection) {
+        try {
+            logger.info('Recherche des informations du livreur', { livreurId });
+            
+            const livreurInfo = await livreurCollection.findOne(
+                { id_livreur: livreurId },
+                {
+                    projection: {
+                        id_livreur: 1,
+                        nom: 1,
+                        prénom: 1,
+                        WhatsApp: 1,
+                        téléphone: 1,
+                        quartier: 1,
+                        contact_urgence: 1,
+                        date_inscription: 1,
+                        photo_nom: 1,
+                        phototype: 1,
+                        photo_taille: 1,
+                        données_photo: 1
+                    }
+                }
+            );
+            
+            if (livreurInfo) {
+                logger.info('Informations du livreur trouvées', { livreurId });
+                
+                enrichedData.livreurInfo = {
+                    id: livreurInfo.id_livreur,
+                    nom: `${livreurInfo.prénom || ''} ${livreurInfo.nom || ''}`.trim(),
+                    prenom: livreurInfo.prénom,
+                    nomFamille: livreurInfo.nom,
+                    whatsapp: livreurInfo.WhatsApp,
+                    telephone: livreurInfo.téléphone,
+                    quartier: livreurInfo.quartier,
+                    contactUrgence: livreurInfo.contact_urgence,
+                    dateInscription: livreurInfo.date_inscription,
+                    photoNom: livreurInfo.photo_nom,
+                    photoType: livreurInfo.phototype,
+                    photoTaille: livreurInfo.photo_taille,
+                    photoBase64: livreurInfo.données_photo,
+                    telephones: [
+                        livreurInfo.téléphone,
+                        livreurInfo.WhatsApp,
+                        livreurInfo.contact_urgence,
+                        enrichedData.telephoneLivreur1,
+                        enrichedData.driverPhone1,
+                        enrichedData.driverPhone,
+                        enrichedData.telephoneLivreur2,
+                        enrichedData.driverPhone2
+                    ].filter(Boolean),
+                    statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
+                };
+                
+                logger.info('Informations du livreur enrichies', { 
+                    livreurId, 
+                    nom: enrichedData.livreurInfo.nom,
+                    hasPhoto: !!enrichedData.livreurInfo.photoBase64
+                });
+            } else {
+                logger.warn('Aucune information de livreur trouvée', { livreurId });
+            }
+        } catch (error) {
+            logger.error('Erreur lors de la récupération des informations du livreur', error);
+        }
+    }
+    
+    // Enrichir les informations de contact (fallback si pas de livreurInfo)
+    if (!enrichedData.livreurInfo && (enrichedData.nomLivreur || enrichedData.driverName)) {
         enrichedData.livreurInfo = {
             nom: enrichedData.nomLivreur || enrichedData.driverName,
             id: enrichedData.idLivreurEnCharge || enrichedData.driverId,
@@ -181,7 +250,7 @@ function calculatePerformanceMetrics(data) {
 
 // Fonction de gestion du cache
 function getCacheKey(codeID) {
-    return `tracking_${codeID}`;
+    return `tracking_enhanced_${codeID}`;
 }
 
 function getCachedData(codeID) {
@@ -318,6 +387,7 @@ exports.handler = async (event, context) => {
         const db = client.db(dbName);
         const expeditionCollection = db.collection('cour_expedition');
         const livraisonCollection = db.collection('Livraison');
+        const livreurCollection = db.collection('Res_livreur');
 
         // Recherche dans cour_expedition avec projection optimisée
         const expeditionInfo = await expeditionCollection.findOne(
@@ -355,8 +425,8 @@ exports.handler = async (event, context) => {
         if (expeditionInfo) {
             logger.info('Expédition trouvée', { codeID, statut: expeditionInfo.statut });
             
-            // Enrichir les données
-            const enrichedData = enrichTrackingData(expeditionInfo);
+            // Enrichir les données avec les informations du livreur
+            const enrichedData = await enrichTrackingData(expeditionInfo, livreurCollection);
             
             // Mettre en cache
             setCachedData(codeID, enrichedData);
