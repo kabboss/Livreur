@@ -34,30 +34,6 @@ const generateTrackingCode = () => {
   return result;
 };
 
-// Validation des données d'expédition
-const validateExpeditionData = (data) => {
-  const requiredFields = [
-    'sender', 'senderPhone', 'recipient',
-    'recipientPhone', 'address', 'packageType',
-    'photos', 'location'
-  ];
-
-  const missingFields = requiredFields.filter(field => !data[field]);
-  if (missingFields.length > 0) {
-    return { valid: false, message: `Champs manquants: ${missingFields.join(', ')}` };
-  }
-
-  if (!Array.isArray(data.photos) || data.photos.length === 0) {
-    return { valid: false, message: 'Au moins une photo est requise' };
-  }
-
-  if (!data.location || typeof data.location.latitude !== 'number' || typeof data.location.longitude !== 'number') {
-    return { valid: false, message: 'Localisation GPS invalide' };
-  }
-
-  return { valid: true };
-};
-
 // Validation des données de recherche
 const validateSearchData = (data) => {
   if (!data.code || !data.nom || !data.numero) {
@@ -69,127 +45,6 @@ const validateSearchData = (data) => {
   }
 
   return { valid: true };
-};
-
-// Traitement optimisé des photos
-const processPhotos = (photos) => {
-  return photos.map((photo, index) => {
-    let thumbnail = photo.thumbnail;
-    
-    if (thumbnail && !thumbnail.startsWith('data:')) {
-      thumbnail = `data:image/jpeg;base64,${thumbnail}`;
-    }
-    
-    if (thumbnail && thumbnail.length > 2 * 1024 * 1024) {
-      console.warn(`Photo ${index + 1} trop volumineuse, compression appliquée`);
-    }
-    
-    return {
-      name: photo.name || `Photo_${index + 1}`,
-      type: photo.type || 'image/jpeg',
-      size: photo.size || 0,
-      thumbnail: thumbnail,
-      uploadedAt: new Date(),
-      index: index,
-      metadata: {
-        originalSize: photo.originalSize || photo.size,
-        compressionRatio: photo.originalSize ? (photo.size / photo.originalSize).toFixed(2) : 1
-      }
-    };
-  });
-};
-
-// Préparation des données complètes pour la livraison
-const prepareLivraisonData = (colisData, clientLocation) => {
-  return {
-    // Identifiants
-    colisID: colisData.colisID,
-    livraisonID: `LIV_${colisData.colisID}_${Date.now()}`,
-    
-    // Informations expéditeur avec localisation
-    expediteur: {
-      nom: colisData.sender,
-      telephone: colisData.senderPhone,
-      location: colisData.location,
-      precision: colisData.location.accuracy || 0,
-      dateLocalisation: colisData.createdAt
-    },
-    
-    // Informations destinataire/client avec localisation
-    destinataire: {
-      nom: colisData.recipient,
-      telephone: colisData.recipientPhone,
-      adresse: colisData.address,
-      location: clientLocation,
-      precision: clientLocation ? clientLocation.accuracy || 0 : null,
-      dateLocalisation: new Date()
-    },
-    
-    // Détails complets du colis
-    colis: {
-      type: colisData.packageType,
-      description: colisData.description || '',
-      photos: colisData.photos || [],
-      photosCount: colisData.photos ? colisData.photos.length : 0,
-      totalPhotoSize: colisData.photos ? 
-        colisData.photos.reduce((sum, photo) => sum + (photo.size || 0), 0) : 0
-    },
-    
-    // Statut et dates
-    statut: 'en_cours_de_livraison',
-    dateCreation: colisData.createdAt,
-    dateAcceptation: new Date(),
-    dateModification: new Date(),
-    
-    // Processus de livraison
-    processus: {
-      etape: 'accepte_par_destinataire',
-      prochaine_etape: 'assignation_livreur',
-      priorite: 'normale',
-      delaiEstime: '24-48h'
-    },
-    
-    // Calculs de distance et logistique
-    logistique: {
-      distanceEstimee: clientLocation && colisData.location ? 
-        calculateDistance(
-          colisData.location.latitude, 
-          colisData.location.longitude,
-          clientLocation.latitude, 
-          clientLocation.longitude
-        ) : null,
-      zoneExpedition: determineZone(colisData.location),
-      zoneLivraison: clientLocation ? determineZone(clientLocation) : null,
-      complexite: determineComplexity(colisData.packageType, colisData.photos.length)
-    },
-    
-    // Historique détaillé
-    historique: [
-      // Historique du colis original
-      ...(colisData.history || []),
-      // Nouvel événement d'acceptation
-      {
-        action: 'accepte_par_destinataire',
-        date: new Date(),
-        location: clientLocation,
-        details: {
-          precision_gps: clientLocation ? clientLocation.accuracy : null,
-          agent_utilisateur: 'Client Web App',
-          confirmation_explicite: true
-        },
-        notes: 'Client a accepté le colis - Processus de livraison déclenché automatiquement'
-      }
-    ],
-    
-    // Métadonnées enrichies
-    metadata: {
-      ...colisData.metadata,
-      acceptationTimestamp: new Date().toISOString(),
-      clientUserAgent: 'Client Web Application',
-      livraisonInitiee: true,
-      sourceAcceptation: 'interface_client_web'
-    }
-  };
 };
 
 // Calcul de distance entre deux points GPS
@@ -205,36 +60,86 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return Math.round(R * c * 100) / 100; // Distance en km avec 2 décimales
 };
 
-// Détermination de zone géographique
-const determineZone = (location) => {
-  if (!location) return 'inconnue';
-  
-  // Logique simplifiée - à adapter selon votre géographie
-  const { latitude, longitude } = location;
-  
-  // Exemple pour une ville (à personnaliser)
-  if (latitude >= 5.3 && latitude <= 5.4 && longitude >= -4.1 && longitude <= -3.9) {
-    return 'centre_ville';
-  } else if (latitude >= 5.2 && latitude <= 5.5 && longitude >= -4.2 && longitude <= -3.8) {
-    return 'peripherie';
-  } else {
-    return 'zone_etendue';
-  }
-};
-
-// Détermination de la complexité de livraison
-const determineComplexity = (packageType, photoCount) => {
-  let complexity = 'simple';
-  
-  if (packageType === 'fragile' || packageType === 'electronique') {
-    complexity = 'moyenne';
-  }
-  
-  if (packageType === 'medicament' || photoCount > 3) {
-    complexity = 'complexe';
-  }
-  
-  return complexity;
+// Préparation des données complètes pour la livraison
+const prepareLivraisonData = (colisData, clientLocation) => {
+  return {
+    colisID: colisData.colisID,
+    livraisonID: `LIV_${colisData.colisID}_${Date.now()}`,
+    
+    expediteur: {
+      nom: colisData.sender,
+      telephone: colisData.senderPhone,
+      location: colisData.location,
+      precision: colisData.location.accuracy || 0,
+      dateLocalisation: colisData.createdAt
+    },
+    
+    destinataire: {
+      nom: colisData.recipient,
+      telephone: colisData.recipientPhone,
+      adresse: colisData.address,
+      location: clientLocation,
+      precision: clientLocation ? clientLocation.accuracy || 0 : null,
+      dateLocalisation: new Date()
+    },
+    
+    colis: {
+      type: colisData.packageType,
+      description: colisData.description || '',
+      photos: colisData.photos || [],
+      photosCount: colisData.photos ? colisData.photos.length : 0,
+      totalPhotoSize: colisData.photos ? 
+        colisData.photos.reduce((sum, photo) => sum + (photo.size || 0), 0) : 0
+    },
+    
+    statut: 'en_cours_de_livraison',
+    dateCreation: colisData.createdAt,
+    dateAcceptation: new Date(),
+    dateModification: new Date(),
+    
+    processus: {
+      etape: 'accepte_par_destinataire',
+      prochaine_etape: 'assignation_livreur',
+      priorite: 'normale',
+      delaiEstime: '24-48h'
+    },
+    
+    logistique: {
+      distanceEstimee: clientLocation && colisData.location ? 
+        calculateDistance(
+          colisData.location.latitude, 
+          colisData.location.longitude,
+          clientLocation.latitude, 
+          clientLocation.longitude
+        ) : null,
+      zoneExpedition: 'zone_principale',
+      zoneLivraison: 'zone_principale',
+      complexite: 'standard'
+    },
+    
+    historique: [
+      ...(colisData.history || []),
+      {
+        action: 'accepte_par_destinataire',
+        date: new Date(),
+        location: clientLocation,
+        details: {
+          precision_gps: clientLocation ? clientLocation.accuracy : null,
+          agent_utilisateur: 'Client Web App',
+          confirmation_explicite: true
+        },
+        notes: 'Client a accepté le colis - Processus de livraison déclenché'
+      }
+    ],
+    
+    metadata: {
+      ...colisData.metadata,
+      acceptationTimestamp: new Date().toISOString(),
+      clientUserAgent: 'Client Web Application',
+      livraisonInitiee: true,
+      sourceAcceptation: 'interface_client_web'
+    }
+  };
 };
 
 // Fonction principale
@@ -282,9 +187,7 @@ exports.handler = async (event) => {
       serverSelectionTimeoutMS: 10000,
       maxPoolSize: 10,
       retryWrites: true,
-      retryReads: true,
-      maxIdleTimeMS: 30000,
-      heartbeatFrequencyMS: 10000
+      retryReads: true
     });
     
     await mongoClient.connect();
@@ -315,8 +218,7 @@ exports.handler = async (event) => {
         colisID: livraisonData.colisID,
         expediteur: livraisonData.expediteur.nom,
         destinataire: livraisonData.destinataire.nom,
-        distance: livraisonData.logistique.distanceEstimee,
-        complexite: livraisonData.logistique.complexite
+        distance: livraisonData.logistique.distanceEstimee
       });
 
       // Transaction pour garantir la cohérence des données
@@ -324,7 +226,7 @@ exports.handler = async (event) => {
       
       try {
         await session.withTransaction(async () => {
-          // 1. Insérer dans la collection Livraison avec toutes les informations
+          // 1. Insérer dans la collection Livraison
           await db.collection(mongoConfig.collections.livraison).insertOne(livraisonData, { session });
           
           // 2. Mettre à jour le statut dans la collection Colis
@@ -342,7 +244,7 @@ exports.handler = async (event) => {
                   action: 'accepte_par_destinataire',
                   date: new Date(),
                   location: requestData.location,
-                  notes: 'Client a accepté - Transféré vers processus de livraison avec données complètes',
+                  notes: 'Client a accepté - Transféré vers processus de livraison',
                   livraisonID: livraisonData.livraisonID
                 }
               }
@@ -453,10 +355,8 @@ exports.handler = async (event) => {
           type: photo.type,
           size: photo.size,
           thumbnail: photo.thumbnail,
-          index: photo.index,
-          metadata: photo.metadata
+          index: photo.index
         })) : [],
-        // Masquer les données sensibles
         metadata: {
           photosCount: colis.metadata?.photosCount || 0,
           createdAt: colis.createdAt
@@ -469,113 +369,6 @@ exports.handler = async (event) => {
           success: true, 
           colis: responseData,
           message: 'Colis localisé avec succès'
-        })
-      });
-    }
-
-    // === CRÉATION D'EXPÉDITION (EXPÉDITEUR) ===
-    if (!requestData.code && !requestData.action) {
-      console.log('📦 Création d\'expédition');
-      
-      const validation = validateExpeditionData(requestData);
-      if (!validation.valid) {
-        return setCorsHeaders({
-          statusCode: 400,
-          body: JSON.stringify({ 
-            success: false, 
-            message: validation.message 
-          })
-        });
-      }
-
-      // Génération d'un code unique avec vérification
-      let trackingCode = generateTrackingCode();
-      let attempts = 0;
-      const maxAttempts = 10;
-      
-      while (attempts < maxAttempts) {
-        const existingColis = await db.collection(mongoConfig.collections.colis).findOne({
-          colisID: trackingCode
-        });
-
-        if (!existingColis) {
-          break;
-        }
-        
-        trackingCode = generateTrackingCode();
-        attempts++;
-      }
-
-      if (attempts >= maxAttempts) {
-        return setCorsHeaders({
-          statusCode: 500,
-          body: JSON.stringify({ 
-            success: false, 
-            message: 'Impossible de générer un code unique. Veuillez réessayer dans quelques instants.' 
-          })
-        });
-      }
-
-      // Traitement optimisé des photos
-      const processedPhotos = processPhotos(requestData.photos);
-      
-      // Données complètes du colis
-      const colisData = {
-        colisID: trackingCode,
-        sender: requestData.sender,
-        senderPhone: requestData.senderPhone,
-        recipient: requestData.recipient,
-        recipientPhone: requestData.recipientPhone,
-        address: requestData.address,
-        packageType: requestData.packageType,
-        description: requestData.description || '',
-        photos: processedPhotos,
-        location: requestData.location,
-        status: 'en_attente_validation',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        metadata: {
-          userAgent: event.headers['user-agent'] || 'Unknown',
-          ipAddress: event.headers['x-forwarded-for'] || event.headers['x-real-ip'] || 'Unknown',
-          photosCount: processedPhotos.length,
-          totalPhotoSize: processedPhotos.reduce((sum, photo) => sum + (photo.size || 0), 0),
-          averagePhotoSize: processedPhotos.length > 0 ? 
-            Math.round(processedPhotos.reduce((sum, photo) => sum + (photo.size || 0), 0) / processedPhotos.length) : 0,
-          locationAccuracy: requestData.location.accuracy,
-          creationSource: 'expediteur_web_app'
-        },
-        history: [{
-          action: 'cree',
-          date: new Date(),
-          location: requestData.location,
-          notes: 'Colis créé par l\'expéditeur - En attente de validation par le destinataire',
-          accuracy: requestData.location.accuracy,
-          details: {
-            photosUploaded: processedPhotos.length,
-            packageType: requestData.packageType,
-            hasDescription: !!requestData.description
-          }
-        }]
-      };
-
-      // Insertion du colis
-      const result = await db.collection(mongoConfig.collections.colis).insertOne(colisData);
-      
-      console.log('✅ Expédition créée avec succès:', trackingCode, 'ID MongoDB:', result.insertedId);
-
-      return setCorsHeaders({
-        statusCode: 200,
-        body: JSON.stringify({
-          success: true,
-          trackingCode: trackingCode,
-          colisID: trackingCode,
-          message: 'Expédition enregistrée avec succès dans le système',
-          timestamp: new Date().toISOString(),
-          details: {
-            photosProcessed: processedPhotos.length,
-            totalSize: colisData.metadata.totalPhotoSize,
-            locationAccuracy: requestData.location.accuracy
-          }
         })
       });
     }
