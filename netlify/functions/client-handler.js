@@ -99,6 +99,32 @@ const processPhotos = (photos) => {
   });
 };
 
+// Calcul de distance entre deux points GPS (en km)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Rayon de la Terre en km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance en km
+}
+
+// Calcul du prix de livraison basé sur la distance
+function calculateDeliveryPrice(distanceKm) {
+    const basePrice = 500; // 500 FCFA pour les 5 premiers km
+    const additionalKmPrice = 100; // 100 FCFA par km supplémentaire
+    
+    if (distanceKm <= 5) {
+        return basePrice;
+    } else {
+        const additionalKm = Math.ceil(distanceKm - 5); // Arrondi au km supérieur
+        return basePrice + (additionalKm * additionalKmPrice);
+    }
+}
+
 // Préparation des données complètes pour la livraison
 const prepareLivraisonData = (colisData, clientLocation) => {
   return {
@@ -190,19 +216,6 @@ const prepareLivraisonData = (colisData, clientLocation) => {
       sourceAcceptation: 'interface_client_web'
     }
   };
-};
-
-// Calcul de distance entre deux points GPS
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Rayon de la Terre en kilomètres
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return Math.round(R * c * 100) / 100; // Distance en km avec 2 décimales
 };
 
 // Détermination de zone géographique
@@ -445,6 +458,35 @@ exports.handler = async (event) => {
 
       console.log('✅ Colis trouvé:', colis.colisID);
 
+      // Calcul du prix de livraison si les positions sont disponibles
+      let prixLivraison = null;
+      if (requestData.location && colis.location) {
+        try {
+          const distance = calculateDistance(
+            colis.location.latitude,
+            colis.location.longitude,
+            requestData.location.latitude,
+            requestData.location.longitude
+          );
+          
+          const prix = calculateDeliveryPrice(distance);
+          
+          prixLivraison = {
+            prix: prix,
+            distance: distance,
+            basePrice: 500,
+            additionalKmPrice: 100,
+            calculation: distance <= 5 ? 
+              'Tarif de base (≤5km)' : 
+              `500 FCFA (base) + ${Math.ceil(distance - 5)} km × 100 FCFA`
+          };
+          
+          console.log('💰 Prix calculé:', prixLivraison);
+        } catch (error) {
+          console.error('Erreur calcul prix:', error);
+        }
+      }
+
       // Préparer les données de réponse sécurisées
       const responseData = {
         ...colis,
@@ -468,6 +510,7 @@ exports.handler = async (event) => {
         body: JSON.stringify({ 
           success: true, 
           colis: responseData,
+          prixLivraison: prixLivraison,
           message: 'Colis localisé avec succès'
         })
       });
