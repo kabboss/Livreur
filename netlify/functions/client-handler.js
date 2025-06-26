@@ -245,109 +245,112 @@ async function handleSearchPackage(db, data) {
 }
 
 async function handleAcceptPackage(db, mongoClient, data) {
-  // Validation stricte
-  if (!data.colisID || typeof data.colisID !== 'string') {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'colisID invalide ou manquant' })
-    };
-  }
+    // Validation stricte
+    if (!data.colisID || typeof data.colisID !== 'string') {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'colisID invalide ou manquant' })
+        };
+    }
 
-  if (!data.location || typeof data.location !== 'object') {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Localisation requise' })
-    };
-  }
+    if (!data.location || typeof data.location !== 'object') {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: 'Localisation requise' })
+        };
+    }
 
-  if (typeof data.location.latitude !== 'number' || 
-      typeof data.location.longitude !== 'number') {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ 
-        error: 'Format de localisation invalide',
-        required: { latitude: 'number', longitude: 'number' }
-      })
-    };
-  }
-  const session = mongoClient.startSession();
-  try {
-    let livraisonDoc;
+    // Modifier ici pour utiliser latitude/longitude au lieu de lat/lng
+    if (typeof data.location.latitude !== 'number' || 
+        typeof data.location.longitude !== 'number') {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ 
+                error: 'Format de localisation invalide',
+                required: { latitude: 'number', longitude: 'number' }
+            })
+        };
+    }
 
-    await session.withTransaction(async () => {
-      const colis = await db.collection(mongoConfig.collections.colis)
-        .findOne({ colisID: colisID.toUpperCase() }, { session });
+    const { colisID, location } = data;
+    const session = mongoClient.startSession();
+    
+    try {
+        let livraisonDoc;
 
-      if (!colis) throw new Error('Package not found');
+        await session.withTransaction(async () => {
+            const colis = await db.collection(mongoConfig.collections.colis)
+                .findOne({ colisID: colisID.toUpperCase() }, { session });
 
-      // Préparer les données de livraison
-      const now = new Date();
-      livraisonDoc = {
-        colisID: colis.colisID,
-        livraisonID: `LIV_${colis.colisID}_${now.getTime()}`,
-        expediteur: colis.expediteur,
-        destinataire: colis.destinataire,
-        colis: {
-          type: colis.packageType,
-          description: colis.description,
-          poids: colis.poids,
-          photos: colis.photos || []
-        },
-        statut: "en_cours_de_livraison",
-        dateCreation: colis.createdAt,
-        dateAcceptation: now,
-        localisation: location,
-        historique: [
-          ...(colis.historique || []),
-          {
-            event: "accepté",
-            date: now,
-            location: location
-          }
-        ]
-      };
+            if (!colis) throw new Error('Package not found');
 
-      // Opérations atomiques
-      await db.collection(mongoConfig.collections.livraison)
-        .insertOne(livraisonDoc, { session });
+            // Préparer les données de livraison
+            const now = new Date();
+            livraisonDoc = {
+                colisID: colis.colisID,
+                livraisonID: `LIV_${colis.colisID}_${now.getTime()}`,
+                expediteur: colis.sender, // Corrigé de 'expediteur' à 'sender'
+                destinataire: colis.recipient, // Corrigé de 'destinataire' à 'recipient'
+                colis: {
+                    type: colis.packageType,
+                    description: colis.description,
+                    photos: colis.photos || []
+                },
+                statut: "en_cours_de_livraison",
+                dateCreation: colis.createdAt,
+                dateAcceptation: now,
+                localisation: location,
+                historique: [
+                    ...(colis.history || []),
+                    {
+                        event: "accepté",
+                        date: now,
+                        location: location
+                    }
+                ]
+            };
 
-      await db.collection(mongoConfig.collections.colis)
-        .updateOne(
-          { colisID: colis.colisID },
-          {
-            $set: { statut: "accepté", updatedAt: now },
-            $push: { 
-              history: {
-                status: 'accepted',
-                date: now,
-                location: location
-              }
-            }
-          },
-          { session }
-        );
-    });
+            // Opérations atomiques
+            await db.collection(mongoConfig.collections.livraison)
+                .insertOne(livraisonDoc, { session });
 
-    return setCorsHeaders({
-      statusCode: 200,
-      body: JSON.stringify({
-        success: true,
-        livraisonID: livraisonDoc.livraisonID,
-        statut: livraisonDoc.statut,
-        dateAcceptation: livraisonDoc.dateAcceptation.toISOString()
-      })
-    });
-  } catch (error) {
-    console.error("Accept error:", error);
-    return setCorsHeaders({
-      statusCode: error.message === 'Package not found' ? 404 : 500,
-      body: JSON.stringify({ 
-        error: error.message || 'Accept failed'
-      })
-    });
-  } finally {
-    await session.endSession();
-  }
+            await db.collection(mongoConfig.collections.colis)
+                .updateOne(
+                    { colisID: colis.colisID },
+                    {
+                        $set: { status: "accepted", updatedAt: now }, // Corrigé 'statut' à 'status'
+                        $push: { 
+                            history: {
+                                status: 'accepted',
+                                date: now,
+                                location: location
+                            }
+                        }
+                    },
+                    { session }
+                );
+        });
+
+        return setCorsHeaders({
+            statusCode: 200,
+            body: JSON.stringify({
+                success: true,
+                livraisonID: livraisonDoc.livraisonID,
+                status: livraisonDoc.statut, // Uniformiser le nom du champ
+                dateAcceptation: livraisonDoc.dateAcceptation.toISOString()
+            })
+        });
+    } catch (error) {
+        console.error("Accept error:", error);
+        return setCorsHeaders({
+            statusCode: error.message === 'Package not found' ? 404 : 500,
+            body: JSON.stringify({ 
+                error: error.message || 'Accept failed'
+            })
+        });
+    } finally {
+        await session.endSession();
+    }
 }
 
 async function handleDeclinePackage(db, mongoClient, data) {
