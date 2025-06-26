@@ -245,21 +245,31 @@ async function handleSearchPackage(db, data) {
 }
 
 async function handleAcceptPackage(db, mongoClient, data) {
-  const { colisID, location } = data;
-  
-  if (!colisID || !location?.latitude || !location?.longitude) {
-    return setCorsHeaders({
+  // Validation stricte
+  if (!data.colisID || typeof data.colisID !== 'string') {
+    return {
       statusCode: 400,
-      body: JSON.stringify({ 
-        error: 'Invalid request data',
-        required: {
-          colisID: 'string',
-          location: { latitude: 'number', longitude: 'number' }
-        }
-      })
-    });
+      body: JSON.stringify({ error: 'colisID invalide ou manquant' })
+    };
   }
 
+  if (!data.location || typeof data.location !== 'object') {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Localisation requise' })
+    };
+  }
+
+  if (typeof data.location.latitude !== 'number' || 
+      typeof data.location.longitude !== 'number') {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'Format de localisation invalide',
+        required: { latitude: 'number', longitude: 'number' }
+      })
+    };
+  }
   const session = mongoClient.startSession();
   try {
     let livraisonDoc;
