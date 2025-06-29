@@ -1,12 +1,14 @@
 const { MongoClient } = require('mongodb');
 
-// Configuration MongoDB (identique à l'original)
-const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
-const DB_NAME = 'FarmsConnect';
+// Configuration de la base de données
+const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const dbName = 'FarmsConnect';
+
+// Configuration du cache et de la performance
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const cache = new Map();
 
-// Logger amélioré mais conservant la même structure
+// Utilitaires de logging avancés
 const logger = {
     info: (message, data = {}) => {
         console.log(`[INFO] ${new Date().toISOString()} - ${message}`, data);
@@ -19,7 +21,7 @@ const logger = {
     }
 };
 
-// Fonctions utilitaires conservées mais optimisées
+// Fonction de validation des données
 function validateTrackingCode(codeID) {
     if (!codeID || typeof codeID !== 'string') {
         return { valid: false, error: 'Code de suivi manquant ou invalide' };
@@ -37,16 +39,18 @@ function validateTrackingCode(codeID) {
     return { valid: true, code: trimmedCode.toUpperCase() };
 }
 
-// Fonction enrichTrackingData complètement conservée
+// Fonction d'enrichissement des données avec informations livreur
 async function enrichTrackingData(expeditionData, livreurCollection) {
     const enrichedData = { ...expeditionData };
     
+    // Calculer la durée depuis la création
     if (enrichedData.dateCreation) {
         const creationDate = new Date(enrichedData.dateCreation);
         const now = new Date();
         enrichedData.dureeDepuisCreation = Math.floor((now - creationDate) / (1000 * 60 * 60 * 24));
     }
     
+    // Enrichir les informations de statut
     enrichedData.statutDetaille = {
         code: enrichedData.statut,
         libelle: getStatusLibelle(enrichedData.statut),
@@ -54,12 +58,14 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
         couleur: getStatusColor(enrichedData.statut)
     };
     
+    // Enrichir les informations de localisation
     if (enrichedData.driverLocation) {
         enrichedData.driverLocation.derniereMAJ = enrichedData.dateModification || enrichedData.dateAcceptation;
         enrichedData.driverLocation.precision = enrichedData.driverLocation.accuracy ? 
             `±${enrichedData.driverLocation.accuracy}m` : 'Non spécifiée';
     }
     
+    // Récupérer et enrichir les informations du livreur
     const livreurId = enrichedData.idLivreurEnCharge || enrichedData.driverId;
     if (livreurId && livreurCollection) {
         try {
@@ -114,12 +120,22 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
                     ].filter(Boolean),
                     statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
                 };
+                
+                // Log supplémentaire ajouté
+                logger.info('Informations du livreur enrichies', { 
+                    livreurId, 
+                    nom: enrichedData.livreurInfo.nom,
+                    hasPhoto: !!enrichedData.livreurInfo.photoBase64
+                });
+            } else {
+                logger.warn('Aucune information de livreur trouvée', { livreurId });
             }
         } catch (error) {
             logger.error('Erreur lors de la récupération des informations du livreur', error);
         }
     }
     
+    // Enrichir les informations de contact (fallback si pas de livreurInfo)
     if (!enrichedData.livreurInfo && (enrichedData.nomLivreur || enrichedData.driverName)) {
         enrichedData.livreurInfo = {
             nom: enrichedData.nomLivreur || enrichedData.driverName,
@@ -135,6 +151,7 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
         };
     }
     
+    // Enrichir les informations de photos
     if (enrichedData.colis?.photos?.length) {
         enrichedData.colis.photos = enrichedData.colis.photos.map((photo, index) => ({
             ...photo,
@@ -145,12 +162,13 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
         }));
     }
     
+    // Calculer les métriques de performance
     enrichedData.metriques = calculatePerformanceMetrics(enrichedData);
     
     return enrichedData;
 }
 
-// Toutes les fonctions utilitaires conservées
+// Fonctions utilitaires pour l'enrichissement
 function getStatusLibelle(statut) {
     const statusMap = {
         'en_cours_de_livraison': 'En cours de livraison',
@@ -230,7 +248,7 @@ function calculatePerformanceMetrics(data) {
     return metrics;
 }
 
-// Gestion du cache identique
+// Fonction de gestion du cache
 function getCacheKey(codeID) {
     return `tracking_enhanced_${codeID}`;
 }
@@ -260,8 +278,9 @@ function setCachedData(codeID, data) {
     }
 }
 
-// Handler principal complet
+// Fonction principale du handler
 exports.handler = async (event, context) => {
+    // Gestion CORS
     const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
@@ -277,6 +296,7 @@ exports.handler = async (event, context) => {
         };
     }
 
+    // Validation de la méthode HTTP
     if (event.httpMethod !== "POST") {
         return {
             statusCode: 405,
@@ -292,6 +312,7 @@ exports.handler = async (event, context) => {
     let client;
 
     try {
+        // Validation du body
         if (!event.body) {
             return {
                 statusCode: 400,
@@ -318,6 +339,7 @@ exports.handler = async (event, context) => {
             };
         }
 
+        // Validation du code de suivi
         const validation = validateTrackingCode(requestData.codeID);
         if (!validation.valid) {
             return {
@@ -333,6 +355,7 @@ exports.handler = async (event, context) => {
         const codeID = validation.code;
         logger.info('Recherche de suivi initiée', { codeID });
 
+        // Vérifier le cache
         const cachedData = getCachedData(codeID);
         if (cachedData) {
             return {
@@ -347,6 +370,7 @@ exports.handler = async (event, context) => {
             };
         }
 
+        // Connexion à MongoDB avec options avancées
         client = new MongoClient(uri, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
@@ -364,6 +388,7 @@ exports.handler = async (event, context) => {
         const livraisonCollection = db.collection('Livraison');
         const livreurCollection = db.collection('Res_livreur');
 
+        // Recherche dans cour_expedition avec projection optimisée
         const expeditionInfo = await expeditionCollection.findOne(
             { colisID: codeID },
             {
@@ -398,7 +423,10 @@ exports.handler = async (event, context) => {
         if (expeditionInfo) {
             logger.info('Expédition trouvée', { codeID, statut: expeditionInfo.statut });
             
+            // Enrichir les données avec les informations du livreur
             const enrichedData = await enrichTrackingData(expeditionInfo, livreurCollection);
+            
+            // Mettre en cache
             setCachedData(codeID, enrichedData);
             
             return {
@@ -413,6 +441,7 @@ exports.handler = async (event, context) => {
             };
         }
 
+        // Recherche dans Livraison si non trouvé dans cour_expedition
         logger.info('Recherche dans la collection Livraison', { codeID });
         const colisEnregistre = await livraisonCollection.findOne(
             { colisID: codeID },
@@ -434,6 +463,7 @@ exports.handler = async (event, context) => {
                 }
             };
             
+            // Mettre en cache avec une durée plus courte pour les colis en attente
             setCachedData(codeID, pendingData);
             
             return {
@@ -447,6 +477,7 @@ exports.handler = async (event, context) => {
             };
         }
 
+        // Aucun résultat trouvé
         logger.warn('Aucun colis trouvé', { codeID });
         return {
             statusCode: 404,
@@ -466,6 +497,7 @@ exports.handler = async (event, context) => {
     } catch (error) {
         logger.error('Erreur lors de la récupération des informations d\'expédition', error);
         
+        // Gestion des erreurs spécifiques
         let errorMessage = 'Erreur serveur lors de la récupération des informations d\'expédition.';
         let errorCode = 'SERVER_ERROR';
         let statusCode = 500;
@@ -492,6 +524,7 @@ exports.handler = async (event, context) => {
         };
         
     } finally {
+        // Fermeture sécurisée de la connexion
         if (client) {
             try {
                 await client.close();
