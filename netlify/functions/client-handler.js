@@ -629,11 +629,13 @@ async function handleDeclinePackage(db, client, data) {
   }
 }
 
+
 /**
  * Génère un code de suivi unique
+ * sans stocker dans une collection séparée
  */
 async function generateTrackingCode(db) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans O, I, 0, 1
   const codeLength = 8;
   let code, exists;
   let attempts = 0;
@@ -644,25 +646,16 @@ async function generateTrackingCode(db) {
       throw new Error('Impossible de générer un code unique après plusieurs tentatives');
     }
 
-    // Génération du code aléatoire
+    // Génération aléatoire du code
     code = Array.from({ length: codeLength }, () =>
       chars.charAt(Math.floor(Math.random() * chars.length))
     ).join('');
 
-    // Vérification de l'unicité
-    exists = await db.collection(mongoConfig.collections.tracking)
-      .findOne({ code });
-    
+    // Vérifie l'unicité dans la collection "Colis"
+    exists = await db.collection(mongoConfig.collections.colis).findOne({ trackingCode: code });
+
     attempts++;
   } while (exists);
-
-  // Enregistrement du code généré
-  await db.collection(mongoConfig.collections.tracking).insertOne({
-    code,
-    createdAt: new Date(),
-    status: 'generated',
-    attempts
-  });
 
   console.log(`🎯 Code de suivi généré: ${code} (tentatives: ${attempts})`);
   return code;

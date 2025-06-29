@@ -79,13 +79,34 @@ exports.handler = async (event) => {
       };
     }
 
-    // Préparation du document
+    // Préparation du document avec gestion de la photo
     const livreurDocument = {
-      ...requestBody,
+      id_livreur: requestBody.id_livreur,
+      nom: requestBody.nom,
+      prenom: requestBody.prenom,
+      whatsapp: requestBody.whatsapp,
+      telephone: requestBody.telephone,
+      quartier: requestBody.quartier,
+      piece: requestBody.piece,
+      date: requestBody.date,
+      contact_urgence: requestBody.contact_urgence,
+      date_inscription: requestBody.date_inscription || new Date().toISOString(),
       createdAt: new Date(),
       updatedAt: new Date(),
       status: 'actif'
     };
+
+    // Ajout des données de la photo compressée si elles existent
+    if (requestBody.photo_data) {
+      livreurDocument.photo = {
+        data: requestBody.photo_data, // Données base64 de l'image compressée
+        content_type: requestBody.photo_type || 'image/webp',
+        size: requestBody.photo_size || 0,
+        width: requestBody.photo_width || 0,
+        height: requestBody.photo_height || 0,
+        uploaded_at: new Date()
+      };
+    }
 
     // Insertion
     const result = await db.collection(COLLECTION_NAME).insertOne(livreurDocument);
@@ -96,7 +117,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         success: true,
         insertedId: result.insertedId,
-        message: 'Livreur ajouté avec succès'
+        message: 'Livreur ajouté avec succès',
+        hasPhoto: !!requestBody.photo_data
       })
     };
 
