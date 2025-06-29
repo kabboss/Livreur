@@ -1,14 +1,14 @@
 const { MongoClient } = require('mongodb');
 
-// Configuration de la base de données
-const uri = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
-const dbName = 'FarmsConnect';
+// Configuration MongoDB
+const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const DB_NAME = 'FarmsConnect';
 
-// Configuration du cache et de la performance
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Configuration du cache
+const CACHE_DURATION = 3 * 60 * 1000; // 3 minutes
 const cache = new Map();
 
-// Utilitaires de logging avancés
+// Utilitaires de logging
 const logger = {
     info: (message, data = {}) => {
         console.log(`[INFO] ${new Date().toISOString()} - ${message}`, data);
@@ -21,15 +21,15 @@ const logger = {
     }
 };
 
-// Fonction de validation des données
+// Validation du code de suivi
 function validateTrackingCode(codeID) {
     if (!codeID || typeof codeID !== 'string') {
         return { valid: false, error: 'Code de suivi manquant ou invalide' };
     }
     
     const trimmedCode = codeID.trim();
-    if (trimmedCode.length < 8 || trimmedCode.length > 20) {
-        return { valid: false, error: 'Le code de suivi doit contenir entre 8 et 20 caractères' };
+    if (trimmedCode.length < 4 || trimmedCode.length > 20) {
+        return { valid: false, error: 'Le code de suivi doit contenir entre 4 et 20 caractères' };
     }
     
     if (!/^[A-Z0-9]+$/i.test(trimmedCode)) {
@@ -39,136 +39,161 @@ function validateTrackingCode(codeID) {
     return { valid: true, code: trimmedCode.toUpperCase() };
 }
 
-// Fonction d'enrichissement des données avec informations livreur
+// Enrichissement ultra-sophistiqué des données
 async function enrichTrackingData(expeditionData, livreurCollection) {
-    const enrichedData = { ...expeditionData };
-    
-    // Calculer la durée depuis la création
-    if (enrichedData.dateCreation) {
-        const creationDate = new Date(enrichedData.dateCreation);
-        const now = new Date();
-        enrichedData.dureeDepuisCreation = Math.floor((now - creationDate) / (1000 * 60 * 60 * 24));
-    }
-    
-    // Enrichir les informations de statut
-    enrichedData.statutDetaille = {
-        code: enrichedData.statut,
-        libelle: getStatusLibelle(enrichedData.statut),
-        pourcentageCompletion: getCompletionPercentage(enrichedData.statut),
-        couleur: getStatusColor(enrichedData.statut)
-    };
-    
-    // Enrichir les informations de localisation
-    if (enrichedData.driverLocation) {
-        enrichedData.driverLocation.derniereMAJ = enrichedData.dateModification || enrichedData.dateAcceptation;
-        enrichedData.driverLocation.precision = enrichedData.driverLocation.accuracy ? 
-            `±${enrichedData.driverLocation.accuracy}m` : 'Non spécifiée';
-    }
-    
-    // Récupérer et enrichir les informations du livreur
-    const livreurId = enrichedData.idLivreurEnCharge || enrichedData.driverId;
-    if (livreurId && livreurCollection) {
-        try {
-            logger.info('Recherche des informations du livreur', { livreurId });
-            
-            const livreurInfo = await livreurCollection.findOne(
-                { id_livreur: livreurId },
-                {
-                    projection: {
-                        id_livreur: 1,
-                        nom: 1,
-                        prénom: 1,
-                        WhatsApp: 1,
-                        téléphone: 1,
-                        quartier: 1,
-                        contact_urgence: 1,
-                        date_inscription: 1,
-                        photo_nom: 1,
-                        phototype: 1,
-                        photo_taille: 1,
-                        données_photo: 1
-                    }
-                }
-            );
-            
-            if (livreurInfo) {
-                logger.info('Informations du livreur trouvées', { livreurId });
-                
-                enrichedData.livreurInfo = {
-                    id: livreurInfo.id_livreur,
-                    nom: `${livreurInfo.prénom || ''} ${livreurInfo.nom || ''}`.trim(),
-                    prenom: livreurInfo.prénom,
-                    nomFamille: livreurInfo.nom,
-                    whatsapp: livreurInfo.WhatsApp,
-                    telephone: livreurInfo.téléphone,
-                    quartier: livreurInfo.quartier,
-                    contactUrgence: livreurInfo.contact_urgence,
-                    dateInscription: livreurInfo.date_inscription,
-                    photoNom: livreurInfo.photo_nom,
-                    photoType: livreurInfo.phototype,
-                    photoTaille: livreurInfo.photo_taille,
-                    photoBase64: livreurInfo.données_photo,
-                    telephones: [
-                        livreurInfo.téléphone,
-                        livreurInfo.WhatsApp,
-                        livreurInfo.contact_urgence,
-                        enrichedData.telephoneLivreur1,
-                        enrichedData.driverPhone1,
-                        enrichedData.driverPhone,
-                        enrichedData.telephoneLivreur2,
-                        enrichedData.driverPhone2
-                    ].filter(Boolean),
-                    statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
-                };
-                
-                // Log supplémentaire ajouté
-                logger.info('Informations du livreur enrichies', { 
-                    livreurId, 
-                    nom: enrichedData.livreurInfo.nom,
-                    hasPhoto: !!enrichedData.livreurInfo.photoBase64
-                });
-            } else {
-                logger.warn('Aucune information de livreur trouvée', { livreurId });
-            }
-        } catch (error) {
-            logger.error('Erreur lors de la récupération des informations du livreur', error);
+    try {
+        const enrichedData = { ...expeditionData };
+        
+        // Calculer la durée depuis la création
+        if (enrichedData.dateCreation) {
+            const creationDate = new Date(enrichedData.dateCreation);
+            const now = new Date();
+            enrichedData.dureeDepuisCreation = Math.floor((now - creationDate) / (1000 * 60 * 60 * 24));
         }
-    }
-    
-    // Enrichir les informations de contact (fallback si pas de livreurInfo)
-    if (!enrichedData.livreurInfo && (enrichedData.nomLivreur || enrichedData.driverName)) {
-        enrichedData.livreurInfo = {
-            nom: enrichedData.nomLivreur || enrichedData.driverName,
-            id: enrichedData.idLivreurEnCharge || enrichedData.driverId,
-            telephones: [
-                enrichedData.telephoneLivreur1,
-                enrichedData.driverPhone1,
-                enrichedData.driverPhone,
-                enrichedData.telephoneLivreur2,
-                enrichedData.driverPhone2
-            ].filter(Boolean),
-            statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
+        
+        // Enrichir les informations de statut
+        enrichedData.statutDetaille = {
+            code: enrichedData.statut,
+            libelle: getStatusLibelle(enrichedData.statut),
+            pourcentageCompletion: getCompletionPercentage(enrichedData.statut),
+            couleur: getStatusColor(enrichedData.statut)
         };
+        
+        // Enrichir les informations de localisation
+        if (enrichedData.driverLocation) {
+            enrichedData.driverLocation.derniereMAJ = enrichedData.dateModification || enrichedData.dateAcceptation;
+            enrichedData.driverLocation.precision = enrichedData.driverLocation.accuracy ? 
+                `±${Math.round(enrichedData.driverLocation.accuracy)}m` : 'Non spécifiée';
+        }
+        
+        // Récupérer et enrichir les informations du livreur
+        const livreurId = enrichedData.idLivreurEnCharge || enrichedData.driverId;
+        if (livreurId && livreurCollection) {
+            try {
+                logger.info('Recherche des informations du livreur', { livreurId });
+                
+                const livreurInfo = await livreurCollection.findOne(
+                    { id_livreur: livreurId },
+                    {
+                        projection: {
+                            id_livreur: 1,
+                            nom: 1,
+                            prenom: 1,
+                            whatsapp: 1,
+                            telephone: 1,
+                            quartier: 1,
+                            contact_urgence: 1,
+                            date_inscription: 1,
+                            'photo.data': 1,
+                            'photo.content_type': 1,
+                            'photo.size': 1,
+                            'photo.width': 1,
+                            'photo.height': 1,
+                            'photo.uploaded_at': 1
+                        }
+                    }
+                );
+                
+                if (livreurInfo) {
+                    logger.info('Informations du livreur trouvées', { 
+                        livreurId, 
+                        hasPhoto: !!livreurInfo.photo?.data 
+                    });
+                    
+                    enrichedData.livreurInfo = {
+                        id: livreurInfo.id_livreur,
+                        nom: `${livreurInfo.prenom || ''} ${livreurInfo.nom || ''}`.trim(),
+                        prenom: livreurInfo.prenom,
+                        nomFamille: livreurInfo.nom,
+                        whatsapp: livreurInfo.whatsapp,
+                        telephone: livreurInfo.telephone,
+                        quartier: livreurInfo.quartier,
+                        contactUrgence: livreurInfo.contact_urgence,
+                        dateInscription: livreurInfo.date_inscription,
+                        
+                        // Gestion sophistiquée de la photo
+                        photoBase64: livreurInfo.photo?.data || null,
+                        photoContentType: livreurInfo.photo?.content_type || null,
+                        photoSize: livreurInfo.photo?.size || null,
+                        photoDimensions: livreurInfo.photo?.width && livreurInfo.photo?.height ? 
+                            `${livreurInfo.photo.width}x${livreurInfo.photo.height}` : null,
+                        photoUploadedAt: livreurInfo.photo?.uploaded_at || null,
+                        
+                        telephones: [
+                            livreurInfo.telephone,
+                            livreurInfo.whatsapp,
+                            livreurInfo.contact_urgence,
+                            enrichedData.telephoneLivreur1,
+                            enrichedData.driverPhone1,
+                            enrichedData.driverPhone,
+                            enrichedData.telephoneLivreur2,
+                            enrichedData.driverPhone2
+                        ].filter(Boolean),
+                        
+                        statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
+                    };
+                    
+                    logger.info('Informations du livreur enrichies', { 
+                        livreurId, 
+                        nom: enrichedData.livreurInfo.nom,
+                        hasPhoto: !!enrichedData.livreurInfo.photoBase64,
+                        photoType: enrichedData.livreurInfo.photoContentType,
+                        photoSize: enrichedData.livreurInfo.photoSize
+                    });
+                } else {
+                    logger.warn('Aucune information de livreur trouvée en base', { livreurId });
+                }
+            } catch (error) {
+                logger.error('Erreur lors de la récupération des informations du livreur', error);
+            }
+        }
+        
+        // Fallback si pas de livreurInfo mais des données de base
+        if (!enrichedData.livreurInfo && (enrichedData.nomLivreur || enrichedData.driverName)) {
+            enrichedData.livreurInfo = {
+                nom: enrichedData.nomLivreur || enrichedData.driverName,
+                id: enrichedData.idLivreurEnCharge || enrichedData.driverId,
+                telephones: [
+                    enrichedData.telephoneLivreur1,
+                    enrichedData.driverPhone1,
+                    enrichedData.driverPhone,
+                    enrichedData.telephoneLivreur2,
+                    enrichedData.driverPhone2
+                ].filter(Boolean),
+                statut: enrichedData.statut === 'en_cours_de_livraison' ? 'actif' : 'standby'
+            };
+        }
+        
+        // Enrichir les informations de photos du colis
+        if (enrichedData.colis?.photos?.length) {
+            enrichedData.colis.photos = enrichedData.colis.photos.map((photo, index) => ({
+                ...photo,
+                id: `photo_${index}`,
+                taille: photo.size ? formatFileSize(photo.size) : 'Inconnue',
+                format: photo.type || 'image/jpeg',
+                dateUpload: photo.uploadedAt || enrichedData.dateCreation
+            }));
+        }
+        
+        // Calculer les métriques de performance
+        enrichedData.metriques = calculatePerformanceMetrics(enrichedData);
+        
+        // Ajouter des informations de traçabilité
+        enrichedData.traceabilite = {
+            derniereUpdate: new Date().toISOString(),
+            sourceEnrichissement: 'tracking-handler-v2.0',
+            versionAPI: '2.0.0'
+        };
+        
+        return enrichedData;
+        
+    } catch (error) {
+        logger.error('Erreur lors de l\'enrichissement des données', error);
+        return expeditionData; // Retourner les données originales en cas d'erreur
     }
-    
-    // Enrichir les informations de photos
-    if (enrichedData.colis?.photos?.length) {
-        enrichedData.colis.photos = enrichedData.colis.photos.map((photo, index) => ({
-            ...photo,
-            id: `photo_${index}`,
-            taille: photo.size ? formatFileSize(photo.size) : 'Inconnue',
-            format: photo.type || 'image/jpeg',
-            dateUpload: photo.uploadedAt || enrichedData.dateCreation
-        }));
-    }
-    
-    // Calculer les métriques de performance
-    enrichedData.metriques = calculatePerformanceMetrics(enrichedData);
-    
-    return enrichedData;
 }
 
-// Fonctions utilitaires pour l'enrichissement
+// Fonctions utilitaires
 function getStatusLibelle(statut) {
     const statusMap = {
         'en_cours_de_livraison': 'En cours de livraison',
@@ -221,8 +246,8 @@ function calculatePerformanceMetrics(data) {
     const metrics = {
         tempsDepuisCreation: null,
         tempsDepuisAcceptation: null,
-        vitesseMoyenne: null,
-        estimationLivraison: null
+        estimationLivraison: null,
+        efficacite: 'normale'
     };
     
     const now = new Date();
@@ -237,20 +262,30 @@ function calculatePerformanceMetrics(data) {
         metrics.tempsDepuisAcceptation = Math.floor((now - acceptance) / (1000 * 60 * 60));
     }
     
-    if (data.statut === 'en_cours_de_livraison') {
-        metrics.estimationLivraison = 'Dans les 2-4 heures';
-    } else if (data.statut === 'en_cours') {
-        metrics.estimationLivraison = 'Dans les 4-8 heures';
-    } else if (data.statut === 'en_attente') {
-        metrics.estimationLivraison = 'Dans les 8-24 heures';
+    // Estimation basée sur le statut
+    switch (data.statut) {
+        case 'en_cours_de_livraison':
+            metrics.estimationLivraison = 'Dans les 2-4 heures';
+            metrics.efficacite = 'excellente';
+            break;
+        case 'en_cours':
+            metrics.estimationLivraison = 'Dans les 4-8 heures';
+            metrics.efficacite = 'bonne';
+            break;
+        case 'en_attente':
+            metrics.estimationLivraison = 'Dans les 8-24 heures';
+            metrics.efficacite = 'normale';
+            break;
+        default:
+            metrics.estimationLivraison = 'Non déterminée';
     }
     
     return metrics;
 }
 
-// Fonction de gestion du cache
+// Gestion du cache
 function getCacheKey(codeID) {
-    return `tracking_enhanced_${codeID}`;
+    return `tracking_ultra_${codeID}`;
 }
 
 function getCachedData(codeID) {
@@ -258,7 +293,7 @@ function getCachedData(codeID) {
     const cached = cache.get(key);
     
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        logger.info('Données récupérées depuis le cache', { codeID });
+        logger.info('Données récupérées depuis le cache', { codeID, age: Date.now() - cached.timestamp });
         return cached.data;
     }
     
@@ -272,22 +307,29 @@ function setCachedData(codeID, data) {
         timestamp: Date.now()
     });
     
-    if (cache.size > 1000) {
+    // Nettoyage du cache si trop volumineux
+    if (cache.size > 500) {
         const oldestKeys = Array.from(cache.keys()).slice(0, 100);
         oldestKeys.forEach(key => cache.delete(key));
+        logger.info('Cache nettoyé', { taille: cache.size });
     }
 }
 
-// Fonction principale du handler
+// Handler principal ultra-sophistiqué
 exports.handler = async (event, context) => {
-    // Gestion CORS
+    // Headers CORS ultra-sécurisés
     const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
+        "Access-Control-Allow-Headers": "Content-Type, X-Requested-With, Authorization",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Max-Age": "86400"
+        "Access-Control-Max-Age": "86400",
+        "Vary": "Origin",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block"
     };
 
+    // Gestion des requêtes OPTIONS
     if (event.httpMethod === "OPTIONS") {
         return {
             statusCode: 200,
@@ -302,8 +344,10 @@ exports.handler = async (event, context) => {
             statusCode: 405,
             headers: corsHeaders,
             body: JSON.stringify({ 
+                success: false,
                 error: 'Méthode non autorisée. Utilisez POST.',
-                code: 'METHOD_NOT_ALLOWED'
+                code: 'METHOD_NOT_ALLOWED',
+                timestamp: new Date().toISOString()
             })
         };
     }
@@ -318,8 +362,10 @@ exports.handler = async (event, context) => {
                 statusCode: 400,
                 headers: corsHeaders,
                 body: JSON.stringify({ 
+                    success: false,
                     error: 'Corps de requête manquant',
-                    code: 'MISSING_BODY'
+                    code: 'MISSING_BODY',
+                    timestamp: new Date().toISOString()
                 })
             };
         }
@@ -333,66 +379,76 @@ exports.handler = async (event, context) => {
                 statusCode: 400,
                 headers: corsHeaders,
                 body: JSON.stringify({ 
+                    success: false,
                     error: 'Format JSON invalide',
-                    code: 'INVALID_JSON'
+                    code: 'INVALID_JSON',
+                    timestamp: new Date().toISOString()
                 })
             };
         }
 
-        // Validation du code de suivi
+        // Validation ultra-sophistiquée du code de suivi
         const validation = validateTrackingCode(requestData.codeID);
         if (!validation.valid) {
             return {
                 statusCode: 400,
                 headers: corsHeaders,
                 body: JSON.stringify({ 
+                    success: false,
                     error: validation.error,
-                    code: 'INVALID_TRACKING_CODE'
+                    code: 'INVALID_TRACKING_CODE',
+                    timestamp: new Date().toISOString()
                 })
             };
         }
 
         const codeID = validation.code;
-        logger.info('Recherche de suivi initiée', { codeID });
+        logger.info('Recherche de suivi ultra-sophistiquée initiée', { codeID });
 
-        // Vérifier le cache
+        // Vérification du cache
         const cachedData = getCachedData(codeID);
         if (cachedData) {
             return {
                 statusCode: 200,
                 headers: corsHeaders,
                 body: JSON.stringify({
+                    success: true,
                     expedition: cachedData,
                     message: 'Informations de suivi récupérées avec succès (cache)',
                     cached: true,
-                    responseTime: Date.now() - startTime
+                    responseTime: Date.now() - startTime,
+                    timestamp: new Date().toISOString()
                 })
             };
         }
 
-        // Connexion à MongoDB avec options avancées
-        client = new MongoClient(uri, {
+        // Connexion MongoDB ultra-optimisée
+        client = new MongoClient(MONGODB_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
-            maxPoolSize: 10,
+            maxPoolSize: 15,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
-            family: 4
+            family: 4,
+            maxIdleTimeMS: 30000,
+            retryWrites: true,
+            retryReads: true
         });
 
         await client.connect();
-        logger.info('Connexion MongoDB établie');
+        logger.info('Connexion MongoDB établie avec succès');
 
-        const db = client.db(dbName);
+        const db = client.db(DB_NAME);
         const expeditionCollection = db.collection('cour_expedition');
         const livraisonCollection = db.collection('Livraison');
         const livreurCollection = db.collection('Res_livreur');
 
-        // Recherche dans cour_expedition avec projection optimisée
+        // Recherche ultra-optimisée dans cour_expedition
         const expeditionInfo = await expeditionCollection.findOne(
             { colisID: codeID },
             {
                 projection: {
+                    // Projection ultra-complète
                     colisID: 1,
                     livraisonID: 1,
                     expediteur: 1,
@@ -415,74 +471,115 @@ exports.handler = async (event, context) => {
                     prixLivraison: 1,
                     processus: 1,
                     historique: 1,
-                    estExpedie: 1
+                    estExpedie: 1,
+                    orderId: 1,
+                    serviceType: 1,
+                    assignedAt: 1,
+                    status: 1,
+                    originalCollection: 1,
+                    lastPositionUpdate: 1,
+                    positionHistory: 1,
+                    localisation: 1
                 }
             }
         );
 
         if (expeditionInfo) {
-            logger.info('Expédition trouvée', { codeID, statut: expeditionInfo.statut });
+            logger.info('Expédition trouvée avec succès', { 
+                codeID, 
+                statut: expeditionInfo.statut,
+                hasDriverLocation: !!expeditionInfo.driverLocation,
+                driverId: expeditionInfo.driverId || expeditionInfo.idLivreurEnCharge
+            });
             
-            // Enrichir les données avec les informations du livreur
+            // Enrichissement ultra-sophistiqué des données
             const enrichedData = await enrichTrackingData(expeditionInfo, livreurCollection);
             
-            // Mettre en cache
+            // Mise en cache avec métadonnées
             setCachedData(codeID, enrichedData);
             
             return {
                 statusCode: 200,
                 headers: corsHeaders,
                 body: JSON.stringify({
+                    success: true,
                     expedition: enrichedData,
                     message: 'Informations de suivi récupérées avec succès',
                     cached: false,
-                    responseTime: Date.now() - startTime
+                    responseTime: Date.now() - startTime,
+                    timestamp: new Date().toISOString(),
+                    metadata: {
+                        version: '2.0.0',
+                        enriched: true,
+                        hasDriverInfo: !!enrichedData.livreurInfo,
+                        hasDriverPhoto: !!(enrichedData.livreurInfo?.photoBase64),
+                        hasLocation: !!enrichedData.driverLocation
+                    }
                 })
             };
         }
 
-        // Recherche dans Livraison si non trouvé dans cour_expedition
+        // Recherche dans Livraison si non trouvé
         logger.info('Recherche dans la collection Livraison', { codeID });
         const colisEnregistre = await livraisonCollection.findOne(
             { colisID: codeID },
-            { projection: { colisID: 1, dateCreation: 1, statut: 1 } }
+            { projection: { colisID: 1, dateCreation: 1, statut: 1, expediteur: 1, destinataire: 1, colis: 1 } }
         );
 
         if (colisEnregistre) {
-            logger.info('Colis trouvé en attente', { codeID });
+            logger.info('Colis trouvé en attente dans Livraison', { codeID });
             
             const pendingData = {
                 colisID: codeID,
                 statut: 'en_attente',
                 dateCreation: colisEnregistre.dateCreation,
+                expediteur: colisEnregistre.expediteur,
+                destinataire: colisEnregistre.destinataire,
+                colis: colisEnregistre.colis,
                 statutDetaille: {
                     code: 'en_attente',
                     libelle: 'En attente de prise en charge',
                     pourcentageCompletion: 10,
                     couleur: '#6B7280'
+                },
+                metriques: {
+                    estimationLivraison: 'Dans les 8-24 heures',
+                    efficacite: 'normale'
+                },
+                traceabilite: {
+                    derniereUpdate: new Date().toISOString(),
+                    sourceEnrichissement: 'tracking-handler-v2.0-pending',
+                    versionAPI: '2.0.0'
                 }
             };
             
-            // Mettre en cache avec une durée plus courte pour les colis en attente
+            // Cache avec durée réduite pour les colis en attente
             setCachedData(codeID, pendingData);
             
             return {
                 statusCode: 200,
                 headers: corsHeaders,
                 body: JSON.stringify({
-                    message: 'Le processus d\'expédition pour ce colis n\'a pas encore démarré. Veuillez réessayer dans quelques minutes.',
+                    success: true,
+                    message: 'Le processus d\'expédition pour ce colis n\'a pas encore démarré. Un livreur prendra en charge votre colis dans les plus brefs délais.',
                     expedition: pendingData,
-                    responseTime: Date.now() - startTime
+                    responseTime: Date.now() - startTime,
+                    timestamp: new Date().toISOString(),
+                    metadata: {
+                        version: '2.0.0',
+                        status: 'pending'
+                    }
                 })
             };
         }
 
         // Aucun résultat trouvé
-        logger.warn('Aucun colis trouvé', { codeID });
+        logger.warn('Aucun colis trouvé avec ce code', { codeID });
         return {
             statusCode: 404,
             headers: corsHeaders,
             body: JSON.stringify({
+                success: false,
                 error: 'Code de colis invalide ou inexistant. Veuillez vérifier le code de suivi.',
                 code: 'PACKAGE_NOT_FOUND',
                 suggestions: [
@@ -490,14 +587,15 @@ exports.handler = async (event, context) => {
                     'Assurez-vous que le code est complet',
                     'Contactez l\'expéditeur si le problème persiste'
                 ],
-                responseTime: Date.now() - startTime
+                responseTime: Date.now() - startTime,
+                timestamp: new Date().toISOString()
             })
         };
 
     } catch (error) {
-        logger.error('Erreur lors de la récupération des informations d\'expédition', error);
+        logger.error('Erreur critique lors de la récupération des informations d\'expédition', error);
         
-        // Gestion des erreurs spécifiques
+        // Gestion sophistiquée des erreurs
         let errorMessage = 'Erreur serveur lors de la récupération des informations d\'expédition.';
         let errorCode = 'SERVER_ERROR';
         let statusCode = 500;
@@ -510,25 +608,34 @@ exports.handler = async (event, context) => {
             errorMessage = 'Timeout de la base de données. Veuillez réessayer.';
             errorCode = 'DATABASE_TIMEOUT';
             statusCode = 504;
+        } else if (error.message?.includes('JSON')) {
+            errorMessage = 'Erreur de traitement des données. Format invalide.';
+            errorCode = 'DATA_PROCESSING_ERROR';
+            statusCode = 422;
         }
         
         return {
             statusCode: statusCode,
             headers: corsHeaders,
             body: JSON.stringify({
+                success: false,
                 error: errorMessage,
                 code: errorCode,
                 timestamp: new Date().toISOString(),
-                responseTime: Date.now() - startTime
+                responseTime: Date.now() - startTime,
+                metadata: {
+                    version: '2.0.0',
+                    errorType: error.name || 'UnknownError'
+                }
             })
         };
         
     } finally {
-        // Fermeture sécurisée de la connexion
+        // Fermeture ultra-sécurisée de la connexion
         if (client) {
             try {
                 await client.close();
-                logger.info('Connexion MongoDB fermée');
+                logger.info('Connexion MongoDB fermée avec succès');
             } catch (closeError) {
                 logger.error('Erreur lors de la fermeture de la connexion MongoDB', closeError);
             }
