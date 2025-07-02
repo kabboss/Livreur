@@ -1,0 +1,1226 @@
+const { MongoClient, ObjectId } = require('mongodb');
+
+// Configuration MongoDB
+const MONGODB_URI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
+const DB_NAME = "FarmsConnect";
+const ADMIN_CODE = "ka23bo23re23";
+
+// Headers CORS
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+    'Content-Type': 'application/json'
+};
+
+// Instance MongoDB réutilisable
+let mongoClient = null;
+
+async function connectToMongoDB() {
+    if (!mongoClient) {
+        mongoClient = new MongoClient(MONGODB_URI, {
+            connectTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 10000,
+            maxPoolSize: 10
+        });
+        await mongoClient.connect();
+    }
+    return mongoClient.db(DB_NAME);
+}
+
+exports.handler = async (event, context) => {
+    // Gérer les requêtes OPTIONS (CORS preflight)
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({})
+        };
+    }
+
+    try {
+        const queryParams = event.queryStringParameters || {};
+        const action = queryParams.action;
+        const adminCode = queryParams.adminCode;
+
+        // Vérification du code admin pour toutes les requêtes
+        if (adminCode !== ADMIN_CODE) {
+            return {
+                statusCode: 401,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    success: false,
+                    message: 'Code administrateur invalide',
+                    error: 'UNAUTHORIZED'
+                })
+            };
+        }
+
+        const db = await connectToMongoDB();
+
+        // Gestion des actions GET
+        if (event.httpMethod === 'GET') {
+            switch (action) {
+                case 'getStats':
+                    return await getStats(db);
+                
+                case 'getData':
+                    const collection = queryParams.collection;
+                    const limit = parseInt(queryParams.limit || '1000');
+                    const offset = parseInt(queryParams.offset || '0');
+                    if (!collection) {
+                        return errorResponse('Collection manquante', 400);
+                    }
+                    return await getData(db, collection, limit, offset);
+                
+                case 'getPreview':
+                    const previewCollection = queryParams.collection;
+                    const previewLimit = parseInt(queryParams.limit || '5');
+                    if (!previewCollection) {
+                        return errorResponse('Collection manquante', 400);
+                    }
+                    return await getPreview(db, previewCollection, previewLimit);
+                
+                case 'getCollectionStats':
+                    const statsCollection = queryParams.collection;
+                    if (!statsCollection) {
+                        return errorResponse('Collection manquante', 400);
+                    }
+                    return await getCollectionStats(db, statsCollection);
+                
+                default:
+                    return errorResponse('Action GET non supportée', 400);
+            }
+        }
+
+        // Gestion des actions POST
+        if (event.httpMethod === 'POST') {
+            const body = JSON.parse(event.body || '{}');
+            
+            // Vérification du code admin dans le body aussi
+            if (body.adminCode !== ADMIN_CODE) {
+                return {
+                    statusCode: 401,
+                    headers: corsHeaders,
+                    body: JSON.stringify({
+                        success: false,
+                        message: 'Code administrateur invalide dans le body',
+                        error: 'UNAUTHORIZED'
+                    })
+                };
+            }
+            
+            switch (body.action) {
+                case 'deleteItem':
+                    return await deleteItem(db, body.collection, body.itemId);
+                
+                case 'bulkDelete':
+                    return await bulkDelete(db, body.collection, body.itemIds);
+                
+                case 'deleteCollection':
+                    return await deleteCollection(db, body.collection);
+                
+                case 'updateItem':
+                    return await updateItem(db, body.collection, body.itemId, body.updates);
+                
+                case 'createItem':
+                    return await createItem(db, body.collection, body.data);
+                
+                case 'exportCollection':
+                    return await exportCollection(db, body.collection, body.format || 'json');
+                
+                case 'getAnalytics':
+                    return await getAnalytics(db, body.collection, body.timeRange || '7d');
+                
+                case 'searchItems':
+                    return await searchItems(db, body.collection, body.query, body.filters || {});
+                
+                case 'backupCollection':
+                    return await backupCollection(db, body.collection);
+                
+                case 'restoreCollection':
+                    return await restoreCollection(db, body.collection, body.backupName);
+                
+                case 'getBackups':
+                    return await getBackups(db, body.collection);
+                
+                case 'deleteBackup':
+                    return await deleteBackup(db, body.backupName);
+                
+                case 'globalSearch':
+                    return await globalSearch(db, body.query, body.collections || []);
+                
+                case 'getSystemInfo':
+                    return await getSystemInfo(db);
+                
+                default:
+                    return errorResponse('Action POST non supportée', 400);
+            }
+        }
+
+        return errorResponse('Méthode HTTP non supportée', 405);
+
+    } catch (error) {
+        console.error('Erreur serveur:', error);
+        return {
+            statusCode: 500,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: false,
+                message: 'Erreur interne du serveur',
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            })
+        };
+    }
+};
+
+// Fonction pour obtenir les statistiques globales
+async function getStats(db) {
+    try {
+        const collections = [
+            'Colis', 'Commandes', 'Livraison', 'LivraisonsEffectuees', 
+            'Refus', 'Res_livreur', 'compte_livreur', 'Restau', 
+            'cour_expedition', 'pharmacyOrders', 'shopping_orders'
+        ];
+
+        const stats = {};
+        const collectionsData = {};
+        const recentActivity = [];
+
+        // Obtenir le nombre de documents dans chaque collection
+        for (const collection of collections) {
+            try {
+                const count = await db.collection(collection).countDocuments();
+                collectionsData[collection] = count;
+
+                // Statistiques spéciales pour le dashboard
+                switch (collection) {
+                    case 'Colis':
+                        stats.colis = count;
+                        // Activité récente
+                        const recentColis = await db.collection(collection)
+                            .find({})
+                            .sort({ createdAt: -1 })
+                            .limit(5)
+                            .toArray();
+                        recentActivity.push(...recentColis.map(item => ({
+                            ...item,
+                            collection: 'Colis',
+                            type: 'colis'
+                        })));
+                        break;
+                    case 'Livraison':
+                        stats.livraison = count;
+                        break;
+                    case 'LivraisonsEffectuees':
+                        stats.livrees = count;
+                        break;
+                    case 'Res_livreur':
+                        const activeDrivers = await db.collection(collection)
+                            .countDocuments({ status: 'actif' });
+                        stats.livreurs = activeDrivers;
+                        stats.totalLivreurs = count;
+                        break;
+                    case 'Restau':
+                        const activeRestaurants = await db.collection(collection)
+                            .countDocuments({ statut: 'actif' });
+                        stats.restaurants = activeRestaurants;
+                        stats.totalRestaurants = count;
+                        break;
+                    case 'Commandes':
+                        stats.commandes = count;
+                        break;
+                }
+            } catch (error) {
+                console.warn(`Erreur pour la collection ${collection}:`, error);
+                collectionsData[collection] = 0;
+            }
+        }
+
+        // Commandes du jour
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        try {
+            const commandesJour = await db.collection('Commandes').countDocuments({
+                date_creation: {
+                    $gte: today,
+                    $lt: tomorrow
+                }
+            }) + await db.collection('Colis').countDocuments({
+                createdAt: {
+                    $gte: today,
+                    $lt: tomorrow
+                }
+            });
+
+            stats.commandesJour = commandesJour;
+        } catch (error) {
+            console.warn('Erreur calcul commandes du jour:', error);
+            stats.commandesJour = 0;
+        }
+
+        // Statistiques de performance
+        try {
+            const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            
+            stats.performance = {
+                weeklyDeliveries: await db.collection('LivraisonsEffectuees').countDocuments({
+                    dateCreation: { $gte: weekAgo }
+                }),
+                weeklyOrders: await db.collection('Commandes').countDocuments({
+                    date_creation: { $gte: weekAgo }
+                }),
+                averageDeliveryTime: '2.5h',
+                successRate: '94%'
+            };
+        } catch (error) {
+            console.warn('Erreur calcul performance:', error);
+            stats.performance = {
+                weeklyDeliveries: 0,
+                weeklyOrders: 0,
+                averageDeliveryTime: 'N/A',
+                successRate: 'N/A'
+            };
+        }
+
+        // Trier l'activité récente par date
+        recentActivity.sort((a, b) => new Date(b.createdAt || b.dateCreation || 0).getTime() - new Date(a.createdAt || a.dateCreation || 0).getTime());
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                stats,
+                collectionsData,
+                recentActivity: recentActivity.slice(0, 10),
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getStats:', error);
+        return errorResponse('Erreur lors du chargement des statistiques');
+    }
+}
+
+// Fonction pour obtenir les données d'une collection avec pagination
+async function getData(db, collectionName, limit = 1000, offset = 0) {
+    try {
+        const collection = db.collection(collectionName);
+        
+        // Obtenir le nombre total de documents
+        const totalCount = await collection.countDocuments();
+        
+        // Obtenir les documents avec pagination et tri
+        const documents = await collection
+            .find({})
+            .sort({ $natural: -1 })
+            .skip(offset)
+            .limit(Math.min(limit, 1000))
+            .toArray();
+
+        // Statistiques de la collection
+        const stats = await getCollectionBasicStats(db, collectionName);
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                data: documents,
+                count: documents.length,
+                totalCount,
+                offset,
+                limit,
+                hasMore: offset + documents.length < totalCount,
+                collection: collectionName,
+                stats,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getData:', error);
+        return errorResponse(`Erreur lors du chargement de la collection ${collectionName}: ${error.message}`);
+    }
+}
+
+// Fonction pour obtenir un aperçu d'une collection
+async function getPreview(db, collectionName, limit = 5) {
+    try {
+        const collection = db.collection(collectionName);
+        
+        const documents = await collection
+            .find({})
+            .sort({ $natural: -1 })
+            .limit(limit)
+            .toArray();
+
+        const totalCount = await collection.countDocuments();
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                data: documents,
+                collection: collectionName,
+                totalCount,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getPreview:', error);
+        return errorResponse(`Erreur lors du chargement de l'aperçu de ${collectionName}: ${error.message}`);
+    }
+}
+
+// Fonction pour obtenir les statistiques d'une collection
+async function getCollectionStats(db, collectionName) {
+    try {
+        const collection = db.collection(collectionName);
+        
+        const totalCount = await collection.countDocuments();
+        const stats = await getCollectionBasicStats(db, collectionName);
+        
+        // Statistiques par période
+        const now = new Date();
+        const periods = {
+            today: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+            month: new Date(now.getFullYear(), now.getMonth(), 1)
+        };
+
+        const periodStats = {};
+        
+        for (const [period, date] of Object.entries(periods)) {
+            try {
+                periodStats[period] = await collection.countDocuments({
+                    $or: [
+                        { createdAt: { $gte: date } },
+                        { dateCreation: { $gte: date } },
+                        { date_creation: { $gte: date } },
+                        { orderDate: { $gte: date } }
+                    ]
+                });
+            } catch (error) {
+                periodStats[period] = 0;
+            }
+        }
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                collection: collectionName,
+                totalCount,
+                stats,
+                periodStats,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getCollectionStats:', error);
+        return errorResponse(`Erreur lors du calcul des statistiques de ${collectionName}: ${error.message}`);
+    }
+}
+
+// Fonction pour obtenir les statistiques de base d'une collection
+async function getCollectionBasicStats(db, collectionName) {
+    try {
+        const collection = db.collection(collectionName);
+        
+        // Statistiques par statut si applicable
+        const statusStats = {};
+        const statusFields = ['status', 'statut'];
+        
+        for (const field of statusFields) {
+            try {
+                const pipeline = [
+                    { $group: { _id: `$${field}`, count: { $sum: 1 } } },
+                    { $sort: { count: -1 } }
+                ];
+                
+                const results = await collection.aggregate(pipeline).toArray();
+                if (results.length > 0) {
+                    statusStats[field] = results.reduce((acc, item) => {
+                        if (item._id) acc[item._id] = item.count;
+                        return acc;
+                    }, {});
+                    break;
+                }
+            } catch (error) {
+                // Ignorer les erreurs pour les champs qui n'existent pas
+            }
+        }
+
+        return {
+            statusDistribution: statusStats,
+            lastUpdated: new Date().toISOString()
+        };
+    } catch (error) {
+        console.warn('Erreur getCollectionBasicStats:', error);
+        return {};
+    }
+}
+
+// Fonction pour supprimer un élément
+async function deleteItem(db, collectionName, itemId) {
+    try {
+        if (!itemId) {
+            return errorResponse('ID de l\'élément manquant', 400);
+        }
+
+        const collection = db.collection(collectionName);
+        
+        // Vérifier que l'élément existe
+        const existingItem = await collection.findOne({ _id: new ObjectId(itemId) });
+        if (!existingItem) {
+            return errorResponse('Élément non trouvé', 404);
+        }
+        
+        const result = await collection.deleteOne({
+            _id: new ObjectId(itemId)
+        });
+
+        if (result.deletedCount === 1) {
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    success: true,
+                    message: 'Élément supprimé avec succès',
+                    deletedCount: 1,
+                    itemId,
+                    collection: collectionName,
+                    timestamp: new Date().toISOString()
+                })
+            };
+        } else {
+            return errorResponse('Échec de la suppression', 500);
+        }
+
+    } catch (error) {
+        console.error('Erreur deleteItem:', error);
+        return errorResponse(`Erreur lors de la suppression: ${error.message}`);
+    }
+}
+
+// Fonction pour suppression en masse
+async function bulkDelete(db, collectionName, itemIds) {
+    try {
+        if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+            return errorResponse('Liste d\'IDs manquante ou vide', 400);
+        }
+
+        const collection = db.collection(collectionName);
+        
+        // Convertir les IDs en ObjectId et valider
+        const objectIds = [];
+        for (const id of itemIds) {
+            try {
+                objectIds.push(new ObjectId(id));
+            } catch (error) {
+                return errorResponse(`ID invalide: ${id}`, 400);
+            }
+        }
+        
+        const result = await collection.deleteMany({
+            _id: { $in: objectIds }
+        });
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                message: `${result.deletedCount} élément(s) supprimé(s)`,
+                deletedCount: result.deletedCount,
+                requestedCount: itemIds.length,
+                collection: collectionName,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur bulkDelete:', error);
+        return errorResponse(`Erreur lors de la suppression en masse: ${error.message}`);
+    }
+}
+
+// Fonction pour vider une collection
+async function deleteCollection(db, collectionName) {
+    try {
+        if (!collectionName) {
+            return errorResponse('Nom de collection manquant', 400);
+        }
+
+        const collection = db.collection(collectionName);
+        
+        // Compter les documents avant suppression
+        const countBefore = await collection.countDocuments();
+        
+        const result = await collection.deleteMany({});
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                message: `Collection ${collectionName} vidée`,
+                deletedCount: result.deletedCount,
+                countBefore,
+                collection: collectionName,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur deleteCollection:', error);
+        return errorResponse(`Erreur lors de la suppression de la collection: ${error.message}`);
+    }
+}
+
+// Fonction pour mettre à jour un élément
+async function updateItem(db, collectionName, itemId, updates) {
+    try {
+        if (!itemId) {
+            return errorResponse('ID de l\'élément manquant', 400);
+        }
+
+        if (!updates || typeof updates !== 'object') {
+            return errorResponse('Données de mise à jour manquantes', 400);
+        }
+
+        const collection = db.collection(collectionName);
+        
+        // Ajouter la date de modification
+        updates.updatedAt = new Date();
+        
+        // Vérifier que l'élément existe
+        const existingItem = await collection.findOne({ _id: new ObjectId(itemId) });
+        if (!existingItem) {
+            return errorResponse('Élément non trouvé', 404);
+        }
+        
+        const result = await collection.updateOne(
+            { _id: new ObjectId(itemId) },
+            { $set: updates }
+        );
+
+        if (result.matchedCount === 1) {
+            // Récupérer l'élément mis à jour
+            const updatedItem = await collection.findOne({ _id: new ObjectId(itemId) });
+            
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    success: true,
+                    message: 'Élément mis à jour avec succès',
+                    modifiedCount: result.modifiedCount,
+                    itemId,
+                    updatedItem,
+                    collection: collectionName,
+                    timestamp: new Date().toISOString()
+                })
+            };
+        } else {
+            return errorResponse('Échec de la mise à jour', 500);
+        }
+
+    } catch (error) {
+        console.error('Erreur updateItem:', error);
+        return errorResponse(`Erreur lors de la mise à jour: ${error.message}`);
+    }
+}
+
+// Fonction pour créer un élément
+async function createItem(db, collectionName, data) {
+    try {
+        if (!data || typeof data !== 'object') {
+            return errorResponse('Données manquantes', 400);
+        }
+
+        const collection = db.collection(collectionName);
+        
+        // Ajouter les dates de création et modification
+        data.createdAt = new Date();
+        data.updatedAt = new Date();
+        
+        const result = await collection.insertOne(data);
+
+        return {
+            statusCode: 201,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                message: 'Élément créé avec succès',
+                insertedId: result.insertedId,
+                collection: collectionName,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur createItem:', error);
+        return errorResponse(`Erreur lors de la création: ${error.message}`);
+    }
+}
+
+// Fonction pour exporter une collection
+async function exportCollection(db, collectionName, format = 'json') {
+    try {
+        const collection = db.collection(collectionName);
+        
+        const documents = await collection.find({}).toArray();
+
+        let exportData;
+        let contentType;
+        let fileExtension;
+
+        switch (format.toLowerCase()) {
+            case 'csv':
+                exportData = convertToCSV(documents);
+                contentType = 'text/csv';
+                fileExtension = 'csv';
+                break;
+            case 'json':
+            default:
+                exportData = JSON.stringify({
+                    collection: collectionName,
+                    exportDate: new Date().toISOString(),
+                    count: documents.length,
+                    data: documents
+                }, null, 2);
+                contentType = 'application/json';
+                fileExtension = 'json';
+                break;
+        }
+
+        return {
+            statusCode: 200,
+            headers: {
+                ...corsHeaders,
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${collectionName}_export_${new Date().toISOString().split('T')[0]}.${fileExtension}"`
+            },
+            body: exportData
+        };
+
+    } catch (error) {
+        console.error('Erreur exportCollection:', error);
+        return errorResponse(`Erreur lors de l'export: ${error.message}`);
+    }
+}
+
+// Fonction pour les analyses temporelles
+async function getAnalytics(db, collectionName, timeRange) {
+    try {
+        const collection = db.collection(collectionName);
+        
+        // Définir la plage de temps
+        const now = new Date();
+        let startDate;
+        let groupFormat;
+
+        switch (timeRange) {
+            case '24h':
+                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                groupFormat = "%Y-%m-%d %H:00";
+                break;
+            case '7d':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                groupFormat = "%Y-%m-%d";
+                break;
+            case '30d':
+                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                groupFormat = "%Y-%m-%d";
+                break;
+            case '90d':
+                startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                groupFormat = "%Y-%m-%d";
+                break;
+            default:
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                groupFormat = "%Y-%m-%d";
+                break;
+        }
+
+        // Agrégation pour les statistiques temporelles
+        const pipeline = [
+            {
+                $match: {
+                    $or: [
+                        { createdAt: { $gte: startDate } },
+                        { dateCreation: { $gte: startDate } },
+                        { date_creation: { $gte: startDate } },
+                        { orderDate: { $gte: startDate } }
+                    ]
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        $dateToString: {
+                            format: groupFormat,
+                            date: {
+                                $ifNull: [
+                                    "$createdAt",
+                                    { $ifNull: ["$dateCreation", { $ifNull: ["$date_creation", "$orderDate"] }] }
+                                ]
+                            }
+                        }
+                    },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ];
+
+        const analyticsData = await collection.aggregate(pipeline).toArray();
+
+        // Statistiques par statut si applicable
+        const statusPipeline = [
+            {
+                $match: {
+                    $or: [
+                        { createdAt: { $gte: startDate } },
+                        { dateCreation: { $gte: startDate } },
+                        { date_creation: { $gte: startDate } },
+                        { orderDate: { $gte: startDate } }
+                    ]
+                }
+            },
+            {
+                $group: {
+                    _id: { $ifNull: ["$status", "$statut"] },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { count: -1 } }
+        ];
+
+        const statusData = await collection.aggregate(statusPipeline).toArray();
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                analytics: analyticsData,
+                statusDistribution: statusData,
+                timeRange,
+                startDate: startDate.toISOString(),
+                endDate: now.toISOString(),
+                collection: collectionName,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getAnalytics:', error);
+        return errorResponse(`Erreur lors de l'analyse: ${error.message}`);
+    }
+}
+
+// Fonction de recherche avancée
+async function searchItems(db, collectionName, query, filters = {}) {
+    try {
+        const collection = db.collection(collectionName);
+        
+        // Construction de la requête de recherche
+        const searchQuery = {};
+
+        // Recherche textuelle si une requête est fournie
+        if (query && query.trim()) {
+            const searchTerms = query.trim().split(/\s+/);
+            const regexQueries = searchTerms.map(term => new RegExp(term, 'i'));
+            
+            searchQuery.$or = [
+                { nom: { $in: regexQueries } },
+                { name: { $in: regexQueries } },
+                { sender: { $in: regexQueries } },
+                { recipient: { $in: regexQueries } },
+                { description: { $in: regexQueries } },
+                { status: { $in: regexQueries } },
+                { statut: { $in: regexQueries } },
+                { colisID: { $in: regexQueries } },
+                { id_livreur: { $in: regexQueries } },
+                { username: { $in: regexQueries } },
+                { telephone: { $in: regexQueries } },
+                { whatsapp: { $in: regexQueries } },
+                { email: { $in: regexQueries } }
+            ];
+        }
+
+        // Appliquer les filtres
+        if (filters.status) {
+            searchQuery.status = filters.status;
+        }
+        if (filters.statut) {
+            searchQuery.statut = filters.statut;
+        }
+        if (filters.dateStart && filters.dateEnd) {
+            const startDate = new Date(filters.dateStart);
+            const endDate = new Date(filters.dateEnd);
+            endDate.setHours(23, 59, 59, 999);
+            
+            searchQuery.$and = searchQuery.$and || [];
+            searchQuery.$and.push({
+                $or: [
+                    { createdAt: { $gte: startDate, $lte: endDate } },
+                    { dateCreation: { $gte: startDate, $lte: endDate } },
+                    { date_creation: { $gte: startDate, $lte: endDate } },
+                    { orderDate: { $gte: startDate, $lte: endDate } }
+                ]
+            });
+        }
+
+        const results = await collection
+            .find(searchQuery)
+            .sort({ $natural: -1 })
+            .limit(500)
+            .toArray();
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                data: results,
+                count: results.length,
+                query,
+                filters,
+                collection: collectionName,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur searchItems:', error);
+        return errorResponse(`Erreur lors de la recherche: ${error.message}`);
+    }
+}
+
+// Fonction de sauvegarde
+async function backupCollection(db, collectionName) {
+    try {
+        const collection = db.collection(collectionName);
+        const timestamp = Date.now();
+        const backupName = `${collectionName}_backup_${timestamp}`;
+        const backupCollection = db.collection(backupName);
+        
+        const documents = await collection.find({}).toArray();
+        
+        if (documents.length > 0) {
+            // Ajouter des métadonnées de sauvegarde
+            const backupData = documents.map(doc => ({
+                ...doc,
+                _backup_metadata: {
+                    originalCollection: collectionName,
+                    backupDate: new Date(),
+                    backupName
+                }
+            }));
+            
+            await backupCollection.insertMany(backupData);
+        }
+
+        // Créer un document de métadonnées pour la sauvegarde
+        const metadataCollection = db.collection('_backup_metadata');
+        await metadataCollection.insertOne({
+            backupName,
+            originalCollection: collectionName,
+            documentsCount: documents.length,
+            backupDate: new Date(),
+            timestamp,
+            status: 'completed'
+        });
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                message: `Sauvegarde créée pour ${collectionName}`,
+                backupName,
+                documentsCount: documents.length,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur backupCollection:', error);
+        return errorResponse(`Erreur lors de la sauvegarde: ${error.message}`);
+    }
+}
+
+// Fonction de restauration
+async function restoreCollection(db, collectionName, backupName) {
+    try {
+        const backupCollection = db.collection(backupName);
+        const targetCollection = db.collection(collectionName);
+        
+        // Vérifier que la sauvegarde existe
+        const backupCount = await backupCollection.countDocuments();
+        if (backupCount === 0) {
+            return errorResponse('Sauvegarde non trouvée ou vide', 404);
+        }
+        
+        // Récupérer les documents de sauvegarde
+        const backupDocuments = await backupCollection.find({}).toArray();
+        
+        // Nettoyer les métadonnées de sauvegarde et restaurer
+        const cleanDocuments = backupDocuments.map(doc => {
+            const { _backup_metadata, ...cleanDoc } = doc;
+            return {
+                ...cleanDoc,
+                restoredAt: new Date(),
+                restoredFrom: backupName
+            };
+        });
+        
+        // Vider la collection cible et insérer les données restaurées
+        await targetCollection.deleteMany({});
+        if (cleanDocuments.length > 0) {
+            await targetCollection.insertMany(cleanDocuments);
+        }
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                message: `Collection ${collectionName} restaurée depuis ${backupName}`,
+                restoredCount: cleanDocuments.length,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur restoreCollection:', error);
+        return errorResponse(`Erreur lors de la restauration: ${error.message}`);
+    }
+}
+
+// Fonction pour lister les sauvegardes
+async function getBackups(db, collectionName) {
+    try {
+        const metadataCollection = db.collection('_backup_metadata');
+        
+        const query = collectionName ? { originalCollection: collectionName } : {};
+        const backups = await metadataCollection
+            .find(query)
+            .sort({ backupDate: -1 })
+            .toArray();
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                backups,
+                count: backups.length,
+                collection: collectionName,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getBackups:', error);
+        return errorResponse(`Erreur lors de la récupération des sauvegardes: ${error.message}`);
+    }
+}
+
+// Fonction pour supprimer une sauvegarde
+async function deleteBackup(db, backupName) {
+    try {
+        // Supprimer la collection de sauvegarde
+        await db.collection(backupName).drop();
+        
+        // Supprimer les métadonnées
+        const metadataCollection = db.collection('_backup_metadata');
+        await metadataCollection.deleteOne({ backupName });
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                message: `Sauvegarde ${backupName} supprimée`,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur deleteBackup:', error);
+        return errorResponse(`Erreur lors de la suppression de la sauvegarde: ${error.message}`);
+    }
+}
+
+// Fonction de recherche globale
+async function globalSearch(db, query, collections = []) {
+    try {
+        if (!query || query.trim().length < 2) {
+            return errorResponse('Requête de recherche trop courte (minimum 2 caractères)', 400);
+        }
+
+        const defaultCollections = [
+            'Colis', 'Commandes', 'Livraison', 'LivraisonsEffectuees', 
+            'Refus', 'Res_livreur', 'compte_livreur', 'Restau', 
+            'cour_expedition', 'pharmacyOrders', 'shopping_orders'
+        ];
+
+        const searchCollections = collections.length > 0 ? collections : defaultCollections;
+        const results = {};
+        let totalResults = 0;
+
+        for (const collectionName of searchCollections) {
+            try {
+                const searchResponse = await searchItems(db, collectionName, query, {});
+                const searchData = JSON.parse(searchResponse.body);
+                
+                if (searchData.success) {
+                    results[collectionName] = {
+                        data: searchData.data.slice(0, 10),
+                        count: searchData.count,
+                        hasMore: searchData.count > 10
+                    };
+                    totalResults += searchData.count;
+                }
+            } catch (error) {
+                console.warn(`Erreur recherche dans ${collectionName}:`, error);
+                results[collectionName] = { data: [], count: 0, hasMore: false };
+            }
+        }
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                query,
+                results,
+                totalResults,
+                searchedCollections: searchCollections,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur globalSearch:', error);
+        return errorResponse(`Erreur lors de la recherche globale: ${error.message}`);
+    }
+}
+
+// Fonction pour obtenir les informations système
+async function getSystemInfo(db) {
+    try {
+        const admin = db.admin();
+        
+        // Informations de base
+        const serverStatus = await admin.serverStatus();
+        const dbStats = await db.stats();
+        
+        // Liste des collections
+        const collections = await db.listCollections().toArray();
+        
+        // Informations sur les index
+        const indexInfo = {};
+        for (const collection of collections) {
+            try {
+                const indexes = await db.collection(collection.name).indexes();
+                indexInfo[collection.name] = indexes;
+            } catch (error) {
+                indexInfo[collection.name] = [];
+            }
+        }
+
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                systemInfo: {
+                    version: serverStatus.version,
+                    uptime: serverStatus.uptime,
+                    connections: serverStatus.connections,
+                    memory: serverStatus.mem,
+                    network: serverStatus.network
+                },
+                databaseInfo: {
+                    name: dbStats.db,
+                    collections: dbStats.collections,
+                    objects: dbStats.objects,
+                    dataSize: dbStats.dataSize,
+                    storageSize: dbStats.storageSize,
+                    indexes: dbStats.indexes,
+                    indexSize: dbStats.indexSize
+                },
+                collectionsInfo: collections.map(col => ({
+                    name: col.name,
+                    type: col.type,
+                    options: col.options
+                })),
+                indexInfo,
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur getSystemInfo:', error);
+        return errorResponse(`Erreur lors de la récupération des informations système: ${error.message}`);
+    }
+}
+
+// Fonction utilitaire pour convertir en CSV
+function convertToCSV(data) {
+    if (!data.length) return '';
+    
+    // Obtenir tous les champs possibles
+    const allFields = new Set();
+    data.forEach(item => {
+        Object.keys(item).forEach(key => allFields.add(key));
+    });
+    
+    const headers = Array.from(allFields);
+    
+    const csvContent = [
+        headers.join(','),
+        ...data.map(row => 
+            headers.map(header => {
+                let value = row[header];
+                if (typeof value === 'object' && value !== null) {
+                    value = JSON.stringify(value);
+                }
+                return `"${String(value || '').replace(/"/g, '""')}"`;
+            }).join(',')
+        )
+    ].join('\n');
+    
+    return csvContent;
+}
+
+// Fonction utilitaire pour les réponses d'erreur
+function errorResponse(message, status = 400) {
+    return {
+        statusCode: status,
+        headers: corsHeaders,
+        body: JSON.stringify({
+            success: false,
+            message,
+            timestamp: new Date().toISOString()
+        })
+    };
+}
