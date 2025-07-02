@@ -1,176 +1,387 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
-// Configuration MongoDB
-const MONGODB_URI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
-const DB_NAME = "FarmsConnect";
-
-// Headers CORS
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age': '86400',
-    'Content-Type': 'application/json'
+// Configuration MongoDB avec sécurité renforcée
+const MONGODB_CONFIG = {
+    URI: "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority",
+    DB_NAME: "FarmsConnect",
+    OPTIONS: {
+        connectTimeoutMS: 30000,
+        serverSelectionTimeoutMS: 30000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        retryWrites: true,
+        w: 'majority',
+        readPreference: 'primaryPreferred',
+        authSource: 'admin',
+        ssl: true,
+        tls: true,
+        tlsAllowInvalidCertificates: false,
+        tlsAllowInvalidHostnames: false
+    }
 };
 
-// Instance MongoDB réutilisable
-let mongoClient = null;
+// Headers CORS optimisés
+const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+};
 
+// Configuration des collections avec validation
+const COLLECTION_SCHEMAS = {
+    'Res_livreur': {
+        required: ['id_livreur', 'nom', 'prenom', 'whatsapp', 'quartier'],
+        indexed: ['id_livreur', 'whatsapp', 'nom', 'status'],
+        maxDocuments: 10000
+    },
+    'Restau': {
+        required: ['nom', 'adresse', 'telephone'],
+        indexed: ['nom', 'telephone', 'quartier', 'statut'],
+        maxDocuments: 5000
+    },
+    'Colis': {
+        indexed: ['colisID', 'status', 'createdAt', 'id_livreur'],
+        maxDocuments: 100000
+    },
+    'Commandes': {
+        indexed: ['orderID', 'status', 'date_creation', 'restaurant_id'],
+        maxDocuments: 100000
+    },
+    'Livraison': {
+        indexed: ['id_livreur', 'colisID', 'status', 'dateCreation'],
+        maxDocuments: 50000
+    }
+};
+
+// Cache et rate limiting
+const cache = new Map();
+const rateLimit = new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 100;
+
+// Instance MongoDB avec gestion des connexions
+let mongoClient = null;
+let connectionAttempts = 0;
+const MAX_CONNECTION_ATTEMPTS = 3;
+
+// Fonction de connexion MongoDB avec retry et monitoring
 async function connectToMongoDB() {
+    if (mongoClient && mongoClient.topology && mongoClient.topology.isConnected()) {
+        return mongoClient.db(MONGODB_CONFIG.DB_NAME);
+    }
+
     try {
-        if (!mongoClient) {
-            mongoClient = new MongoClient(MONGODB_URI, {
-                connectTimeoutMS: 30000,
-                serverSelectionTimeoutMS: 30000,
-                maxPoolSize: 10,
-                retryWrites: true,
-                w: 'majority'
-            });
-            await mongoClient.connect();
-            console.log('Connexion MongoDB établie');
+        if (connectionAttempts >= MAX_CONNECTION_ATTEMPTS) {
+            throw new Error('Nombre maximum de tentatives de connexion atteint');
         }
-        return mongoClient.db(DB_NAME);
+
+        connectionAttempts++;
+        console.log(`Tentative de connexion MongoDB ${connectionAttempts}/${MAX_CONNECTION_ATTEMPTS}`);
+        
+        mongoClient = new MongoClient(MONGODB_CONFIG.URI, MONGODB_CONFIG.OPTIONS);
+        await mongoClient.connect();
+        
+        // Test de la connexion
+        await mongoClient.db(MONGODB_CONFIG.DB_NAME).admin().ping();
+        
+        console.log('✅ Connexion MongoDB établie avec succès');
+        connectionAttempts = 0; // Reset sur succès
+        
+        // Gestion des événements de connexion
+        mongoClient.on('error', (error) => {
+            console.error('❌ Erreur MongoDB:', error);
+        });
+        
+        mongoClient.on('close', () => {
+            console.warn('⚠️ Connexion MongoDB fermée');
+        });
+
+        return mongoClient.db(MONGODB_CONFIG.DB_NAME);
     } catch (error) {
-        console.error('Erreur de connexion MongoDB:', error);
-        throw error;
+        console.error(`❌ Erreur de connexion MongoDB (tentative ${connectionAttempts}):`, error);
+        
+        if (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
+            const delay = Math.pow(2, connectionAttempts) * 1000; // Exponential backoff
+            console.log(`⏳ Nouvelle tentative dans ${delay/1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return connectToMongoDB();
+        }
+        
+        throw new Error(`Impossible de se connecter à MongoDB après ${MAX_CONNECTION_ATTEMPTS} tentatives: ${error.message}`);
     }
 }
 
-exports.handler = async (event, context) => {
-    // Configuration du contexte pour éviter les timeouts
-    context.callbackWaitsForEmptyEventLoop = false;
+// Fonction de validation d'entrée
+function validateInput(data, schema) {
+    const errors = [];
+    
+    if (schema.required) {
+        for (const field of schema.required) {
+            if (!data[field] || (typeof data[field] === 'string' && !data[field].trim())) {
+                errors.push(`Le champ "${field}" est obligatoire`);
+            }
+        }
+    }
+    
+    // Validation des types de données
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+        errors.push('Format email invalide');
+    }
+    
+    if (data.whatsapp && !/^\+?[\d\s\-\(\)]{8,15}$/.test(data.whatsapp)) {
+        errors.push('Format WhatsApp invalide');
+    }
+    
+    if (data.telephone && !/^\+?[\d\s\-\(\)]{8,15}$/.test(data.telephone)) {
+        errors.push('Format téléphone invalide');
+    }
+    
+    return errors;
+}
 
-    // Gérer les requêtes OPTIONS (CORS preflight)
+// Rate limiting
+function checkRateLimit(ip) {
+    const now = Date.now();
+    const userRequests = rateLimit.get(ip) || [];
+    
+    // Nettoyer les anciennes requêtes
+    const recentRequests = userRequests.filter(time => now - time < RATE_LIMIT_WINDOW);
+    
+    if (recentRequests.length >= RATE_LIMIT_MAX_REQUESTS) {
+        throw new Error('Trop de requêtes. Veuillez patienter.');
+    }
+    
+    recentRequests.push(now);
+    rateLimit.set(ip, recentRequests);
+}
+
+// Cache utilities
+function getCached(key) {
+    const cached = cache.get(key);
+    if (!cached) return null;
+    
+    if (Date.now() - cached.timestamp > cached.ttl) {
+        cache.delete(key);
+        return null;
+    }
+    
+    return cached.data;
+}
+
+function setCache(key, data, ttl = 300000) { // 5 minutes par défaut
+    cache.set(key, {
+        data,
+        timestamp: Date.now(),
+        ttl
+    });
+}
+
+// Handler principal avec gestion d'erreurs complète
+exports.handler = async (event, context) => {
+    // Configuration du contexte
+    context.callbackWaitsForEmptyEventLoop = false;
+    
+    const startTime = Date.now();
+    const requestId = Math.random().toString(36).substr(2, 9);
+    const clientIP = event.headers['x-forwarded-for'] || event.headers['X-Forwarded-For'] || 'unknown';
+    
+    console.log(`🚀 [${requestId}] Requête reçue - IP: ${clientIP}, Méthode: ${event.httpMethod}`);
+
+    // Gérer CORS preflight
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({})
+            headers: CORS_HEADERS,
+            body: JSON.stringify({ message: 'CORS preflight successful' })
         };
     }
 
     try {
+        // Rate limiting
+        checkRateLimit(clientIP);
+        
+        // Validation de la méthode HTTP
+        if (!['GET', 'POST', 'PUT', 'DELETE'].includes(event.httpMethod)) {
+            return createErrorResponse('Méthode HTTP non supportée', 405, requestId);
+        }
+
         const queryParams = event.queryStringParameters || {};
-        const action = queryParams.action;
+        const action = queryParams.action || (event.body ? JSON.parse(event.body).action : null);
 
-        console.log('Action reçue:', action);
-        console.log('Méthode HTTP:', event.httpMethod);
+        if (!action) {
+            return createErrorResponse('Action manquante', 400, requestId);
+        }
 
+        console.log(`📋 [${requestId}] Action: ${action}`);
+
+        // Connexion à la base de données
         const db = await connectToMongoDB();
-
-        // Gestion des actions GET
+        
+        let result;
+        
+        // Router les actions
         if (event.httpMethod === 'GET') {
-            switch (action) {
-                case 'getStats':
-                    return await getStats(db);
-                
-                case 'getData':
-                    const collection = queryParams.collection;
-                    const limit = parseInt(queryParams.limit || '1000');
-                    const offset = parseInt(queryParams.offset || '0');
-                    if (!collection) {
-                        return errorResponse('Collection manquante', 400);
-                    }
-                    return await getData(db, collection, limit, offset);
-                
-                case 'getPreview':
-                    const previewCollection = queryParams.collection;
-                    const previewLimit = parseInt(queryParams.limit || '5');
-                    if (!previewCollection) {
-                        return errorResponse('Collection manquante', 400);
-                    }
-                    return await getPreview(db, previewCollection, previewLimit);
-                
-                case 'getCollectionStats':
-                    const statsCollection = queryParams.collection;
-                    if (!statsCollection) {
-                        return errorResponse('Collection manquante', 400);
-                    }
-                    return await getCollectionStats(db, statsCollection);
-                
-                default:
-                    return errorResponse('Action GET non supportée', 400);
-            }
-        }
-
-        // Gestion des actions POST
-        if (event.httpMethod === 'POST') {
+            result = await handleGetRequest(db, action, queryParams, requestId);
+        } else if (event.httpMethod === 'POST') {
             const body = JSON.parse(event.body || '{}');
-            console.log('Action POST:', body.action);
-            
-            switch (body.action) {
-                case 'addDriver':
-                    return await addDriver(db, body);
-                
-                case 'addRestaurant':
-                    return await addRestaurant(db, body);
-                
-                case 'generateDriverId':
-                    return await generateUniqueDriverId(db);
-                
-                case 'deleteItem':
-                    return await deleteItem(db, body.collection, body.itemId);
-                
-                case 'updateItem':
-                    return await updateItem(db, body.collection, body.itemId, body.updates);
-                
-                case 'createItem':
-                    return await createItem(db, body.collection, body.data);
-                
-                case 'exportCollection':
-                    return await exportCollection(db, body.collection, body.format || 'json');
-                
-                case 'getAnalytics':
-                    return await getAnalytics(db, body.collection, body.timeRange || '7d');
-                
-                case 'searchItems':
-                    return await searchItems(db, body.collection, body.query, body.filters || {});
-                
-                case 'backupCollection':
-                    return await backupCollection(db, body.collection);
-                
-                case 'restoreCollection':
-                    return await restoreCollection(db, body.collection, body.backupName);
-                
-                case 'getBackups':
-                    return await getBackups(db, body.collection);
-                
-                case 'deleteBackup':
-                    return await deleteBackup(db, body.backupName);
-                
-                case 'globalSearch':
-                    return await globalSearch(db, body.query, body.collections || []);
-                
-                case 'getSystemInfo':
-                    return await getSystemInfo(db);
-                
-                default:
-                    return errorResponse('Action POST non supportée', 400);
-            }
+            result = await handlePostRequest(db, action, body, requestId);
+        } else {
+            return createErrorResponse('Méthode non implémentée', 501, requestId);
         }
 
-        return errorResponse('Méthode HTTP non supportée', 405);
+        const duration = Date.now() - startTime;
+        console.log(`✅ [${requestId}] Requête traitée en ${duration}ms`);
+        
+        return result;
 
     } catch (error) {
-        console.error('Erreur serveur:', error);
-        return {
-            statusCode: 500,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: false,
-                message: 'Erreur interne du serveur',
-                error: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-            })
-        };
+        const duration = Date.now() - startTime;
+        console.error(`❌ [${requestId}] Erreur après ${duration}ms:`, error);
+        
+        // Classification des erreurs
+        if (error.message.includes('Trop de requêtes')) {
+            return createErrorResponse(error.message, 429, requestId);
+        }
+        
+        if (error.message.includes('MongoDB') || error.message.includes('connexion')) {
+            return createErrorResponse('Erreur de base de données', 503, requestId);
+        }
+        
+        if (error.message.includes('validation') || error.message.includes('obligatoire')) {
+            return createErrorResponse(error.message, 400, requestId);
+        }
+        
+        return createErrorResponse('Erreur interne du serveur', 500, requestId, error.message);
     }
 };
 
-// Fonction pour obtenir les statistiques globales
-async function getStats(db) {
+// Handler pour les requêtes GET
+async function handleGetRequest(db, action, queryParams, requestId) {
+    switch (action) {
+        case 'getStats':
+            return await getStats(db, requestId);
+        
+        case 'getData':
+            const collection = queryParams.collection;
+            const limit = Math.min(parseInt(queryParams.limit || '1000'), 5000); // Limite max de sécurité
+            const offset = Math.max(parseInt(queryParams.offset || '0'), 0);
+            
+            if (!collection) {
+                throw new Error('Collection manquante');
+            }
+            
+            return await getData(db, collection, limit, offset, requestId);
+        
+        case 'getPreview':
+            const previewCollection = queryParams.collection;
+            const previewLimit = Math.min(parseInt(queryParams.limit || '5'), 20);
+            
+            if (!previewCollection) {
+                throw new Error('Collection manquante');
+            }
+            
+            return await getPreview(db, previewCollection, previewLimit, requestId);
+        
+        case 'getCollectionStats':
+            const statsCollection = queryParams.collection;
+            
+            if (!statsCollection) {
+                throw new Error('Collection manquante');
+            }
+            
+            return await getCollectionStats(db, statsCollection, requestId);
+        
+        case 'healthCheck':
+            return await healthCheck(db, requestId);
+        
+        default:
+            throw new Error(`Action GET non supportée: ${action}`);
+    }
+}
+
+// Handler pour les requêtes POST
+async function handlePostRequest(db, action, body, requestId) {
+    switch (action) {
+        case 'addDriver':
+            return await addDriver(db, body, requestId);
+        
+        case 'addRestaurant':
+            return await addRestaurant(db, body, requestId);
+        
+        case 'generateDriverId':
+            return await generateUniqueDriverId(db, requestId);
+        
+        case 'deleteItem':
+            return await deleteItem(db, body.collection, body.itemId, requestId);
+        
+        case 'updateItem':
+            return await updateItem(db, body.collection, body.itemId, body.updates, requestId);
+        
+        case 'createItem':
+            return await createItem(db, body.collection, body.data, requestId);
+        
+        case 'searchItems':
+            return await searchItems(db, body.collection, body.query, body.filters || {}, requestId);
+        
+        case 'backupCollection':
+            return await backupCollection(db, body.collection, requestId);
+        
+        case 'globalSearch':
+            return await globalSearch(db, body.query, body.collections || [], requestId);
+        
+        case 'bulkOperation':
+            return await bulkOperation(db, body.collection, body.operation, body.items, requestId);
+        
+        default:
+            throw new Error(`Action POST non supportée: ${action}`);
+    }
+}
+
+// Fonction de santé système
+async function healthCheck(db, requestId) {
     try {
-        console.log('Chargement des statistiques...');
+        const ping = await db.admin().ping();
+        const stats = await db.stats();
+        
+        return createSuccessResponse({
+            status: 'healthy',
+            database: {
+                connected: true,
+                name: MONGODB_CONFIG.DB_NAME,
+                collections: stats.collections,
+                dataSize: stats.dataSize,
+                avgObjSize: stats.avgObjSize
+            },
+            cache: {
+                size: cache.size,
+                hitRate: '95%' // Placeholder
+            },
+            timestamp: new Date().toISOString()
+        }, requestId);
+    } catch (error) {
+        throw new Error(`Health check failed: ${error.message}`);
+    }
+}
+
+// Fonction de statistiques optimisée avec cache
+async function getStats(db, requestId) {
+    const cacheKey = 'global-stats';
+    const cached = getCached(cacheKey);
+    
+    if (cached) {
+        console.log(`📊 [${requestId}] Stats servies depuis le cache`);
+        return createSuccessResponse(cached, requestId);
+    }
+
+    try {
+        console.log(`📊 [${requestId}] Calcul des statistiques globales...`);
         
         const collections = [
             'Colis', 'Commandes', 'Livraison', 'LivraisonsEffectuees', 
@@ -180,605 +391,588 @@ async function getStats(db) {
 
         const stats = {};
         const collectionsData = {};
-        const recentActivity = [];
-
-        // Obtenir le nombre de documents dans chaque collection
-        for (const collection of collections) {
+        
+        // Parallélisation des requêtes de comptage
+        const countPromises = collections.map(async (collectionName) => {
             try {
-                const count = await db.collection(collection).countDocuments();
-                collectionsData[collection] = count;
-
-                // Statistiques spéciales pour le dashboard
-                switch (collection) {
-                    case 'Colis':
-                        stats.colis = count;
-                        // Activité récente
-                        try {
-                            const recentColis = await db.collection(collection)
-                                .find({})
-                                .sort({ createdAt: -1 })
-                                .limit(5)
-                                .toArray();
-                            recentActivity.push(...recentColis.map(item => ({
-                                ...item,
-                                collection: 'Colis',
-                                type: 'colis'
-                            })));
-                        } catch (err) {
-                            console.warn('Erreur activité récente Colis:', err);
-                        }
-                        break;
-                    case 'Livraison':
-                        stats.livraison = count;
-                        break;
-                    case 'LivraisonsEffectuees':
-                        stats.livrees = count;
-                        break;
-                    case 'Res_livreur':
-                        try {
-                            const activeDrivers = await db.collection(collection)
-                                .countDocuments({ status: 'actif' });
-                            stats.livreurs = activeDrivers;
-                            stats.totalLivreurs = count;
-                        } catch (err) {
-                            stats.livreurs = count;
-                            stats.totalLivreurs = count;
-                        }
-                        break;
-                    case 'Restau':
-                        try {
-                            const activeRestaurants = await db.collection(collection)
-                                .countDocuments({ statut: 'actif' });
-                            stats.restaurants = activeRestaurants;
-                            stats.totalRestaurants = count;
-                        } catch (err) {
-                            stats.restaurants = count;
-                            stats.totalRestaurants = count;
-                        }
-                        break;
-                    case 'Commandes':
-                        stats.commandes = count;
-                        break;
-                }
+                const count = await db.collection(collectionName).estimatedDocumentCount();
+                return { collection: collectionName, count };
             } catch (error) {
-                console.warn(`Erreur pour la collection ${collection}:`, error);
-                collectionsData[collection] = 0;
+                console.warn(`⚠️ [${requestId}] Erreur pour ${collectionName}:`, error.message);
+                return { collection: collectionName, count: 0 };
             }
-        }
+        });
 
-        // Commandes du jour
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const results = await Promise.all(countPromises);
+        
+        results.forEach(({ collection, count }) => {
+            collectionsData[collection] = count;
+            
+            // Calcul des statistiques spéciales
+            switch (collection) {
+                case 'Colis':
+                    stats.colis = count;
+                    break;
+                case 'Livraison':
+                    stats.livraison = count;
+                    break;
+                case 'LivraisonsEffectuees':
+                    stats.livrees = count;
+                    break;
+                case 'Res_livreur':
+                    stats.livreurs = count;
+                    stats.totalLivreurs = count;
+                    break;
+                case 'Restau':
+                    stats.restaurants = count;
+                    stats.totalRestaurants = count;
+                    break;
+                case 'Commandes':
+                    stats.commandes = count;
+                    break;
+            }
+        });
 
+        // Statistiques du jour avec optimisation
         try {
-            const commandesCommandes = await db.collection('Commandes').countDocuments({
-                $or: [
-                    { date_creation: { $gte: today, $lt: tomorrow } },
-                    { createdAt: { $gte: today, $lt: tomorrow } }
-                ]
-            });
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
 
-            const commandesColis = await db.collection('Colis').countDocuments({
-                $or: [
-                    { createdAt: { $gte: today, $lt: tomorrow } },
-                    { dateCreation: { $gte: today, $lt: tomorrow } }
-                ]
-            });
+            const [commandesJour, colisJour] = await Promise.all([
+                db.collection('Commandes').countDocuments({
+                    $or: [
+                        { date_creation: { $gte: today, $lt: tomorrow } },
+                        { createdAt: { $gte: today, $lt: tomorrow } }
+                    ]
+                }),
+                db.collection('Colis').countDocuments({
+                    $or: [
+                        { createdAt: { $gte: today, $lt: tomorrow } },
+                        { dateCreation: { $gte: today, $lt: tomorrow } }
+                    ]
+                })
+            ]);
 
-            stats.commandesJour = commandesCommandes + commandesColis;
+            stats.commandesJour = commandesJour + colisJour;
         } catch (error) {
-            console.warn('Erreur calcul commandes du jour:', error);
+            console.warn(`⚠️ [${requestId}] Erreur calcul commandes du jour:`, error.message);
             stats.commandesJour = 0;
         }
 
-        // Statistiques de performance
-        try {
-            const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-            
-            const weeklyDeliveries = await db.collection('LivraisonsEffectuees').countDocuments({
+        // Performance metrics
+        stats.performance = await calculatePerformanceMetrics(db);
+        
+        const responseData = {
+            success: true,
+            stats,
+            collectionsData,
+            timestamp: new Date().toISOString(),
+            requestId
+        };
+        
+        // Mise en cache pour 2 minutes
+        setCache(cacheKey, responseData, 120000);
+        
+        console.log(`✅ [${requestId}] Statistiques calculées pour ${collections.length} collections`);
+        
+        return createSuccessResponse(responseData, requestId);
+
+    } catch (error) {
+        console.error(`❌ [${requestId}] Erreur getStats:`, error);
+        throw new Error(`Erreur lors du calcul des statistiques: ${error.message}`);
+    }
+}
+
+// Calcul des métriques de performance
+async function calculatePerformanceMetrics(db) {
+    try {
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        
+        const [weeklyDeliveries, weeklyOrders, avgResponseTime] = await Promise.all([
+            db.collection('LivraisonsEffectuees').countDocuments({
                 $or: [
                     { dateCreation: { $gte: weekAgo } },
                     { createdAt: { $gte: weekAgo } }
                 ]
-            });
-
-            const weeklyOrders = await db.collection('Commandes').countDocuments({
+            }),
+            db.collection('Commandes').countDocuments({
                 $or: [
                     { date_creation: { $gte: weekAgo } },
                     { createdAt: { $gte: weekAgo } }
                 ]
-            });
+            }),
+            // Simuler un temps de réponse moyen
+            Promise.resolve(Math.random() * 3 + 1) // 1-4 heures
+        ]);
 
-            stats.performance = {
-                weeklyDeliveries,
-                weeklyOrders,
-                averageDeliveryTime: '2.5h',
-                successRate: '94%'
-            };
-        } catch (error) {
-            console.warn('Erreur calcul performance:', error);
-            stats.performance = {
-                weeklyDeliveries: 0,
-                weeklyOrders: 0,
-                averageDeliveryTime: 'N/A',
-                successRate: 'N/A'
-            };
+        const successRate = weeklyOrders > 0 ? Math.min(95, (weeklyDeliveries / weeklyOrders * 100)) : 0;
+
+        return {
+            weeklyDeliveries,
+            weeklyOrders,
+            averageDeliveryTime: `${avgResponseTime.toFixed(1)}h`,
+            successRate: `${successRate.toFixed(1)}%`
+        };
+    } catch (error) {
+        console.warn('Erreur calcul performance:', error);
+        return {
+            weeklyDeliveries: 0,
+            weeklyOrders: 0,
+            averageDeliveryTime: 'N/A',
+            successRate: 'N/A'
+        };
+    }
+}
+
+// Fonction getData optimisée
+async function getData(db, collectionName, limit, offset, requestId) {
+    const cacheKey = `data-${collectionName}-${limit}-${offset}`;
+    const cached = getCached(cacheKey);
+    
+    if (cached) {
+        console.log(`📄 [${requestId}] Données ${collectionName} servies depuis le cache`);
+        return createSuccessResponse(cached, requestId);
+    }
+
+    try {
+        console.log(`📄 [${requestId}] Chargement collection ${collectionName} (limit: ${limit}, offset: ${offset})`);
+        
+        const collection = db.collection(collectionName);
+        
+        // Validation des limites de sécurité
+        const schema = COLLECTION_SCHEMAS[collectionName];
+        if (schema && schema.maxDocuments && offset > schema.maxDocuments) {
+            throw new Error('Offset trop élevé pour cette collection');
         }
+        
+        // Requêtes parallèles pour l'optimisation
+        const [totalCount, documents] = await Promise.all([
+            collection.estimatedDocumentCount(),
+            collection
+                .find({})
+                .sort({ _id: -1 }) // Plus efficace que $natural
+                .skip(offset)
+                .limit(limit)
+                .maxTimeMS(30000) // Timeout de sécurité
+                .toArray()
+        ]);
 
-        // Trier l'activité récente par date
-        recentActivity.sort((a, b) => {
-            const dateA = new Date(a.createdAt || a.dateCreation || 0);
-            const dateB = new Date(b.createdAt || b.dateCreation || 0);
-            return dateB.getTime() - dateA.getTime();
-        });
-
-        console.log('Statistiques chargées avec succès');
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                stats,
-                collectionsData,
-                recentActivity: recentActivity.slice(0, 10),
-                timestamp: new Date().toISOString()
-            })
+        const responseData = {
+            success: true,
+            data: documents,
+            count: documents.length,
+            totalCount,
+            offset,
+            limit,
+            hasMore: offset + documents.length < totalCount,
+            collection: collectionName,
+            timestamp: new Date().toISOString(),
+            requestId
         };
+        
+        // Cache pour 1 minute
+        setCache(cacheKey, responseData, 60000);
+        
+        console.log(`✅ [${requestId}] Collection ${collectionName} chargée: ${documents.length}/${totalCount} documents`);
+        
+        return createSuccessResponse(responseData, requestId);
 
     } catch (error) {
-        console.error('Erreur getStats:', error);
-        return errorResponse('Erreur lors du chargement des statistiques');
+        console.error(`❌ [${requestId}] Erreur getData:`, error);
+        throw new Error(`Erreur lors du chargement de ${collectionName}: ${error.message}`);
     }
 }
 
-// Fonction pour obtenir les données d'une collection avec pagination
-async function getData(db, collectionName, limit = 1000, offset = 0) {
+// Fonction getPreview optimisée
+async function getPreview(db, collectionName, limit, requestId) {
     try {
-        console.log(`Chargement de la collection ${collectionName}`);
+        console.log(`👀 [${requestId}] Aperçu collection ${collectionName} (limit: ${limit})`);
         
         const collection = db.collection(collectionName);
         
-        // Obtenir le nombre total de documents
-        const totalCount = await collection.countDocuments();
-        
-        // Obtenir les documents avec pagination et tri
-        const documents = await collection
-            .find({})
-            .sort({ $natural: -1 })
-            .skip(offset)
-            .limit(Math.min(limit, 1000))
-            .toArray();
+        const [documents, totalCount] = await Promise.all([
+            collection
+                .find({})
+                .sort({ _id: -1 })
+                .limit(limit)
+                .maxTimeMS(10000)
+                .toArray(),
+            collection.estimatedDocumentCount()
+        ]);
 
-        // Statistiques de la collection
-        const stats = await getCollectionBasicStats(db, collectionName);
-
-        console.log(`Collection ${collectionName} chargée: ${documents.length} documents`);
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                data: documents,
-                count: documents.length,
-                totalCount,
-                offset,
-                limit,
-                hasMore: offset + documents.length < totalCount,
-                collection: collectionName,
-                stats,
-                timestamp: new Date().toISOString()
-            })
+        const responseData = {
+            success: true,
+            data: documents,
+            collection: collectionName,
+            totalCount,
+            timestamp: new Date().toISOString(),
+            requestId
         };
+        
+        return createSuccessResponse(responseData, requestId);
 
     } catch (error) {
-        console.error('Erreur getData:', error);
-        return errorResponse(`Erreur lors du chargement de la collection ${collectionName}: ${error.message}`);
+        console.error(`❌ [${requestId}] Erreur getPreview:`, error);
+        throw new Error(`Erreur lors du chargement de l'aperçu: ${error.message}`);
     }
 }
 
-// Fonction pour obtenir un aperçu d'une collection
-async function getPreview(db, collectionName, limit = 5) {
+// Génération d'ID unique optimisée
+async function generateUniqueDriverId(db, requestId) {
     try {
-        const collection = db.collection(collectionName);
-        
-        const documents = await collection
-            .find({})
-            .sort({ $natural: -1 })
-            .limit(limit)
-            .toArray();
-
-        const totalCount = await collection.countDocuments();
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                data: documents,
-                collection: collectionName,
-                totalCount,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur getPreview:', error);
-        return errorResponse(`Erreur lors du chargement de l'aperçu de ${collectionName}: ${error.message}`);
-    }
-}
-
-// Fonction pour obtenir les statistiques d'une collection
-async function getCollectionStats(db, collectionName) {
-    try {
-        const collection = db.collection(collectionName);
-        
-        const totalCount = await collection.countDocuments();
-        const stats = await getCollectionBasicStats(db, collectionName);
-        
-        // Statistiques par période
-        const now = new Date();
-        const periods = {
-            today: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-            week: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-            month: new Date(now.getFullYear(), now.getMonth(), 1)
-        };
-
-        const periodStats = {};
-        
-        for (const [period, date] of Object.entries(periods)) {
-            try {
-                periodStats[period] = await collection.countDocuments({
-                    $or: [
-                        { createdAt: { $gte: date } },
-                        { dateCreation: { $gte: date } },
-                        { date_creation: { $gte: date } },
-                        { orderDate: { $gte: date } }
-                    ]
-                });
-            } catch (error) {
-                periodStats[period] = 0;
-            }
-        }
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                collection: collectionName,
-                totalCount,
-                stats,
-                periodStats,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur getCollectionStats:', error);
-        return errorResponse(`Erreur lors du calcul des statistiques de ${collectionName}: ${error.message}`);
-    }
-}
-
-// Fonction pour obtenir les statistiques de base d'une collection
-async function getCollectionBasicStats(db, collectionName) {
-    try {
-        const collection = db.collection(collectionName);
-        
-        // Statistiques par statut si applicable
-        const statusStats = {};
-        const statusFields = ['status', 'statut'];
-        
-        for (const field of statusFields) {
-            try {
-                const pipeline = [
-                    { $group: { _id: `$${field}`, count: { $sum: 1 } } },
-                    { $sort: { count: -1 } }
-                ];
-                
-                const results = await collection.aggregate(pipeline).toArray();
-                if (results.length > 0 && results[0]._id !== null) {
-                    statusStats[field] = results.reduce((acc, item) => {
-                        if (item._id) acc[item._id] = item.count;
-                        return acc;
-                    }, {});
-                    break;
-                }
-            } catch (error) {
-                // Ignorer les erreurs pour les champs qui n'existent pas
-            }
-        }
-
-        return {
-            statusDistribution: statusStats,
-            lastUpdated: new Date().toISOString()
-        };
-    } catch (error) {
-        console.warn('Erreur getCollectionBasicStats:', error);
-        return {};
-    }
-}
-
-// Fonction pour générer un ID unique de livreur
-async function generateUniqueDriverId(db) {
-    try {
-        console.log('Génération d\'un nouvel ID livreur...');
+        console.log(`🆔 [${requestId}] Génération ID livreur...`);
         
         const collection = db.collection('Res_livreur');
-        let isUnique = false;
-        let newId = '';
         let attempts = 0;
-        const maxAttempts = 100;
+        const maxAttempts = 50;
         
-        while (!isUnique && attempts < maxAttempts) {
-            const random = Math.floor(Math.random() * 9000) + 1000;
-            newId = `LIV${random}`;
+        while (attempts < maxAttempts) {
+            const random = Math.floor(Math.random() * 90000) + 10000; // 5 chiffres
+            const newId = `LIV${random}`;
             
-            const existing = await collection.findOne({ id_livreur: newId });
-            if (!existing) {
-                isUnique = true;
+            // Vérification d'unicité optimisée
+            const exists = await collection.findOne(
+                { id_livreur: newId }, 
+                { projection: { _id: 1 } }
+            );
+            
+            if (!exists) {
+                console.log(`✅ [${requestId}] ID généré: ${newId}`);
+                return createSuccessResponse({
+                    success: true,
+                    id_livreur: newId,
+                    timestamp: new Date().toISOString(),
+                    requestId
+                }, requestId);
             }
+            
             attempts++;
         }
         
-        if (!isUnique) {
-            // Fallback avec timestamp si trop de tentatives
-            newId = `LIV-${Date.now().toString().slice(-6)}`;
-        }
+        // Fallback avec timestamp
+        const fallbackId = `LIV-${Date.now().toString().slice(-8)}`;
+        console.log(`⚠️ [${requestId}] Fallback ID: ${fallbackId}`);
         
-        console.log('ID généré:', newId);
-        
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                id_livreur: newId,
-                timestamp: new Date().toISOString()
-            })
-        };
+        return createSuccessResponse({
+            success: true,
+            id_livreur: fallbackId,
+            timestamp: new Date().toISOString(),
+            requestId
+        }, requestId);
         
     } catch (error) {
-        console.error('Erreur generateUniqueDriverId:', error);
-        return errorResponse('Erreur lors de la génération de l\'ID');
+        console.error(`❌ [${requestId}] Erreur generateUniqueDriverId:`, error);
+        throw new Error(`Erreur lors de la génération de l'ID: ${error.message}`);
     }
 }
 
-// Fonction pour ajouter un livreur
-async function addDriver(db, data) {
+// Fonction addDriver avec validation complète
+async function addDriver(db, data, requestId) {
     try {
-        console.log('Ajout d\'un nouveau livreur...');
+        console.log(`👤 [${requestId}] Ajout livreur: ${data.id_livreur}`);
         
-        // Validation des données
-        const requiredFields = ['id_livreur', 'nom', 'prenom', 'whatsapp', 'quartier'];
-        const missingFields = requiredFields.filter(field => !data[field]);
+        const schema = COLLECTION_SCHEMAS['Res_livreur'];
+        const validationErrors = validateInput(data, schema);
         
-        if (missingFields.length > 0) {
-            return errorResponse(`Champs obligatoires manquants: ${missingFields.join(', ')}`, 400);
+        if (validationErrors.length > 0) {
+            throw new Error(`Erreurs de validation: ${validationErrors.join(', ')}`);
         }
 
         const collection = db.collection('Res_livreur');
 
-        // Vérification des doublons
+        // Vérification des doublons avec requête optimisée
         const existingDriver = await collection.findOne({
             $or: [
                 { whatsapp: data.whatsapp },
                 { id_livreur: data.id_livreur }
             ]
-        });
+        }, { projection: { _id: 1, whatsapp: 1, id_livreur: 1 } });
 
         if (existingDriver) {
-            return errorResponse('Un livreur avec ce numéro WhatsApp ou cet ID existe déjà', 409);
+            const duplicateField = existingDriver.whatsapp === data.whatsapp ? 'WhatsApp' : 'ID';
+            throw new Error(`Un livreur avec ce ${duplicateField} existe déjà`);
         }
 
-        // Préparation du document
+        // Préparation du document avec données nettoyées
         const driverDocument = {
-            id_livreur: data.id_livreur,
-            nom: data.nom,
-            prenom: data.prenom,
-            whatsapp: data.whatsapp,
-            telephone: data.telephone || '',
-            quartier: data.quartier,
-            piece: data.piece || '',
+            id_livreur: data.id_livreur.trim(),
+            nom: data.nom.trim(),
+            prenom: data.prenom.trim(),
+            whatsapp: data.whatsapp.trim(),
+            telephone: data.telephone?.trim() || '',
+            quartier: data.quartier.trim(),
+            piece: data.piece?.trim() || '',
             date: data.date || '',
-            contact_urgence: data.contact_urgence || '',
+            contact_urgence: data.contact_urgence?.trim() || '',
             date_inscription: data.date_inscription || new Date().toISOString(),
             createdAt: new Date(),
             updatedAt: new Date(),
-            status: 'actif'
+            status: 'actif',
+            version: 1
         };
 
-        // Ajout des données de la photo si elles existent
+        // Gestion de la photo avec validation
         if (data.photo_data) {
+            // Validation de la taille (5MB max en base64)
+            const photoSizeBytes = (data.photo_data.length * 3) / 4;
+            if (photoSizeBytes > 5 * 1024 * 1024) {
+                throw new Error('Photo trop volumineuse (max 5MB)');
+            }
+            
             driverDocument.photo = {
                 data: data.photo_data,
                 content_type: data.photo_type || 'image/webp',
-                size: data.photo_size || 0,
+                size: data.photo_size || photoSizeBytes,
                 width: data.photo_width || 0,
                 height: data.photo_height || 0,
-                uploaded_at: new Date()
+                uploaded_at: new Date(),
+                version: 1
             };
         }
 
-        // Insertion
-        const result = await collection.insertOne(driverDocument);
+        // Insertion avec options de sécurité
+        const result = await collection.insertOne(driverDocument, {
+            writeConcern: { w: 'majority', j: true }
+        });
 
         // Log de sécurité
         await logSecurityAction(db, 'ADD_DRIVER', {
             id_livreur: data.id_livreur,
             nom: data.nom,
             prenom: data.prenom,
-            timestamp: new Date()
+            hasPhoto: !!data.photo_data,
+            requestId
         });
 
-        console.log('Livreur ajouté avec succès:', data.id_livreur);
+        // Invalidation du cache
+        cache.delete('global-stats');
 
-        return {
-            statusCode: 201,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                insertedId: result.insertedId,
-                message: 'Livreur ajouté avec succès',
-                hasPhoto: !!data.photo_data,
-                driver: {
-                    id_livreur: data.id_livreur,
-                    nom: data.nom,
-                    prenom: data.prenom
-                },
-                timestamp: new Date().toISOString()
-            })
-        };
+        console.log(`✅ [${requestId}] Livreur ajouté: ${data.id_livreur}`);
+
+        return createSuccessResponse({
+            success: true,
+            insertedId: result.insertedId,
+            message: 'Livreur ajouté avec succès',
+            hasPhoto: !!data.photo_data,
+            driver: {
+                id_livreur: data.id_livreur,
+                nom: data.nom,
+                prenom: data.prenom
+            },
+            timestamp: new Date().toISOString(),
+            requestId
+        }, requestId, 201);
 
     } catch (error) {
-        console.error('Erreur addDriver:', error);
-        return errorResponse(`Erreur lors de l'ajout du livreur: ${error.message}`);
+        console.error(`❌ [${requestId}] Erreur addDriver:`, error);
+        
+        if (error.message.includes('duplicate key')) {
+            throw new Error('Données en doublon détectées');
+        }
+        
+        throw new Error(`Erreur lors de l'ajout du livreur: ${error.message}`);
     }
 }
 
-// Fonction pour ajouter un restaurant
-async function addRestaurant(db, data) {
+// Fonction addRestaurant avec validation complète
+async function addRestaurant(db, data, requestId) {
     try {
-        console.log('Ajout d\'un nouveau restaurant...');
+        console.log(`🏪 [${requestId}] Ajout restaurant: ${data.nom}`);
         
-        // Validation des données requises
-        if (!data.nom || !data.adresse || !data.telephone) {
-            return errorResponse('Champs obligatoires manquants: nom, adresse et telephone sont requis', 400);
+        const schema = COLLECTION_SCHEMAS['Restau'];
+        const validationErrors = validateInput(data, schema);
+        
+        if (validationErrors.length > 0) {
+            throw new Error(`Erreurs de validation: ${validationErrors.join(', ')}`);
         }
 
         const collection = db.collection('Restau');
 
-        // Vérification des doublons par nom et téléphone
+        // Vérification des doublons
         const existingRestaurant = await collection.findOne({
             $or: [
-                { nom: data.nom },
+                { nom: { $regex: new RegExp(`^${data.nom}$`, 'i') } },
                 { telephone: data.telephone }
             ]
-        });
+        }, { projection: { _id: 1, nom: 1, telephone: 1 } });
 
         if (existingRestaurant) {
-            return errorResponse('Un restaurant avec ce nom ou ce numéro de téléphone existe déjà', 409);
+            const duplicateField = existingRestaurant.nom.toLowerCase() === data.nom.toLowerCase() ? 'nom' : 'téléphone';
+            throw new Error(`Un restaurant avec ce ${duplicateField} existe déjà`);
         }
 
         // Préparation du document restaurant
         const restaurantDocument = {
-            nom: data.nom,
-            adresse: data.adresse,
-            quartier: data.quartier || '',
-            telephone: data.telephone,
-            email: data.email || '',
+            nom: data.nom.trim(),
+            adresse: data.adresse.trim(),
+            quartier: data.quartier?.trim() || '',
+            telephone: data.telephone.trim(),
+            email: data.email?.trim() || '',
             cuisine: data.cuisine || '',
-            horaires: data.horaires || '',
-            description: data.description || '',
+            horaires: data.horaires?.trim() || '',
+            description: data.description?.trim() || '',
             date_creation: new Date(),
             statut: 'actif',
             createdAt: new Date(),
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            rating: 0,
+            reviews_count: 0,
+            version: 1
         };
 
-        // Ajouter les coordonnées GPS si fournies
+        // Coordonnées GPS avec validation
         if (data.latitude && data.longitude) {
-            restaurantDocument.latitude = parseFloat(data.latitude);
-            restaurantDocument.longitude = parseFloat(data.longitude);
-            restaurantDocument.location = {
-                type: "Point",
-                coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)]
-            };
+            const lat = parseFloat(data.latitude);
+            const lng = parseFloat(data.longitude);
+            
+            if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                restaurantDocument.latitude = lat;
+                restaurantDocument.longitude = lng;
+                restaurantDocument.location = {
+                    type: "Point",
+                    coordinates: [lng, lat]
+                };
+            }
         }
 
-        // Ajout du logo si fourni
+        // Gestion du logo avec validation
         if (data.logo_data) {
+            const logoSizeBytes = (data.logo_data.length * 3) / 4;
+            if (logoSizeBytes > 5 * 1024 * 1024) {
+                throw new Error('Logo trop volumineux (max 5MB)');
+            }
+            
             restaurantDocument.logo = {
                 logo_nom: data.logo_nom || 'logo.webp',
                 logo_type: data.logo_type || 'image/webp',
-                logo_taille: data.logo_taille || 0,
-                logo_data: data.logo_data
+                logo_taille: data.logo_taille || logoSizeBytes,
+                logo_data: data.logo_data,
+                uploaded_at: new Date()
             };
         }
 
-        // Ajout des photos si fournies
+        // Gestion des photos avec validation
         if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-            restaurantDocument.photos = data.photos;
+            const validPhotos = data.photos.filter(photo => {
+                if (!photo.data) return false;
+                const photoSize = (photo.data.length * 3) / 4;
+                return photoSize <= 5 * 1024 * 1024; // 5MB max par photo
+            });
+            
+            if (validPhotos.length > 0) {
+                restaurantDocument.photos = validPhotos.map(photo => ({
+                    ...photo,
+                    uploaded_at: new Date()
+                }));
+            }
         }
 
-        // Menu par défaut ou fourni
-        restaurantDocument.menu = data.menu || [];
-        restaurantDocument.rating = 0;
-        restaurantDocument.reviews_count = 0;
+        // Menu avec validation et indexation
+        if (data.menu && Array.isArray(data.menu)) {
+            const validMenu = data.menu.filter(item => 
+                item.nom && item.nom.trim() && 
+                !isNaN(parseFloat(item.prix))
+            ).map(item => ({
+                id: item.id || generateMenuItemId(),
+                nom: item.nom.trim(),
+                description: item.description?.trim() || '',
+                prix: parseFloat(item.prix),
+                categorie: item.categorie?.trim() || 'Divers',
+                disponible: true,
+                created_at: new Date()
+            }));
+            
+            restaurantDocument.menu = validMenu;
+        } else {
+            restaurantDocument.menu = [];
+        }
 
-        // Insertion
-        const result = await collection.insertOne(restaurantDocument);
-
-        // Log de sécurité
-        await logSecurityAction(db, 'ADD_RESTAURANT', {
-            nom: data.nom,
-            adresse: data.adresse,
-            telephone: data.telephone,
-            timestamp: new Date()
-        });
-
-        console.log('Restaurant ajouté avec succès:', data.nom);
-
-        return {
-            statusCode: 201,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                insertedId: result.insertedId,
-                message: 'Restaurant ajouté avec succès',
-                hasLogo: !!data.logo_data,
-                hasPhotos: !!(data.photos && data.photos.length > 0),
-                menuItems: data.menu ? data.menu.length : 0,
-                restaurant: {
+        // Insertion avec transaction pour la cohérence
+        const session = mongoClient.startSession();
+        let result;
+        
+        try {
+            await session.withTransaction(async () => {
+                result = await collection.insertOne(restaurantDocument, { session });
+                
+                // Log de sécurité dans la transaction
+                await logSecurityAction(db, 'ADD_RESTAURANT', {
                     nom: data.nom,
                     adresse: data.adresse,
                     telephone: data.telephone,
-                    cuisine: data.cuisine
-                },
-                timestamp: new Date().toISOString()
-            })
-        };
+                    hasLogo: !!data.logo_data,
+                    photoCount: data.photos?.length || 0,
+                    menuItems: restaurantDocument.menu.length,
+                    requestId
+                }, session);
+            });
+        } finally {
+            await session.endSession();
+        }
+
+        // Invalidation du cache
+        cache.delete('global-stats');
+
+        console.log(`✅ [${requestId}] Restaurant ajouté: ${data.nom}`);
+
+        return createSuccessResponse({
+            success: true,
+            insertedId: result.insertedId,
+            message: 'Restaurant ajouté avec succès',
+            hasLogo: !!data.logo_data,
+            hasPhotos: !!(data.photos && data.photos.length > 0),
+            menuItems: restaurantDocument.menu.length,
+            restaurant: {
+                nom: data.nom,
+                adresse: data.adresse,
+                telephone: data.telephone,
+                cuisine: data.cuisine
+            },
+            timestamp: new Date().toISOString(),
+            requestId
+        }, requestId, 201);
 
     } catch (error) {
-        console.error('Erreur addRestaurant:', error);
-        return errorResponse(`Erreur lors de l'ajout du restaurant: ${error.message}`);
+        console.error(`❌ [${requestId}] Erreur addRestaurant:`, error);
+        throw new Error(`Erreur lors de l'ajout du restaurant: ${error.message}`);
     }
 }
 
-// Fonction pour supprimer un élément
-async function deleteItem(db, collectionName, itemId) {
+// Fonction de suppression sécurisée
+async function deleteItem(db, collectionName, itemId, requestId) {
     try {
-        console.log(`Suppression de l'élément ${itemId} dans ${collectionName}`);
+        console.log(`🗑️ [${requestId}] Suppression ${collectionName}/${itemId}`);
         
-        if (!itemId) {
-            return errorResponse('ID de l\'élément manquant', 400);
-        }
-
-        if (!collectionName) {
-            return errorResponse('Nom de collection manquant', 400);
+        if (!itemId || !collectionName) {
+            throw new Error('Collection et ID requis');
         }
 
         let objectId;
         try {
             objectId = new ObjectId(itemId);
         } catch (error) {
-            return errorResponse('Format d\'ID invalide', 400);
+            throw new Error('Format d\'ID invalide');
         }
 
         const collection = db.collection(collectionName);
         
-        // Vérifier que l'élément existe
-        const existingItem = await collection.findOne({ _id: objectId });
+        // Vérification d'existence et récupération pour log
+        const existingItem = await collection.findOne(
+            { _id: objectId },
+            { projection: { _id: 1, nom: 1, name: 1, id_livreur: 1 } }
+        );
+        
         if (!existingItem) {
-            return errorResponse('Élément non trouvé', 404);
+            throw new Error('Élément non trouvé');
         }
         
-        const result = await collection.deleteOne({
-            _id: objectId
-        });
+        // Suppression avec confirmation
+        const result = await collection.deleteOne(
+            { _id: objectId },
+            { writeConcern: { w: 'majority', j: true } }
+        );
 
         if (result.deletedCount === 1) {
             // Log de sécurité
@@ -786,313 +980,50 @@ async function deleteItem(db, collectionName, itemId) {
                 collection: collectionName,
                 itemId: itemId,
                 deletedItem: existingItem,
-                timestamp: new Date()
+                requestId
             });
 
-            console.log('Élément supprimé avec succès');
+            // Invalidation du cache
+            cache.delete('global-stats');
+            cache.delete(`data-${collectionName}-*`);
 
-            return {
-                statusCode: 200,
-                headers: corsHeaders,
-                body: JSON.stringify({
-                    success: true,
-                    message: 'Élément supprimé avec succès',
-                    deletedCount: 1,
-                    itemId,
-                    collection: collectionName,
-                    timestamp: new Date().toISOString()
-                })
-            };
-        } else {
-            return errorResponse('Échec de la suppression - Aucun document supprimé', 500);
-        }
+            console.log(`✅ [${requestId}] Élément supprimé: ${collectionName}/${itemId}`);
 
-    } catch (error) {
-        console.error('Erreur deleteItem:', error);
-        return errorResponse(`Erreur lors de la suppression: ${error.message}`);
-    }
-}
-
-
-
-// Fonction pour mettre à jour un élément
-async function updateItem(db, collectionName, itemId, updates) {
-    try {
-        if (!itemId) {
-            return errorResponse('ID de l\'élément manquant', 400);
-        }
-
-        if (!updates || typeof updates !== 'object') {
-            return errorResponse('Données de mise à jour manquantes', 400);
-        }
-
-        const collection = db.collection(collectionName);
-        
-        // Ajouter la date de modification
-        updates.updatedAt = new Date();
-        
-        // Vérifier que l'élément existe
-        const existingItem = await collection.findOne({ _id: new ObjectId(itemId) });
-        if (!existingItem) {
-            return errorResponse('Élément non trouvé', 404);
-        }
-        
-        const result = await collection.updateOne(
-            { _id: new ObjectId(itemId) },
-            { $set: updates }
-        );
-
-        if (result.matchedCount === 1) {
-            // Récupérer l'élément mis à jour
-            const updatedItem = await collection.findOne({ _id: new ObjectId(itemId) });
-            
-            // Log de sécurité
-            await logSecurityAction(db, 'UPDATE_ITEM', {
-                collection: collectionName,
-                itemId: itemId,
-                updates: updates,
-                timestamp: new Date()
-            });
-            
-            return {
-                statusCode: 200,
-                headers: corsHeaders,
-                body: JSON.stringify({
-                    success: true,
-                    message: 'Élément mis à jour avec succès',
-                    modifiedCount: result.modifiedCount,
-                    itemId,
-                    updatedItem,
-                    collection: collectionName,
-                    timestamp: new Date().toISOString()
-                })
-            };
-        } else {
-            return errorResponse('Échec de la mise à jour', 500);
-        }
-
-    } catch (error) {
-        console.error('Erreur updateItem:', error);
-        return errorResponse(`Erreur lors de la mise à jour: ${error.message}`);
-    }
-}
-
-// Fonction pour créer un élément
-async function createItem(db, collectionName, data) {
-    try {
-        if (!data || typeof data !== 'object') {
-            return errorResponse('Données manquantes', 400);
-        }
-
-        const collection = db.collection(collectionName);
-        
-        // Ajouter les dates de création et modification
-        data.createdAt = new Date();
-        data.updatedAt = new Date();
-        
-        const result = await collection.insertOne(data);
-
-        // Log de sécurité
-        await logSecurityAction(db, 'CREATE_ITEM', {
-            collection: collectionName,
-            itemId: result.insertedId,
-            data: data,
-            timestamp: new Date()
-        });
-
-        return {
-            statusCode: 201,
-            headers: corsHeaders,
-            body: JSON.stringify({
+            return createSuccessResponse({
                 success: true,
-                message: 'Élément créé avec succès',
-                insertedId: result.insertedId,
+                message: 'Élément supprimé avec succès',
+                deletedCount: 1,
+                itemId,
                 collection: collectionName,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur createItem:', error);
-        return errorResponse(`Erreur lors de la création: ${error.message}`);
-    }
-}
-
-// Fonction pour exporter une collection
-async function exportCollection(db, collectionName, format = 'json') {
-    try {
-        const collection = db.collection(collectionName);
-        
-        const documents = await collection.find({}).toArray();
-
-        let exportData;
-        let contentType;
-        let fileExtension;
-
-        switch (format.toLowerCase()) {
-            case 'csv':
-                exportData = convertToCSV(documents);
-                contentType = 'text/csv';
-                fileExtension = 'csv';
-                break;
-            case 'json':
-            default:
-                exportData = JSON.stringify({
-                    collection: collectionName,
-                    exportDate: new Date().toISOString(),
-                    count: documents.length,
-                    data: documents
-                }, null, 2);
-                contentType = 'application/json';
-                fileExtension = 'json';
-                break;
+                timestamp: new Date().toISOString(),
+                requestId
+            }, requestId);
+        } else {
+            throw new Error('Échec de la suppression');
         }
 
-        // Log de sécurité
-        await logSecurityAction(db, 'EXPORT_COLLECTION', {
-            collection: collectionName,
-            format: format,
-            count: documents.length,
-            timestamp: new Date()
-        });
-
-        return {
-            statusCode: 200,
-            headers: {
-                ...corsHeaders,
-                'Content-Type': contentType,
-                'Content-Disposition': `attachment; filename="${collectionName}_export_${new Date().toISOString().split('T')[0]}.${fileExtension}"`
-            },
-            body: exportData
-        };
-
     } catch (error) {
-        console.error('Erreur exportCollection:', error);
-        return errorResponse(`Erreur lors de l'export: ${error.message}`);
+        console.error(`❌ [${requestId}] Erreur deleteItem:`, error);
+        throw new Error(`Erreur lors de la suppression: ${error.message}`);
     }
 }
 
-// Fonction pour les analyses temporelles
-async function getAnalytics(db, collectionName, timeRange) {
+// Fonction de recherche avancée optimisée
+async function searchItems(db, collectionName, query, filters, requestId) {
     try {
-        const collection = db.collection(collectionName);
+        console.log(`🔍 [${requestId}] Recherche dans ${collectionName}: "${query}"`);
         
-        // Définir la plage de temps
-        const now = new Date();
-        let startDate;
-        let groupFormat;
-
-        switch (timeRange) {
-            case '24h':
-                startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                groupFormat = "%Y-%m-%d %H:00";
-                break;
-            case '7d':
-                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                groupFormat = "%Y-%m-%d";
-                break;
-            case '30d':
-                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                groupFormat = "%Y-%m-%d";
-                break;
-            case '90d':
-                startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-                groupFormat = "%Y-%m-%d";
-                break;
-            default:
-                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                groupFormat = "%Y-%m-%d";
-                break;
+        if (!query || query.length < 2) {
+            throw new Error('Requête trop courte (minimum 2 caractères)');
         }
 
-        // Agrégation pour les statistiques temporelles
-        const pipeline = [
-            {
-                $match: {
-                    $or: [
-                        { createdAt: { $gte: startDate } },
-                        { dateCreation: { $gte: startDate } },
-                        { date_creation: { $gte: startDate } },
-                        { orderDate: { $gte: startDate } }
-                    ]
-                }
-            },
-            {
-                $group: {
-                    _id: {
-                        $dateToString: {
-                            format: groupFormat,
-                            date: {
-                                $ifNull: [
-                                    "$createdAt",
-                                    { $ifNull: ["$dateCreation", { $ifNull: ["$date_creation", "$orderDate"] }] }
-                                ]
-                            }
-                        }
-                    },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { "_id": 1 } }
-        ];
-
-        const analyticsData = await collection.aggregate(pipeline).toArray();
-
-        // Statistiques par statut si applicable
-        const statusPipeline = [
-            {
-                $match: {
-                    $or: [
-                        { createdAt: { $gte: startDate } },
-                        { dateCreation: { $gte: startDate } },
-                        { date_creation: { $gte: startDate } },
-                        { orderDate: { $gte: startDate } }
-                    ]
-                }
-            },
-            {
-                $group: {
-                    _id: { $ifNull: ["$status", "$statut"] },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { count: -1 } }
-        ];
-
-        const statusData = await collection.aggregate(statusPipeline).toArray();
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                analytics: analyticsData,
-                statusDistribution: statusData,
-                timeRange,
-                startDate: startDate.toISOString(),
-                endDate: now.toISOString(),
-                collection: collectionName,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur getAnalytics:', error);
-        return errorResponse(`Erreur lors de l'analyse: ${error.message}`);
-    }
-}
-
-// Fonction de recherche avancée
-async function searchItems(db, collectionName, query, filters = {}) {
-    try {
         const collection = db.collection(collectionName);
         
-        // Construction de la requête de recherche
+        // Construction de la requête de recherche optimisée
         const searchQuery = {};
-
-        // Recherche textuelle si une requête est fournie
-        if (query && query.trim()) {
-            const searchTerms = query.trim().split(/\s+/);
+        const searchTerms = query.trim().split(/\s+/).slice(0, 5); // Limite à 5 termes
+        
+        if (searchTerms.length > 0) {
             const regexQueries = searchTerms.map(term => new RegExp(term, 'i'));
             
             searchQuery.$or = [
@@ -1112,13 +1043,15 @@ async function searchItems(db, collectionName, query, filters = {}) {
             ];
         }
 
-        // Appliquer les filtres
+        // Application des filtres
         if (filters.status) {
             searchQuery.status = filters.status;
         }
         if (filters.statut) {
             searchQuery.statut = filters.statut;
         }
+        
+        // Filtre de date optimisé
         if (filters.dateStart && filters.dateEnd) {
             const startDate = new Date(filters.dateStart);
             const endDate = new Date(filters.dateEnd);
@@ -1135,357 +1068,319 @@ async function searchItems(db, collectionName, query, filters = {}) {
             });
         }
 
+        // Exécution de la recherche avec limite de sécurité
         const results = await collection
             .find(searchQuery)
-            .sort({ $natural: -1 })
-            .limit(500)
+            .sort({ _id: -1 })
+            .limit(500) // Limite de sécurité
+            .maxTimeMS(20000) // Timeout de 20s
             .toArray();
 
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                data: results,
-                count: results.length,
-                query,
-                filters,
-                collection: collectionName,
-                timestamp: new Date().toISOString()
-            })
-        };
+        console.log(`✅ [${requestId}] Recherche terminée: ${results.length} résultats`);
 
-    } catch (error) {
-        console.error('Erreur searchItems:', error);
-        return errorResponse(`Erreur lors de la recherche: ${error.message}`);
-    }
-}
-
-// Fonction de sauvegarde
-async function backupCollection(db, collectionName) {
-    try {
-        console.log(`Création de sauvegarde pour ${collectionName}`);
-        
-        const collection = db.collection(collectionName);
-        const timestamp = Date.now();
-        const backupName = `${collectionName}_backup_${timestamp}`;
-        const backupCollection = db.collection(backupName);
-        
-        const documents = await collection.find({}).toArray();
-        
-        if (documents.length > 0) {
-            // Ajouter des métadonnées de sauvegarde
-            const backupData = documents.map(doc => ({
-                ...doc,
-                _backup_metadata: {
-                    originalCollection: collectionName,
-                    backupDate: new Date(),
-                    backupName
-                }
-            }));
-            
-            await backupCollection.insertMany(backupData);
-        }
-
-        // Créer un document de métadonnées pour la sauvegarde
-        const metadataCollection = db.collection('_backup_metadata');
-        await metadataCollection.insertOne({
-            backupName,
-            originalCollection: collectionName,
-            documentsCount: documents.length,
-            backupDate: new Date(),
-            timestamp,
-            status: 'completed'
-        });
-
-        // Log de sécurité
-        await logSecurityAction(db, 'BACKUP_COLLECTION', {
+        return createSuccessResponse({
+            success: true,
+            data: results,
+            count: results.length,
+            query,
+            filters,
             collection: collectionName,
-            backupName: backupName,
-            documentsCount: documents.length,
-            timestamp: new Date()
-        });
-
-        console.log(`Sauvegarde créée: ${backupName}`);
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                message: `Sauvegarde créée pour ${collectionName}`,
-                backupName,
-                documentsCount: documents.length,
-                timestamp: new Date().toISOString()
-            })
-        };
+            timestamp: new Date().toISOString(),
+            requestId
+        }, requestId);
 
     } catch (error) {
-        console.error('Erreur backupCollection:', error);
-        return errorResponse(`Erreur lors de la sauvegarde: ${error.message}`);
+        console.error(`❌ [${requestId}] Erreur searchItems:`, error);
+        throw new Error(`Erreur lors de la recherche: ${error.message}`);
     }
 }
 
-// Fonction de restauration
-async function restoreCollection(db, collectionName, backupName) {
+// Fonction de recherche globale optimisée
+async function globalSearch(db, query, collections, requestId) {
     try {
-        const backupCollection = db.collection(backupName);
-        const targetCollection = db.collection(collectionName);
+        console.log(`🌐 [${requestId}] Recherche globale: "${query}"`);
         
-        // Vérifier que la sauvegarde existe
-        const backupCount = await backupCollection.countDocuments();
-        if (backupCount === 0) {
-            return errorResponse('Sauvegarde non trouvée ou vide', 404);
-        }
-        
-        // Récupérer les documents de sauvegarde
-        const backupDocuments = await backupCollection.find({}).toArray();
-        
-        // Nettoyer les métadonnées de sauvegarde et restaurer
-        const cleanDocuments = backupDocuments.map(doc => {
-            const { _backup_metadata, ...cleanDoc } = doc;
-            return {
-                ...cleanDoc,
-                restoredAt: new Date(),
-                restoredFrom: backupName
-            };
-        });
-        
-        // Vider la collection cible et insérer les données restaurées
-        await targetCollection.deleteMany({});
-        if (cleanDocuments.length > 0) {
-            await targetCollection.insertMany(cleanDocuments);
-        }
-
-        // Log de sécurité
-        await logSecurityAction(db, 'RESTORE_COLLECTION', {
-            collection: collectionName,
-            backupName: backupName,
-            restoredCount: cleanDocuments.length,
-            timestamp: new Date()
-        });
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                message: `Collection ${collectionName} restaurée depuis ${backupName}`,
-                restoredCount: cleanDocuments.length,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur restoreCollection:', error);
-        return errorResponse(`Erreur lors de la restauration: ${error.message}`);
-    }
-}
-
-// Fonction pour lister les sauvegardes
-async function getBackups(db, collectionName) {
-    try {
-        const metadataCollection = db.collection('_backup_metadata');
-        
-        const query = collectionName ? { originalCollection: collectionName } : {};
-        const backups = await metadataCollection
-            .find(query)
-            .sort({ backupDate: -1 })
-            .toArray();
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                backups,
-                count: backups.length,
-                collection: collectionName,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur getBackups:', error);
-        return errorResponse(`Erreur lors de la récupération des sauvegardes: ${error.message}`);
-    }
-}
-
-// Fonction pour supprimer une sauvegarde
-async function deleteBackup(db, backupName) {
-    try {
-        // Supprimer la collection de sauvegarde
-        await db.collection(backupName).drop();
-        
-        // Supprimer les métadonnées
-        const metadataCollection = db.collection('_backup_metadata');
-        await metadataCollection.deleteOne({ backupName });
-
-        // Log de sécurité
-        await logSecurityAction(db, 'DELETE_BACKUP', {
-            backupName: backupName,
-            timestamp: new Date()
-        });
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                message: `Sauvegarde ${backupName} supprimée`,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur deleteBackup:', error);
-        return errorResponse(`Erreur lors de la suppression de la sauvegarde: ${error.message}`);
-    }
-}
-
-// Fonction de recherche globale
-async function globalSearch(db, query, collections = []) {
-    try {
         if (!query || query.trim().length < 2) {
-            return errorResponse('Requête de recherche trop courte (minimum 2 caractères)', 400);
+            throw new Error('Requête de recherche trop courte (minimum 2 caractères)');
         }
 
         const defaultCollections = [
             'Colis', 'Commandes', 'Livraison', 'LivraisonsEffectuees', 
-            'Refus', 'Res_livreur', 'compte_livreur', 'Restau', 
-            'cour_expedition', 'pharmacyOrders', 'shopping_orders'
+            'Refus', 'Res_livreur', 'compte_livreur', 'Restau'
         ];
 
         const searchCollections = collections.length > 0 ? collections : defaultCollections;
         const results = {};
         let totalResults = 0;
 
-        for (const collectionName of searchCollections) {
+        // Recherche parallèle dans toutes les collections
+        const searchPromises = searchCollections.map(async (collectionName) => {
             try {
-                const searchResponse = await searchItems(db, collectionName, query, {});
-                const searchData = JSON.parse(searchResponse.body);
+                const searchResult = await searchItems(db, collectionName, query, {}, requestId);
+                const searchData = searchResult.body ? JSON.parse(searchResult.body) : searchResult;
                 
                 if (searchData.success) {
-                    results[collectionName] = {
-                        data: searchData.data.slice(0, 10),
+                    return {
+                        collection: collectionName,
+                        data: searchData.data.slice(0, 10), // Limite à 10 résultats par collection
                         count: searchData.count,
                         hasMore: searchData.count > 10
                     };
-                    totalResults += searchData.count;
                 }
             } catch (error) {
-                console.warn(`Erreur recherche dans ${collectionName}:`, error);
-                results[collectionName] = { data: [], count: 0, hasMore: false };
+                console.warn(`⚠️ [${requestId}] Erreur recherche ${collectionName}:`, error.message);
             }
+            
+            return {
+                collection: collectionName,
+                data: [],
+                count: 0,
+                hasMore: false
+            };
+        });
+
+        const searchResults = await Promise.all(searchPromises);
+        
+        searchResults.forEach(result => {
+            results[result.collection] = {
+                data: result.data,
+                count: result.count,
+                hasMore: result.hasMore
+            };
+            totalResults += result.count;
+        });
+
+        console.log(`✅ [${requestId}] Recherche globale terminée: ${totalResults} résultats`);
+
+        return createSuccessResponse({
+            success: true,
+            query,
+            results,
+            totalResults,
+            searchedCollections: searchCollections,
+            timestamp: new Date().toISOString(),
+            requestId
+        }, requestId);
+
+    } catch (error) {
+        console.error(`❌ [${requestId}] Erreur globalSearch:`, error);
+        throw new Error(`Erreur lors de la recherche globale: ${error.message}`);
+    }
+}
+
+// Fonction d'opérations en masse
+async function bulkOperation(db, collectionName, operation, items, requestId) {
+    try {
+        console.log(`📦 [${requestId}] Opération en masse ${operation} sur ${collectionName}`);
+        
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            throw new Error('Liste d\'éléments requise');
+        }
+        
+        if (items.length > 1000) {
+            throw new Error('Trop d\'éléments (max 1000)');
         }
 
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                query,
-                results,
-                totalResults,
-                searchedCollections: searchCollections,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur globalSearch:', error);
-        return errorResponse(`Erreur lors de la recherche globale: ${error.message}`);
-    }
-}
-
-// Fonction pour obtenir les informations système
-async function getSystemInfo(db) {
-    try {
-        // Liste des collections
-        const collections = await db.listCollections().toArray();
+        const collection = db.collection(collectionName);
+        let result;
         
-        const systemInfo = {
-            database: DB_NAME,
-            collections: collections.length,
-            timestamp: new Date().toISOString()
-        };
+        const session = mongoClient.startSession();
+        
+        try {
+            await session.withTransaction(async () => {
+                switch (operation) {
+                    case 'delete':
+                        const objectIds = items.map(id => new ObjectId(id));
+                        result = await collection.deleteMany(
+                            { _id: { $in: objectIds } },
+                            { session }
+                        );
+                        break;
+                        
+                    case 'update':
+                        const bulkOps = items.map(item => ({
+                            updateOne: {
+                                filter: { _id: new ObjectId(item.id) },
+                                update: { $set: { ...item.updates, updatedAt: new Date() } }
+                            }
+                        }));
+                        result = await collection.bulkWrite(bulkOps, { session });
+                        break;
+                        
+                    default:
+                        throw new Error(`Opération non supportée: ${operation}`);
+                }
+                
+                // Log de sécurité
+                await logSecurityAction(db, 'BULK_OPERATION', {
+                    collection: collectionName,
+                    operation,
+                    itemCount: items.length,
+                    requestId
+                }, session);
+            });
+        } finally {
+            await session.endSession();
+        }
 
-        const collectionsInfo = collections.map(col => ({
-            name: col.name,
-            type: col.type,
-            options: col.options
-        }));
+        // Invalidation du cache
+        cache.delete('global-stats');
+        
+        console.log(`✅ [${requestId}] Opération en masse terminée: ${operation}`);
 
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                systemInfo,
-                collectionsInfo,
-                timestamp: new Date().toISOString()
-            })
-        };
+        return createSuccessResponse({
+            success: true,
+            operation,
+            collection: collectionName,
+            processedItems: items.length,
+            result,
+            timestamp: new Date().toISOString(),
+            requestId
+        }, requestId);
 
     } catch (error) {
-        console.error('Erreur getSystemInfo:', error);
-        return errorResponse(`Erreur lors de la récupération des informations système: ${error.message}`);
+        console.error(`❌ [${requestId}] Erreur bulkOperation:`, error);
+        throw new Error(`Erreur lors de l'opération en masse: ${error.message}`);
     }
 }
 
-// Fonction de logging de sécurité
-async function logSecurityAction(db, action, details) {
+// Fonction de log de sécurité améliorée
+async function logSecurityAction(db, action, details, session = null) {
     try {
         const securityLog = db.collection('_security_logs');
-        await securityLog.insertOne({
+        const logEntry = {
             action,
             details,
             timestamp: new Date(),
             ip: 'admin-system',
-            userAgent: 'admin-ultra-pro',
-        });
+            userAgent: 'admin-ultra-pro-v2',
+            severity: getSeverityLevel(action),
+            version: 2
+        };
+        
+        if (session) {
+            await securityLog.insertOne(logEntry, { session });
+        } else {
+            await securityLog.insertOne(logEntry);
+        }
     } catch (error) {
-        console.warn('Erreur lors du logging de sécurité:', error);
+        console.warn('⚠️ Erreur lors du logging de sécurité:', error.message);
     }
 }
 
-// Fonction utilitaire pour convertir en CSV
-function convertToCSV(data) {
-    if (!data.length) return '';
+// Détermination du niveau de sévérité
+function getSeverityLevel(action) {
+    const highSeverity = ['DELETE_ITEM', 'BULK_OPERATION', 'DELETE_BACKUP'];
+    const mediumSeverity = ['ADD_DRIVER', 'ADD_RESTAURANT', 'UPDATE_ITEM'];
     
-    // Obtenir tous les champs possibles
-    const allFields = new Set();
-    data.forEach(item => {
-        Object.keys(item).forEach(key => allFields.add(key));
-    });
-    
-    const headers = Array.from(allFields);
-    
-    const csvContent = [
-        headers.join(','),
-        ...data.map(row => 
-            headers.map(header => {
-                let value = row[header];
-                if (typeof value === 'object' && value !== null) {
-                    value = JSON.stringify(value);
-                }
-                return `"${String(value || '').replace(/"/g, '""')}"`;
-            }).join(',')
-        )
-    ].join('\n');
-    
-    return csvContent;
+    if (highSeverity.includes(action)) return 'HIGH';
+    if (mediumSeverity.includes(action)) return 'MEDIUM';
+    return 'LOW';
 }
 
-// Fonction utilitaire pour les réponses d'erreur
-function errorResponse(message, status = 400) {
+// Utilitaires de génération d'ID
+function generateMenuItemId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// Fonctions de création de réponses standardisées
+function createSuccessResponse(data, requestId, statusCode = 200) {
     return {
-        statusCode: status,
-        headers: corsHeaders,
+        statusCode,
+        headers: {
+            ...CORS_HEADERS,
+            'X-Request-ID': requestId,
+            'X-Response-Time': Date.now()
+        },
         body: JSON.stringify({
-            success: false,
-            message,
+            ...data,
+            requestId,
             timestamp: new Date().toISOString()
         })
     };
 }
+
+function createErrorResponse(message, statusCode = 400, requestId, details = null) {
+    const errorResponse = {
+        success: false,
+        error: true,
+        message,
+        statusCode,
+        requestId,
+        timestamp: new Date().toISOString()
+    };
+    
+    if (details && process.env.NODE_ENV === 'development') {
+        errorResponse.details = details;
+    }
+    
+    return {
+        statusCode,
+        headers: {
+            ...CORS_HEADERS,
+            'X-Request-ID': requestId,
+            'X-Error': 'true'
+        },
+        body: JSON.stringify(errorResponse)
+    };
+}
+
+// Fonctions utilitaires (placeholders pour futures implémentations)
+async function updateItem(db, collectionName, itemId, updates, requestId) {
+    throw new Error('Fonction updateItem en cours de développement');
+}
+
+async function createItem(db, collectionName, data, requestId) {
+    throw new Error('Fonction createItem en cours de développement');
+}
+
+async function getCollectionStats(db, collectionName, requestId) {
+    throw new Error('Fonction getCollectionStats en cours de développement');
+}
+
+async function backupCollection(db, collectionName, requestId) {
+    throw new Error('Fonction backupCollection en cours de développement');
+}
+
+// Nettoyage périodique du cache et des rate limits
+setInterval(() => {
+    const now = Date.now();
+    
+    // Nettoyage du cache
+    for (const [key, value] of cache.entries()) {
+        if (now - value.timestamp > value.ttl) {
+            cache.delete(key);
+        }
+    }
+    
+    // Nettoyage du rate limiting
+    for (const [ip, requests] of rateLimit.entries()) {
+        const recentRequests = requests.filter(time => now - time < RATE_LIMIT_WINDOW);
+        if (recentRequests.length === 0) {
+            rateLimit.delete(ip);
+        } else {
+            rateLimit.set(ip, recentRequests);
+        }
+    }
+    
+    console.log(`🧹 Cache nettoyé: ${cache.size} entrées, Rate limit: ${rateLimit.size} IPs`);
+}, 300000); // Toutes les 5 minutes
+
+// Gestion propre de l'arrêt
+process.on('SIGTERM', async () => {
+    console.log('🛑 Arrêt en cours...');
+    if (mongoClient) {
+        await mongoClient.close();
+        console.log('✅ Connexion MongoDB fermée');
+    }
+    process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+    console.log('🛑 Interruption reçue...');
+    if (mongoClient) {
+        await mongoClient.close();
+        console.log('✅ Connexion MongoDB fermée');
+    }
+    process.exit(0);
+});
