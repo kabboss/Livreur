@@ -515,7 +515,7 @@ async function generateUniqueDriverId(db) {
         
         while (!isUnique && attempts < maxAttempts) {
             const random = Math.floor(Math.random() * 9000) + 1000;
-            newId = `LIV-${random}`;
+            newId = `LIV${random}`;
             
             const existing = await collection.findOne({ id_livreur: newId });
             if (!existing) {
@@ -761,16 +761,23 @@ async function deleteItem(db, collectionName, itemId) {
             return errorResponse('Nom de collection manquant', 400);
         }
 
+        let objectId;
+        try {
+            objectId = new ObjectId(itemId);
+        } catch (error) {
+            return errorResponse('Format d\'ID invalide', 400);
+        }
+
         const collection = db.collection(collectionName);
         
         // Vérifier que l'élément existe
-        const existingItem = await collection.findOne({ _id: new ObjectId(itemId) });
+        const existingItem = await collection.findOne({ _id: objectId });
         if (!existingItem) {
             return errorResponse('Élément non trouvé', 404);
         }
         
         const result = await collection.deleteOne({
-            _id: new ObjectId(itemId)
+            _id: objectId
         });
 
         if (result.deletedCount === 1) {
@@ -797,7 +804,7 @@ async function deleteItem(db, collectionName, itemId) {
                 })
             };
         } else {
-            return errorResponse('Échec de la suppression', 500);
+            return errorResponse('Échec de la suppression - Aucun document supprimé', 500);
         }
 
     } catch (error) {
@@ -805,6 +812,8 @@ async function deleteItem(db, collectionName, itemId) {
         return errorResponse(`Erreur lors de la suppression: ${error.message}`);
     }
 }
+
+
 
 // Fonction pour mettre à jour un élément
 async function updateItem(db, collectionName, itemId, updates) {
