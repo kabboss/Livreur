@@ -3,8 +3,6 @@ const { MongoClient, ObjectId } = require('mongodb');
 // Configuration MongoDB
 const MONGODB_URI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
 const DB_NAME = "FarmsConnect";
-const ADMIN_CODE = "ka23bo23re23";
-const SECURITY_CODE = "ka23bo23re23";
 
 // Headers CORS
 const corsHeaders = {
@@ -20,18 +18,29 @@ const corsHeaders = {
 let mongoClient = null;
 
 async function connectToMongoDB() {
-    if (!mongoClient) {
-        mongoClient = new MongoClient(MONGODB_URI, {
-            connectTimeoutMS: 10000,
-            serverSelectionTimeoutMS: 10000,
-            maxPoolSize: 10
-        });
-        await mongoClient.connect();
+    try {
+        if (!mongoClient) {
+            mongoClient = new MongoClient(MONGODB_URI, {
+                connectTimeoutMS: 30000,
+                serverSelectionTimeoutMS: 30000,
+                maxPoolSize: 10,
+                retryWrites: true,
+                w: 'majority'
+            });
+            await mongoClient.connect();
+            console.log('Connexion MongoDB établie');
+        }
+        return mongoClient.db(DB_NAME);
+    } catch (error) {
+        console.error('Erreur de connexion MongoDB:', error);
+        throw error;
     }
-    return mongoClient.db(DB_NAME);
 }
 
 exports.handler = async (event, context) => {
+    // Configuration du contexte pour éviter les timeouts
+    context.callbackWaitsForEmptyEventLoop = false;
+
     // Gérer les requêtes OPTIONS (CORS preflight)
     if (event.httpMethod === 'OPTIONS') {
         return {
@@ -44,20 +53,9 @@ exports.handler = async (event, context) => {
     try {
         const queryParams = event.queryStringParameters || {};
         const action = queryParams.action;
-        const adminCode = queryParams.adminCode;
 
-        // Vérification du code admin pour toutes les requêtes
-        if (adminCode !== ADMIN_CODE) {
-            return {
-                statusCode: 401,
-                headers: corsHeaders,
-                body: JSON.stringify({
-                    success: false,
-                    message: 'Code administrateur invalide',
-                    error: 'UNAUTHORIZED'
-                })
-            };
-        }
+        console.log('Action reçue:', action);
+        console.log('Méthode HTTP:', event.httpMethod);
 
         const db = await connectToMongoDB();
 
@@ -99,19 +97,7 @@ exports.handler = async (event, context) => {
         // Gestion des actions POST
         if (event.httpMethod === 'POST') {
             const body = JSON.parse(event.body || '{}');
-            
-            // Vérification du code admin dans le body aussi
-            if (body.adminCode !== ADMIN_CODE) {
-                return {
-                    statusCode: 401,
-                    headers: corsHeaders,
-                    body: JSON.stringify({
-                        success: false,
-                        message: 'Code administrateur invalide dans le body',
-                        error: 'UNAUTHORIZED'
-                    })
-                };
-            }
+            console.log('Action POST:', body.action);
             
             switch (body.action) {
                 case 'addDriver':
@@ -124,23 +110,7 @@ exports.handler = async (event, context) => {
                     return await generateUniqueDriverId(db);
                 
                 case 'deleteItem':
-                    // Vérification du code de sécurité pour les suppressions
-                    if (body.securityCode !== SECURITY_CODE) {
-                        return errorResponse('Code de sécurité requis pour la suppression', 403);
-                    }
                     return await deleteItem(db, body.collection, body.itemId);
-                
-                case 'bulkDelete':
-                    if (body.securityCode !== SECURITY_CODE) {
-                        return errorResponse('Code de sécurité requis pour la suppression', 403);
-                    }
-                    return await bulkDelete(db, body.collection, body.itemIds);
-                
-                case 'deleteCollection':
-                    if (body.securityCode !== SECURITY_CODE) {
-                        return errorResponse('Code de sécurité requis pour la suppression', 403);
-                    }
-                    return await deleteCollection(db, body.collection);
                 
                 case 'updateItem':
                     return await updateItem(db, body.collection, body.itemId, body.updates);
@@ -167,9 +137,6 @@ exports.handler = async (event, context) => {
                     return await getBackups(db, body.collection);
                 
                 case 'deleteBackup':
-                    if (body.securityCode !== SECURITY_CODE) {
-                        return errorResponse('Code de sécurité requis pour la suppression', 403);
-                    }
                     return await deleteBackup(db, body.backupName);
                 
                 case 'globalSearch':
@@ -203,6 +170,8 @@ exports.handler = async (event, context) => {
 // Fonction pour obtenir les statistiques globales
 async function getStats(db) {
     try {
+        console.log('Chargement des statistiques...');
+        
         const collections = [
             'Colis', 'Commandes', 'Livraison', 'LivraisonsEffectuees', 
             'Refus', 'Res_livreur', 'compte_livreur', 'Restau', 
@@ -224,16 +193,20 @@ async function getStats(db) {
                     case 'Colis':
                         stats.colis = count;
                         // Activité récente
-                        const recentColis = await db.collection(collection)
-                            .find({})
-                            .sort({ createdAt: -1 })
-                            .limit(5)
-                            .toArray();
-                        recentActivity.push(...recentColis.map(item => ({
-                            ...item,
-                            collection: 'Colis',
-                            type: 'colis'
-                        })));
+                        try {
+                            const recentColis = await db.collection(collection)
+                                .find({})
+                                .sort({ createdAt: -1 })
+                                .limit(5)
+                                .toArray();
+                            recentActivity.push(...recentColis.map(item => ({
+                                ...item,
+                                collection: 'Colis',
+                                type: 'colis'
+                            })));
+                        } catch (err) {
+                            console.warn('Erreur activité récente Colis:', err);
+                        }
                         break;
                     case 'Livraison':
                         stats.livraison = count;
@@ -242,16 +215,26 @@ async function getStats(db) {
                         stats.livrees = count;
                         break;
                     case 'Res_livreur':
-                        const activeDrivers = await db.collection(collection)
-                            .countDocuments({ status: 'actif' });
-                        stats.livreurs = activeDrivers;
-                        stats.totalLivreurs = count;
+                        try {
+                            const activeDrivers = await db.collection(collection)
+                                .countDocuments({ status: 'actif' });
+                            stats.livreurs = activeDrivers;
+                            stats.totalLivreurs = count;
+                        } catch (err) {
+                            stats.livreurs = count;
+                            stats.totalLivreurs = count;
+                        }
                         break;
                     case 'Restau':
-                        const activeRestaurants = await db.collection(collection)
-                            .countDocuments({ statut: 'actif' });
-                        stats.restaurants = activeRestaurants;
-                        stats.totalRestaurants = count;
+                        try {
+                            const activeRestaurants = await db.collection(collection)
+                                .countDocuments({ statut: 'actif' });
+                            stats.restaurants = activeRestaurants;
+                            stats.totalRestaurants = count;
+                        } catch (err) {
+                            stats.restaurants = count;
+                            stats.totalRestaurants = count;
+                        }
                         break;
                     case 'Commandes':
                         stats.commandes = count;
@@ -270,19 +253,21 @@ async function getStats(db) {
         tomorrow.setDate(tomorrow.getDate() + 1);
 
         try {
-            const commandesJour = await db.collection('Commandes').countDocuments({
-                date_creation: {
-                    $gte: today,
-                    $lt: tomorrow
-                }
-            }) + await db.collection('Colis').countDocuments({
-                createdAt: {
-                    $gte: today,
-                    $lt: tomorrow
-                }
+            const commandesCommandes = await db.collection('Commandes').countDocuments({
+                $or: [
+                    { date_creation: { $gte: today, $lt: tomorrow } },
+                    { createdAt: { $gte: today, $lt: tomorrow } }
+                ]
             });
 
-            stats.commandesJour = commandesJour;
+            const commandesColis = await db.collection('Colis').countDocuments({
+                $or: [
+                    { createdAt: { $gte: today, $lt: tomorrow } },
+                    { dateCreation: { $gte: today, $lt: tomorrow } }
+                ]
+            });
+
+            stats.commandesJour = commandesCommandes + commandesColis;
         } catch (error) {
             console.warn('Erreur calcul commandes du jour:', error);
             stats.commandesJour = 0;
@@ -292,13 +277,23 @@ async function getStats(db) {
         try {
             const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
             
+            const weeklyDeliveries = await db.collection('LivraisonsEffectuees').countDocuments({
+                $or: [
+                    { dateCreation: { $gte: weekAgo } },
+                    { createdAt: { $gte: weekAgo } }
+                ]
+            });
+
+            const weeklyOrders = await db.collection('Commandes').countDocuments({
+                $or: [
+                    { date_creation: { $gte: weekAgo } },
+                    { createdAt: { $gte: weekAgo } }
+                ]
+            });
+
             stats.performance = {
-                weeklyDeliveries: await db.collection('LivraisonsEffectuees').countDocuments({
-                    dateCreation: { $gte: weekAgo }
-                }),
-                weeklyOrders: await db.collection('Commandes').countDocuments({
-                    date_creation: { $gte: weekAgo }
-                }),
+                weeklyDeliveries,
+                weeklyOrders,
                 averageDeliveryTime: '2.5h',
                 successRate: '94%'
             };
@@ -313,7 +308,13 @@ async function getStats(db) {
         }
 
         // Trier l'activité récente par date
-        recentActivity.sort((a, b) => new Date(b.createdAt || b.dateCreation || 0).getTime() - new Date(a.createdAt || a.dateCreation || 0).getTime());
+        recentActivity.sort((a, b) => {
+            const dateA = new Date(a.createdAt || a.dateCreation || 0);
+            const dateB = new Date(b.createdAt || b.dateCreation || 0);
+            return dateB.getTime() - dateA.getTime();
+        });
+
+        console.log('Statistiques chargées avec succès');
 
         return {
             statusCode: 200,
@@ -336,6 +337,8 @@ async function getStats(db) {
 // Fonction pour obtenir les données d'une collection avec pagination
 async function getData(db, collectionName, limit = 1000, offset = 0) {
     try {
+        console.log(`Chargement de la collection ${collectionName}`);
+        
         const collection = db.collection(collectionName);
         
         // Obtenir le nombre total de documents
@@ -351,6 +354,8 @@ async function getData(db, collectionName, limit = 1000, offset = 0) {
 
         // Statistiques de la collection
         const stats = await getCollectionBasicStats(db, collectionName);
+
+        console.log(`Collection ${collectionName} chargée: ${documents.length} documents`);
 
         return {
             statusCode: 200,
@@ -475,7 +480,7 @@ async function getCollectionBasicStats(db, collectionName) {
                 ];
                 
                 const results = await collection.aggregate(pipeline).toArray();
-                if (results.length > 0) {
+                if (results.length > 0 && results[0]._id !== null) {
                     statusStats[field] = results.reduce((acc, item) => {
                         if (item._id) acc[item._id] = item.count;
                         return acc;
@@ -500,11 +505,15 @@ async function getCollectionBasicStats(db, collectionName) {
 // Fonction pour générer un ID unique de livreur
 async function generateUniqueDriverId(db) {
     try {
+        console.log('Génération d\'un nouvel ID livreur...');
+        
         const collection = db.collection('Res_livreur');
         let isUnique = false;
         let newId = '';
+        let attempts = 0;
+        const maxAttempts = 100;
         
-        while (!isUnique) {
+        while (!isUnique && attempts < maxAttempts) {
             const random = Math.floor(Math.random() * 9000) + 1000;
             newId = `LIV-${random}`;
             
@@ -512,7 +521,15 @@ async function generateUniqueDriverId(db) {
             if (!existing) {
                 isUnique = true;
             }
+            attempts++;
         }
+        
+        if (!isUnique) {
+            // Fallback avec timestamp si trop de tentatives
+            newId = `LIV-${Date.now().toString().slice(-6)}`;
+        }
+        
+        console.log('ID généré:', newId);
         
         return {
             statusCode: 200,
@@ -533,6 +550,8 @@ async function generateUniqueDriverId(db) {
 // Fonction pour ajouter un livreur
 async function addDriver(db, data) {
     try {
+        console.log('Ajout d\'un nouveau livreur...');
+        
         // Validation des données
         const requiredFields = ['id_livreur', 'nom', 'prenom', 'whatsapp', 'quartier'];
         const missingFields = requiredFields.filter(field => !data[field]);
@@ -595,6 +614,8 @@ async function addDriver(db, data) {
             timestamp: new Date()
         });
 
+        console.log('Livreur ajouté avec succès:', data.id_livreur);
+
         return {
             statusCode: 201,
             headers: corsHeaders,
@@ -621,6 +642,8 @@ async function addDriver(db, data) {
 // Fonction pour ajouter un restaurant
 async function addRestaurant(db, data) {
     try {
+        console.log('Ajout d\'un nouveau restaurant...');
+        
         // Validation des données requises
         if (!data.nom || !data.adresse || !data.telephone) {
             return errorResponse('Champs obligatoires manquants: nom, adresse et telephone sont requis', 400);
@@ -697,6 +720,8 @@ async function addRestaurant(db, data) {
             timestamp: new Date()
         });
 
+        console.log('Restaurant ajouté avec succès:', data.nom);
+
         return {
             statusCode: 201,
             headers: corsHeaders,
@@ -723,11 +748,17 @@ async function addRestaurant(db, data) {
     }
 }
 
-// Fonction pour supprimer un élément (avec vérification de sécurité)
+// Fonction pour supprimer un élément
 async function deleteItem(db, collectionName, itemId) {
     try {
+        console.log(`Suppression de l'élément ${itemId} dans ${collectionName}`);
+        
         if (!itemId) {
             return errorResponse('ID de l\'élément manquant', 400);
+        }
+
+        if (!collectionName) {
+            return errorResponse('Nom de collection manquant', 400);
         }
 
         const collection = db.collection(collectionName);
@@ -751,6 +782,8 @@ async function deleteItem(db, collectionName, itemId) {
                 timestamp: new Date()
             });
 
+            console.log('Élément supprimé avec succès');
+
             return {
                 statusCode: 200,
                 headers: corsHeaders,
@@ -770,98 +803,6 @@ async function deleteItem(db, collectionName, itemId) {
     } catch (error) {
         console.error('Erreur deleteItem:', error);
         return errorResponse(`Erreur lors de la suppression: ${error.message}`);
-    }
-}
-
-// Fonction pour suppression en masse (avec vérification de sécurité)
-async function bulkDelete(db, collectionName, itemIds) {
-    try {
-        if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
-            return errorResponse('Liste d\'IDs manquante ou vide', 400);
-        }
-
-        const collection = db.collection(collectionName);
-        
-        // Convertir les IDs en ObjectId et valider
-        const objectIds = [];
-        for (const id of itemIds) {
-            try {
-                objectIds.push(new ObjectId(id));
-            } catch (error) {
-                return errorResponse(`ID invalide: ${id}`, 400);
-            }
-        }
-        
-        const result = await collection.deleteMany({
-            _id: { $in: objectIds }
-        });
-
-        // Log de sécurité
-        await logSecurityAction(db, 'BULK_DELETE', {
-            collection: collectionName,
-            itemCount: result.deletedCount,
-            requestedCount: itemIds.length,
-            itemIds: itemIds,
-            timestamp: new Date()
-        });
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                message: `${result.deletedCount} élément(s) supprimé(s)`,
-                deletedCount: result.deletedCount,
-                requestedCount: itemIds.length,
-                collection: collectionName,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur bulkDelete:', error);
-        return errorResponse(`Erreur lors de la suppression en masse: ${error.message}`);
-    }
-}
-
-// Fonction pour vider une collection (avec vérification de sécurité)
-async function deleteCollection(db, collectionName) {
-    try {
-        if (!collectionName) {
-            return errorResponse('Nom de collection manquant', 400);
-        }
-
-        const collection = db.collection(collectionName);
-        
-        // Compter les documents avant suppression
-        const countBefore = await collection.countDocuments();
-        
-        const result = await collection.deleteMany({});
-
-        // Log de sécurité critique
-        await logSecurityAction(db, 'DELETE_COLLECTION', {
-            collection: collectionName,
-            deletedCount: result.deletedCount,
-            countBefore: countBefore,
-            timestamp: new Date()
-        });
-
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                message: `Collection ${collectionName} vidée`,
-                deletedCount: result.deletedCount,
-                countBefore,
-                collection: collectionName,
-                timestamp: new Date().toISOString()
-            })
-        };
-
-    } catch (error) {
-        console.error('Erreur deleteCollection:', error);
-        return errorResponse(`Erreur lors de la suppression de la collection: ${error.message}`);
     }
 }
 
@@ -1214,6 +1155,8 @@ async function searchItems(db, collectionName, query, filters = {}) {
 // Fonction de sauvegarde
 async function backupCollection(db, collectionName) {
     try {
+        console.log(`Création de sauvegarde pour ${collectionName}`);
+        
         const collection = db.collection(collectionName);
         const timestamp = Date.now();
         const backupName = `${collectionName}_backup_${timestamp}`;
@@ -1253,6 +1196,8 @@ async function backupCollection(db, collectionName) {
             documentsCount: documents.length,
             timestamp: new Date()
         });
+
+        console.log(`Sauvegarde créée: ${backupName}`);
 
         return {
             statusCode: 200,
@@ -1357,7 +1302,7 @@ async function getBackups(db, collectionName) {
     }
 }
 
-// Fonction pour supprimer une sauvegarde (avec vérification de sécurité)
+// Fonction pour supprimer une sauvegarde
 async function deleteBackup(db, backupName) {
     try {
         // Supprimer la collection de sauvegarde
@@ -1447,53 +1392,28 @@ async function globalSearch(db, query, collections = []) {
 // Fonction pour obtenir les informations système
 async function getSystemInfo(db) {
     try {
-        const admin = db.admin();
-        
-        // Informations de base
-        const serverStatus = await admin.serverStatus();
-        const dbStats = await db.stats();
-        
         // Liste des collections
         const collections = await db.listCollections().toArray();
         
-        // Informations sur les index
-        const indexInfo = {};
-        for (const collection of collections) {
-            try {
-                const indexes = await db.collection(collection.name).indexes();
-                indexInfo[collection.name] = indexes;
-            } catch (error) {
-                indexInfo[collection.name] = [];
-            }
-        }
+        const systemInfo = {
+            database: DB_NAME,
+            collections: collections.length,
+            timestamp: new Date().toISOString()
+        };
+
+        const collectionsInfo = collections.map(col => ({
+            name: col.name,
+            type: col.type,
+            options: col.options
+        }));
 
         return {
             statusCode: 200,
             headers: corsHeaders,
             body: JSON.stringify({
                 success: true,
-                systemInfo: {
-                    version: serverStatus.version,
-                    uptime: serverStatus.uptime,
-                    connections: serverStatus.connections,
-                    memory: serverStatus.mem,
-                    network: serverStatus.network
-                },
-                databaseInfo: {
-                    name: dbStats.db,
-                    collections: dbStats.collections,
-                    objects: dbStats.objects,
-                    dataSize: dbStats.dataSize,
-                    storageSize: dbStats.storageSize,
-                    indexes: dbStats.indexes,
-                    indexSize: dbStats.indexSize
-                },
-                collectionsInfo: collections.map(col => ({
-                    name: col.name,
-                    type: col.type,
-                    options: col.options
-                })),
-                indexInfo,
+                systemInfo,
+                collectionsInfo,
                 timestamp: new Date().toISOString()
             })
         };
@@ -1514,7 +1434,6 @@ async function logSecurityAction(db, action, details) {
             timestamp: new Date(),
             ip: 'admin-system',
             userAgent: 'admin-ultra-pro',
-            adminCode: ADMIN_CODE
         });
     } catch (error) {
         console.warn('Erreur lors du logging de sécurité:', error);
