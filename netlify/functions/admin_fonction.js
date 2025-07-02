@@ -4,6 +4,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 const MONGODB_URI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
 const DB_NAME = "FarmsConnect";
 const ADMIN_CODE = "ka23bo23re23";
+const SECURITY_CODE = "ka23bo23re23";
 
 // Headers CORS
 const corsHeaders = {
@@ -113,13 +114,32 @@ exports.handler = async (event, context) => {
             }
             
             switch (body.action) {
+                case 'addDriver':
+                    return await addDriver(db, body);
+                
+                case 'addRestaurant':
+                    return await addRestaurant(db, body);
+                
+                case 'generateDriverId':
+                    return await generateUniqueDriverId(db);
+                
                 case 'deleteItem':
+                    // Vérification du code de sécurité pour les suppressions
+                    if (body.securityCode !== SECURITY_CODE) {
+                        return errorResponse('Code de sécurité requis pour la suppression', 403);
+                    }
                     return await deleteItem(db, body.collection, body.itemId);
                 
                 case 'bulkDelete':
+                    if (body.securityCode !== SECURITY_CODE) {
+                        return errorResponse('Code de sécurité requis pour la suppression', 403);
+                    }
                     return await bulkDelete(db, body.collection, body.itemIds);
                 
                 case 'deleteCollection':
+                    if (body.securityCode !== SECURITY_CODE) {
+                        return errorResponse('Code de sécurité requis pour la suppression', 403);
+                    }
                     return await deleteCollection(db, body.collection);
                 
                 case 'updateItem':
@@ -147,6 +167,9 @@ exports.handler = async (event, context) => {
                     return await getBackups(db, body.collection);
                 
                 case 'deleteBackup':
+                    if (body.securityCode !== SECURITY_CODE) {
+                        return errorResponse('Code de sécurité requis pour la suppression', 403);
+                    }
                     return await deleteBackup(db, body.backupName);
                 
                 case 'globalSearch':
@@ -474,7 +497,233 @@ async function getCollectionBasicStats(db, collectionName) {
     }
 }
 
-// Fonction pour supprimer un élément
+// Fonction pour générer un ID unique de livreur
+async function generateUniqueDriverId(db) {
+    try {
+        const collection = db.collection('Res_livreur');
+        let isUnique = false;
+        let newId = '';
+        
+        while (!isUnique) {
+            const random = Math.floor(Math.random() * 9000) + 1000;
+            newId = `LIV-${random}`;
+            
+            const existing = await collection.findOne({ id_livreur: newId });
+            if (!existing) {
+                isUnique = true;
+            }
+        }
+        
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                id_livreur: newId,
+                timestamp: new Date().toISOString()
+            })
+        };
+        
+    } catch (error) {
+        console.error('Erreur generateUniqueDriverId:', error);
+        return errorResponse('Erreur lors de la génération de l\'ID');
+    }
+}
+
+// Fonction pour ajouter un livreur
+async function addDriver(db, data) {
+    try {
+        // Validation des données
+        const requiredFields = ['id_livreur', 'nom', 'prenom', 'whatsapp', 'quartier'];
+        const missingFields = requiredFields.filter(field => !data[field]);
+        
+        if (missingFields.length > 0) {
+            return errorResponse(`Champs obligatoires manquants: ${missingFields.join(', ')}`, 400);
+        }
+
+        const collection = db.collection('Res_livreur');
+
+        // Vérification des doublons
+        const existingDriver = await collection.findOne({
+            $or: [
+                { whatsapp: data.whatsapp },
+                { id_livreur: data.id_livreur }
+            ]
+        });
+
+        if (existingDriver) {
+            return errorResponse('Un livreur avec ce numéro WhatsApp ou cet ID existe déjà', 409);
+        }
+
+        // Préparation du document
+        const driverDocument = {
+            id_livreur: data.id_livreur,
+            nom: data.nom,
+            prenom: data.prenom,
+            whatsapp: data.whatsapp,
+            telephone: data.telephone || '',
+            quartier: data.quartier,
+            piece: data.piece || '',
+            date: data.date || '',
+            contact_urgence: data.contact_urgence || '',
+            date_inscription: data.date_inscription || new Date().toISOString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            status: 'actif'
+        };
+
+        // Ajout des données de la photo si elles existent
+        if (data.photo_data) {
+            driverDocument.photo = {
+                data: data.photo_data,
+                content_type: data.photo_type || 'image/webp',
+                size: data.photo_size || 0,
+                width: data.photo_width || 0,
+                height: data.photo_height || 0,
+                uploaded_at: new Date()
+            };
+        }
+
+        // Insertion
+        const result = await collection.insertOne(driverDocument);
+
+        // Log de sécurité
+        await logSecurityAction(db, 'ADD_DRIVER', {
+            id_livreur: data.id_livreur,
+            nom: data.nom,
+            prenom: data.prenom,
+            timestamp: new Date()
+        });
+
+        return {
+            statusCode: 201,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                insertedId: result.insertedId,
+                message: 'Livreur ajouté avec succès',
+                hasPhoto: !!data.photo_data,
+                driver: {
+                    id_livreur: data.id_livreur,
+                    nom: data.nom,
+                    prenom: data.prenom
+                },
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur addDriver:', error);
+        return errorResponse(`Erreur lors de l'ajout du livreur: ${error.message}`);
+    }
+}
+
+// Fonction pour ajouter un restaurant
+async function addRestaurant(db, data) {
+    try {
+        // Validation des données requises
+        if (!data.nom || !data.adresse || !data.telephone) {
+            return errorResponse('Champs obligatoires manquants: nom, adresse et telephone sont requis', 400);
+        }
+
+        const collection = db.collection('Restau');
+
+        // Vérification des doublons par nom et téléphone
+        const existingRestaurant = await collection.findOne({
+            $or: [
+                { nom: data.nom },
+                { telephone: data.telephone }
+            ]
+        });
+
+        if (existingRestaurant) {
+            return errorResponse('Un restaurant avec ce nom ou ce numéro de téléphone existe déjà', 409);
+        }
+
+        // Préparation du document restaurant
+        const restaurantDocument = {
+            nom: data.nom,
+            adresse: data.adresse,
+            quartier: data.quartier || '',
+            telephone: data.telephone,
+            email: data.email || '',
+            cuisine: data.cuisine || '',
+            horaires: data.horaires || '',
+            description: data.description || '',
+            date_creation: new Date(),
+            statut: 'actif',
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        // Ajouter les coordonnées GPS si fournies
+        if (data.latitude && data.longitude) {
+            restaurantDocument.latitude = parseFloat(data.latitude);
+            restaurantDocument.longitude = parseFloat(data.longitude);
+            restaurantDocument.location = {
+                type: "Point",
+                coordinates: [parseFloat(data.longitude), parseFloat(data.latitude)]
+            };
+        }
+
+        // Ajout du logo si fourni
+        if (data.logo_data) {
+            restaurantDocument.logo = {
+                logo_nom: data.logo_nom || 'logo.webp',
+                logo_type: data.logo_type || 'image/webp',
+                logo_taille: data.logo_taille || 0,
+                logo_data: data.logo_data
+            };
+        }
+
+        // Ajout des photos si fournies
+        if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+            restaurantDocument.photos = data.photos;
+        }
+
+        // Menu par défaut ou fourni
+        restaurantDocument.menu = data.menu || [];
+        restaurantDocument.rating = 0;
+        restaurantDocument.reviews_count = 0;
+
+        // Insertion
+        const result = await collection.insertOne(restaurantDocument);
+
+        // Log de sécurité
+        await logSecurityAction(db, 'ADD_RESTAURANT', {
+            nom: data.nom,
+            adresse: data.adresse,
+            telephone: data.telephone,
+            timestamp: new Date()
+        });
+
+        return {
+            statusCode: 201,
+            headers: corsHeaders,
+            body: JSON.stringify({
+                success: true,
+                insertedId: result.insertedId,
+                message: 'Restaurant ajouté avec succès',
+                hasLogo: !!data.logo_data,
+                hasPhotos: !!(data.photos && data.photos.length > 0),
+                menuItems: data.menu ? data.menu.length : 0,
+                restaurant: {
+                    nom: data.nom,
+                    adresse: data.adresse,
+                    telephone: data.telephone,
+                    cuisine: data.cuisine
+                },
+                timestamp: new Date().toISOString()
+            })
+        };
+
+    } catch (error) {
+        console.error('Erreur addRestaurant:', error);
+        return errorResponse(`Erreur lors de l'ajout du restaurant: ${error.message}`);
+    }
+}
+
+// Fonction pour supprimer un élément (avec vérification de sécurité)
 async function deleteItem(db, collectionName, itemId) {
     try {
         if (!itemId) {
@@ -494,6 +743,14 @@ async function deleteItem(db, collectionName, itemId) {
         });
 
         if (result.deletedCount === 1) {
+            // Log de sécurité
+            await logSecurityAction(db, 'DELETE_ITEM', {
+                collection: collectionName,
+                itemId: itemId,
+                deletedItem: existingItem,
+                timestamp: new Date()
+            });
+
             return {
                 statusCode: 200,
                 headers: corsHeaders,
@@ -516,7 +773,7 @@ async function deleteItem(db, collectionName, itemId) {
     }
 }
 
-// Fonction pour suppression en masse
+// Fonction pour suppression en masse (avec vérification de sécurité)
 async function bulkDelete(db, collectionName, itemIds) {
     try {
         if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
@@ -539,6 +796,15 @@ async function bulkDelete(db, collectionName, itemIds) {
             _id: { $in: objectIds }
         });
 
+        // Log de sécurité
+        await logSecurityAction(db, 'BULK_DELETE', {
+            collection: collectionName,
+            itemCount: result.deletedCount,
+            requestedCount: itemIds.length,
+            itemIds: itemIds,
+            timestamp: new Date()
+        });
+
         return {
             statusCode: 200,
             headers: corsHeaders,
@@ -558,7 +824,7 @@ async function bulkDelete(db, collectionName, itemIds) {
     }
 }
 
-// Fonction pour vider une collection
+// Fonction pour vider une collection (avec vérification de sécurité)
 async function deleteCollection(db, collectionName) {
     try {
         if (!collectionName) {
@@ -571,6 +837,14 @@ async function deleteCollection(db, collectionName) {
         const countBefore = await collection.countDocuments();
         
         const result = await collection.deleteMany({});
+
+        // Log de sécurité critique
+        await logSecurityAction(db, 'DELETE_COLLECTION', {
+            collection: collectionName,
+            deletedCount: result.deletedCount,
+            countBefore: countBefore,
+            timestamp: new Date()
+        });
 
         return {
             statusCode: 200,
@@ -622,6 +896,14 @@ async function updateItem(db, collectionName, itemId, updates) {
             // Récupérer l'élément mis à jour
             const updatedItem = await collection.findOne({ _id: new ObjectId(itemId) });
             
+            // Log de sécurité
+            await logSecurityAction(db, 'UPDATE_ITEM', {
+                collection: collectionName,
+                itemId: itemId,
+                updates: updates,
+                timestamp: new Date()
+            });
+            
             return {
                 statusCode: 200,
                 headers: corsHeaders,
@@ -659,6 +941,14 @@ async function createItem(db, collectionName, data) {
         data.updatedAt = new Date();
         
         const result = await collection.insertOne(data);
+
+        // Log de sécurité
+        await logSecurityAction(db, 'CREATE_ITEM', {
+            collection: collectionName,
+            itemId: result.insertedId,
+            data: data,
+            timestamp: new Date()
+        });
 
         return {
             statusCode: 201,
@@ -707,6 +997,14 @@ async function exportCollection(db, collectionName, format = 'json') {
                 fileExtension = 'json';
                 break;
         }
+
+        // Log de sécurité
+        await logSecurityAction(db, 'EXPORT_COLLECTION', {
+            collection: collectionName,
+            format: format,
+            count: documents.length,
+            timestamp: new Date()
+        });
 
         return {
             statusCode: 200,
@@ -948,6 +1246,14 @@ async function backupCollection(db, collectionName) {
             status: 'completed'
         });
 
+        // Log de sécurité
+        await logSecurityAction(db, 'BACKUP_COLLECTION', {
+            collection: collectionName,
+            backupName: backupName,
+            documentsCount: documents.length,
+            timestamp: new Date()
+        });
+
         return {
             statusCode: 200,
             headers: corsHeaders,
@@ -997,6 +1303,14 @@ async function restoreCollection(db, collectionName, backupName) {
             await targetCollection.insertMany(cleanDocuments);
         }
 
+        // Log de sécurité
+        await logSecurityAction(db, 'RESTORE_COLLECTION', {
+            collection: collectionName,
+            backupName: backupName,
+            restoredCount: cleanDocuments.length,
+            timestamp: new Date()
+        });
+
         return {
             statusCode: 200,
             headers: corsHeaders,
@@ -1043,7 +1357,7 @@ async function getBackups(db, collectionName) {
     }
 }
 
-// Fonction pour supprimer une sauvegarde
+// Fonction pour supprimer une sauvegarde (avec vérification de sécurité)
 async function deleteBackup(db, backupName) {
     try {
         // Supprimer la collection de sauvegarde
@@ -1052,6 +1366,12 @@ async function deleteBackup(db, backupName) {
         // Supprimer les métadonnées
         const metadataCollection = db.collection('_backup_metadata');
         await metadataCollection.deleteOne({ backupName });
+
+        // Log de sécurité
+        await logSecurityAction(db, 'DELETE_BACKUP', {
+            backupName: backupName,
+            timestamp: new Date()
+        });
 
         return {
             statusCode: 200,
@@ -1181,6 +1501,23 @@ async function getSystemInfo(db) {
     } catch (error) {
         console.error('Erreur getSystemInfo:', error);
         return errorResponse(`Erreur lors de la récupération des informations système: ${error.message}`);
+    }
+}
+
+// Fonction de logging de sécurité
+async function logSecurityAction(db, action, details) {
+    try {
+        const securityLog = db.collection('_security_logs');
+        await securityLog.insertOne({
+            action,
+            details,
+            timestamp: new Date(),
+            ip: 'admin-system',
+            userAgent: 'admin-ultra-pro',
+            adminCode: ADMIN_CODE
+        });
+    } catch (error) {
+        console.warn('Erreur lors du logging de sécurité:', error);
     }
 }
 
