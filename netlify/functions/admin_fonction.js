@@ -118,7 +118,7 @@ async function connectToMongoDB() {
             dbConnection = mongoClient.db(DB_NAME);
         }
 
-        return dbConnection; 
+        return dbConnection;
     } catch (error) {
         console.error('Erreur de connexion MongoDB:', error);
         
@@ -1003,7 +1003,7 @@ async function addRestaurant(db, data, requestId) {
                 type: "Point",
                 coordinates: [lng, lat]
             };
-        
+
             console.log(`[${requestId}] Coordonnées GPS ajoutées: ${lat}, ${lng}`);
         }
 
