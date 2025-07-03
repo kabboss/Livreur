@@ -1057,7 +1057,7 @@ async function addRestaurant(db, data, clientIP) {
     }
 }
 
-// Fonction pour supprimer un élément
+// Fonction pour supprimer un élément (modifiée)
 async function deleteItem(db, collectionName, itemId, clientIP) {
     try {
         console.log(`🗑️ Suppression de l'élément ${itemId} dans ${collectionName}`);
@@ -1070,24 +1070,28 @@ async function deleteItem(db, collectionName, itemId, clientIP) {
             return errorResponse('Collection non autorisée', 403);
         }
 
-        let objectId;
+        // Requête flexible pour les ID
+        let query = {};
+        
+        // Essayer de convertir en ObjectId si possible
         try {
-            objectId = new ObjectId(itemId);
+            const objectId = new ObjectId(itemId);
+            query._id = objectId;
         } catch (error) {
-            return errorResponse('Format d\'ID invalide', 400);
+            // Si échoue, utiliser l'ID comme chaîne
+            query._id = itemId;
         }
 
         const collection = db.collection(collectionName);
         
         // Vérifier que l'élément existe
-        const existingItem = await collection.findOne({ _id: objectId });
+        const existingItem = await collection.findOne(query);
         if (!existingItem) {
             return errorResponse('Élément non trouvé', 404);
         }
         
-        const result = await collection.deleteOne({
-            _id: objectId
-        });
+        // Supprimer
+        const result = await collection.deleteOne(query);
 
         if (result.deletedCount === 1) {
             // Nettoyer le cache
@@ -1122,7 +1126,7 @@ async function deleteItem(db, collectionName, itemId, clientIP) {
     }
 }
 
-// Fonction pour supprimer plusieurs éléments
+// Fonction pour supprimer plusieurs éléments (cohérence)
 async function deleteItems(db, collectionName, itemIds, clientIP) {
     try {
         console.log(`🗑️ Suppression de ${itemIds.length} éléments dans ${collectionName}`);
@@ -1135,30 +1139,18 @@ async function deleteItems(db, collectionName, itemIds, clientIP) {
             return errorResponse('Collection non autorisée', 403);
         }
 
-        // Convertir les IDs en ObjectId
-        const objectIds = itemIds.map(id => {
-            try {
-                return new ObjectId(id);
-            } catch (error) {
-                return null;
-            }
-        }).filter(id => id !== null);
-
-        if (objectIds.length === 0) {
-            return errorResponse('Aucun ID valide fourni', 400);
-        }
+        // Requête flexible pour les IDs
+        const query = {
+            _id: { $in: itemIds }
+        };
 
         const collection = db.collection(collectionName);
         
         // Récupérer les éléments avant suppression pour le log
-        const itemsToDelete = await collection.find({
-            _id: { $in: objectIds }
-        }).toArray();
+        const itemsToDelete = await collection.find(query).toArray();
         
         // Supprimer les éléments
-        const result = await collection.deleteMany({
-            _id: { $in: objectIds }
-        });
+        const result = await collection.deleteMany(query);
 
         // Nettoyer le cache
         clearCache();
@@ -1167,7 +1159,7 @@ async function deleteItems(db, collectionName, itemIds, clientIP) {
         await logSecurityAction(db, 'DELETE_ITEMS', {
             collection: collectionName,
             requestedIds: itemIds.length,
-            validIds: objectIds.length,
+            validIds: itemsToDelete.length,
             deletedCount: result.deletedCount,
             deletedItems: itemsToDelete.map(item => ({
                 id: item._id,
@@ -1189,6 +1181,7 @@ async function deleteItems(db, collectionName, itemIds, clientIP) {
         return errorResponse(`Erreur lors de la suppression multiple: ${error.message}`);
     }
 }
+
 
 // Fonction pour mettre à jour un élément
 async function updateItem(db, collectionName, itemId, updates, clientIP) {
