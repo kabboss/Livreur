@@ -833,14 +833,13 @@ async function generateUniqueDriverId(db, clientIP) {
     }
 }
 
-// Fonction pour ajouter un livreur
 async function addDriver(db, data, clientIP) {
     try {
         console.log('👤 Ajout d\'un nouveau livreur...');
-        
+
         const config = COLLECTIONS_CONFIG['Res_livreur'];
         const validation = validateData(data, config.requiredFields);
-        
+
         if (!validation.isValid) {
             return errorResponse(`Champs obligatoires manquants: ${validation.missingFields.join(', ')}`, 400);
         }
@@ -848,7 +847,6 @@ async function addDriver(db, data, clientIP) {
         const sanitizedData = sanitizeData(data);
         const collection = db.collection('Res_livreur');
 
-        // Vérification des doublons
         const existingDriver = await collection.findOne({
             $or: [
                 { whatsapp: sanitizedData.whatsapp },
@@ -860,7 +858,6 @@ async function addDriver(db, data, clientIP) {
             return errorResponse('Un livreur avec ce numéro WhatsApp ou cet ID existe déjà', 409);
         }
 
-        // Préparation du document
         const driverDocument = {
             id_livreur: sanitizedData.id_livreur,
             nom: sanitizedData.nom,
@@ -869,8 +866,12 @@ async function addDriver(db, data, clientIP) {
             telephone: sanitizedData.telephone || '',
             quartier: sanitizedData.quartier,
             piece: sanitizedData.piece || '',
-            date: sanitizedData.date || '',
-            contact_urgence: sanitizedData.contact_urgence || '',
+            piece_number: sanitizedData.piece_number || '',
+            vehicule: sanitizedData.vehicule || '',
+            immatriculation: sanitizedData.immatriculation || '',
+            experience: sanitizedData.experience || '',
+            contact_urgence: sanitizedData.contact_urgence || {},
+            garant: sanitizedData.garant || {},
             date_inscription: sanitizedData.date_inscription || new Date().toISOString(),
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -882,7 +883,6 @@ async function addDriver(db, data, clientIP) {
             }
         };
 
-        // Ajout des données de la photo si elles existent
         if (sanitizedData.photo_data) {
             driverDocument.photo = {
                 data: sanitizedData.photo_data,
@@ -894,13 +894,18 @@ async function addDriver(db, data, clientIP) {
             };
         }
 
-        // Insertion
+        if (sanitizedData.permis_file) {
+            driverDocument.permis_file = sanitizedData.permis_file;
+        }
+
+        if (sanitizedData.casier_file) {
+            driverDocument.casier_file = sanitizedData.casier_file;
+        }
+
         const result = await collection.insertOne(driverDocument);
 
-        // Nettoyer le cache
         clearCache();
 
-        // Log de sécurité
         await logSecurityAction(db, 'ADD_DRIVER', {
             id_livreur: sanitizedData.id_livreur,
             nom: sanitizedData.nom,
@@ -918,7 +923,6 @@ async function addDriver(db, data, clientIP) {
                 success: true,
                 insertedId: result.insertedId,
                 message: 'Livreur ajouté avec succès',
-                hasPhoto: !!sanitizedData.photo_data,
                 driver: {
                     id_livreur: sanitizedData.id_livreur,
                     nom: sanitizedData.nom,
