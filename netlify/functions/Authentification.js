@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
 
 // Configuration MongoDB
@@ -16,8 +16,35 @@ const corsHeaders = {
     'Content-Type': 'application/json'
 };
 
+// Instance MongoDB réutilisable
+let mongoClient = null;
+
+async function connectToMongoDB() {
+    try {
+        if (!mongoClient) {
+            mongoClient = new MongoClient(MONGODB_URI, {
+                useNewUrlParser: true,
+                useUnifiedTopology: true,
+                connectTimeoutMS: 30000,
+                serverSelectionTimeoutMS: 30000,
+                maxPoolSize: 10,
+                retryWrites: true,
+                w: 'majority'
+            });
+            await mongoClient.connect();
+            console.log('✅ Connexion MongoDB établie');
+        }
+        return mongoClient.db(DB_NAME);
+    } catch (error) {
+        console.error('❌ Erreur de connexion MongoDB:', error);
+        throw error;
+    }
+}
+
 // Function principale
 exports.handler = async (event, context) => {
+    context.callbackWaitsForEmptyEventLoop = false;
+
     // Gestion des requêtes OPTIONS (preflight CORS)
     if (event.httpMethod === 'OPTIONS') {
         return {
@@ -35,70 +62,566 @@ exports.handler = async (event, context) => {
         });
     }
 
-    let client;
+    let db;
     
     try {
         // Parse du body de la requête
         const body = JSON.parse(event.body || '{}');
         const { action } = body;
 
-        // Validation de l'action
-        if (!action || !['register', 'login'].includes(action)) {
-            return createResponse(400, { 
-                success: false, 
-                message: 'Action invalide. Utilisez "register" ou "login"' 
-            });
-        }
+        console.log(`🚀 Action reçue: ${action}`);
 
         // Connexion à MongoDB
-        client = new MongoClient(MONGODB_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            connectTimeoutMS: 10000,
-            socketTimeoutMS: 45000,
-            maxPoolSize: 10,
-            serverSelectionTimeoutMS: 5000,
-            family: 4
-        });
-        
-        await client.connect();
-        console.log('Connexion MongoDB établie');
-        
-        const db = client.db(DB_NAME);
+        db = await connectToMongoDB();
 
         // Router vers la fonction appropriée
-        if (action === 'register') {
-            return await handleRegistration(db, body);
-        } else if (action === 'login') {
-            return await handleLogin(db, body);
+        switch (action) {
+            case 'register':
+                return await handleClassicRegistration(db, body);
+            
+            case 'login':
+                return await handleLogin(db, body);
+            
+            case 'demandeRecrutement':
+                return await handleDemandeRecrutement(db, body);
+            
+            case 'demandePartenariat':
+                return await handleDemandePartenariat(db, body);
+            
+            case 'verifyIdentifiant':
+                return await verifyIdentifiant(db, body);
+            
+            case 'finalizeInscription':
+                return await finalizeInscription(db, body);
+            
+            case 'finalizePartenariat':
+                return await finalizePartenariat(db, body);
+            
+            default:
+                return createResponse(400, { 
+                    success: false, 
+                    message: 'Action non supportée' 
+                });
         }
 
     } catch (error) {
-        console.error('Erreur serveur:', error);
+        console.error('💥 Erreur serveur:', error);
         return createResponse(500, { 
             success: false, 
             message: 'Erreur interne du serveur',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
-    } finally {
-        // Fermeture de la connexion MongoDB
-        if (client) {
-            try {
-                await client.close();
-                console.log('Connexion MongoDB fermée');
-            } catch (closeError) {
-                console.error('Erreur fermeture MongoDB:', closeError);
-            }
-        }
     }
 };
 
-// Gestion de l'inscription
-async function handleRegistration(db, data) {
+// ===== NOUVELLES FONCTIONS POUR LE SYSTÈME DE RECRUTEMENT =====
+
+// Gestion des demandes de recrutement (livreurs)
+async function handleDemandeRecrutement(db, data) {
+    try {
+        console.log('👤 Nouvelle demande de recrutement livreur');
+
+        // Validation des données requises
+        const requiredFields = ['nom', 'prenom', 'whatsapp', 'quartier', 'vehicule', 'immatriculation'];
+        const validation = validateRequiredFields(data, requiredFields);
+        
+        if (!validation.isValid) {
+            return createResponse(400, {
+                success: false,
+                message: `Champs obligatoires manquants: ${validation.missingFields.join(', ')}`
+            });
+        }
+
+        // Vérifier les doublons par WhatsApp
+        const existingDemande = await db.collection('demande_livreur').findOne({
+            whatsapp: data.whatsapp
+        });
+
+        if (existingDemande) {
+            return createResponse(409, {
+                success: false,
+                message: 'Une demande existe déjà avec ce numéro WhatsApp'
+            });
+        }
+
+        // Vérifier si déjà un livreur actif
+        const existingLivreur = await db.collection('Res_livreur').findOne({
+            whatsapp: data.whatsapp,
+            status: 'actif'
+        });
+
+        if (existingLivreur) {
+            return createResponse(409, {
+                success: false,
+                message: 'Vous êtes déjà enregistré comme livreur actif'
+            });
+        }
+
+        // Créer la demande
+        const demandeDocument = {
+            nom: data.nom.trim(),
+            prenom: data.prenom.trim(),
+            whatsapp: data.whatsapp,
+            telephone: data.telephone || '',
+            quartier: data.quartier.trim(),
+            dateNaissance: data.dateNaissance || null,
+            vehicule: data.vehicule,
+            immatriculation: data.immatriculation.trim(),
+            experience: data.experience || '',
+            contactUrgence: data.contactUrgence || {},
+            hasPhoto: data.hasPhoto || false,
+            photoInfo: data.hasPhoto ? {
+                name: data.photoName,
+                size: data.photoSize,
+                type: data.photoType
+            } : null,
+            statut: 'en_attente',
+            dateCreation: new Date(),
+            dateTraitement: null,
+            traiteePar: null,
+            identifiantGenere: null,
+            notificationEnvoyee: false,
+            ip: event.headers['x-forwarded-for'] || 'unknown'
+        };
+
+        const result = await db.collection('demande_livreur').insertOne(demandeDocument);
+
+        console.log(`✅ Demande de recrutement créée: ${result.insertedId}`);
+
+        return createResponse(201, {
+            success: true,
+            message: 'Demande de recrutement envoyée avec succès',
+            demandeId: result.insertedId,
+            estimatedProcessingTime: '24-48 heures'
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur handleDemandeRecrutement:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de l\'enregistrement de la demande'
+        });
+    }
+}
+
+// Gestion des demandes de partenariat (restaurants)
+async function handleDemandePartenariat(db, data) {
+    try {
+        console.log('🏪 Nouvelle demande de partenariat restaurant');
+
+        // Validation des données requises
+        const requiredFields = ['nom', 'telephone', 'adresse'];
+        const validation = validateRequiredFields(data, requiredFields);
+        
+        if (!validation.isValid) {
+            return createResponse(400, {
+                success: false,
+                message: `Champs obligatoires manquants: ${validation.missingFields.join(', ')}`
+            });
+        }
+
+        // Vérifier la présence des coordonnées GPS
+        if (!data.coordinates || !data.coordinates.latitude || !data.coordinates.longitude) {
+            return createResponse(400, {
+                success: false,
+                message: 'Coordonnées GPS requises pour la localisation du restaurant'
+            });
+        }
+
+        // Vérifier les doublons par nom ou téléphone
+        const existingDemande = await db.collection('demande_restau').findOne({
+            $or: [
+                { nom: data.nom.trim() },
+                { telephone: data.telephone }
+            ]
+        });
+
+        if (existingDemande) {
+            return createResponse(409, {
+                success: false,
+                message: 'Une demande existe déjà avec ce nom ou ce numéro de téléphone'
+            });
+        }
+
+        // Vérifier si déjà un restaurant actif
+        const existingRestaurant = await db.collection('Restau').findOne({
+            $or: [
+                { nom: data.nom.trim() },
+                { telephone: data.telephone }
+            ],
+            statut: 'actif'
+        });
+
+        if (existingRestaurant) {
+            return createResponse(409, {
+                success: false,
+                message: 'Ce restaurant est déjà enregistré et actif'
+            });
+        }
+
+        // Créer la demande
+        const demandeDocument = {
+            nom: data.nom.trim(),
+            nomCommercial: data.nomCommercial?.trim() || '',
+            telephone: data.telephone,
+            email: data.email?.trim() || '',
+            adresse: data.adresse.trim(),
+            quartier: data.quartier?.trim() || '',
+            cuisine: data.cuisine || '',
+            specialites: data.specialites?.trim() || '',
+            heureOuverture: data.heureOuverture || '',
+            heureFermeture: data.heureFermeture || '',
+            horairesDetails: data.horairesDetails?.trim() || '',
+            responsableNom: data.responsableNom?.trim() || '',
+            responsableTel: data.responsableTel || '',
+            description: data.description?.trim() || '',
+            coordinates: {
+                latitude: data.coordinates.latitude,
+                longitude: data.coordinates.longitude,
+                accuracy: data.coordinates.accuracy
+            },
+            hasLogo: data.hasLogo || false,
+            logoInfo: data.hasLogo ? {
+                name: data.logoName,
+                size: data.logoSize,
+                type: data.logoType
+            } : null,
+            hasPhotos: data.hasPhotos || false,
+            photosInfo: data.hasPhotos ? data.photosInfo : null,
+            statut: 'en_attente',
+            dateCreation: new Date(),
+            dateTraitement: null,
+            traiteePar: null,
+            identifiantGenere: null,
+            notificationEnvoyee: false,
+            ip: event.headers['x-forwarded-for'] || 'unknown'
+        };
+
+        const result = await db.collection('demande_restau').insertOne(demandeDocument);
+
+        console.log(`✅ Demande de partenariat créée: ${result.insertedId}`);
+
+        return createResponse(201, {
+            success: true,
+            message: 'Demande de partenariat envoyée avec succès',
+            demandeId: result.insertedId,
+            estimatedProcessingTime: '24-48 heures'
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur handleDemandePartenariat:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de l\'enregistrement de la demande'
+        });
+    }
+}
+
+// Vérification d'identifiant pour finalisation
+async function verifyIdentifiant(db, data) {
+    try {
+        console.log(`🔍 Vérification identifiant: ${data.identifiant} (${data.type})`);
+
+        const { identifiant, type } = data;
+
+        if (!identifiant || !type) {
+            return createResponse(400, {
+                success: false,
+                message: 'Identifiant et type requis'
+            });
+        }
+
+        let collectionName, collectionDemande;
+        
+        if (type === 'livreur') {
+            collectionName = 'Res_livreur';
+            collectionDemande = 'demande_livreur';
+        } else if (type === 'restaurant') {
+            collectionName = 'Restau';
+            collectionDemande = 'demande_restau';
+        } else {
+            return createResponse(400, {
+                success: false,
+                message: 'Type invalide. Utilisez "livreur" ou "restaurant"'
+            });
+        }
+
+        // Vérifier que l'identifiant existe dans les demandes traitées
+        const demande = await db.collection(collectionDemande).findOne({
+            identifiantGenere: identifiant,
+            statut: 'approuvee'
+        });
+
+        if (!demande) {
+            return createResponse(404, {
+                success: false,
+                message: 'Identifiant non trouvé ou demande non approuvée'
+            });
+        }
+
+        // Vérifier que l'identifiant n'a pas déjà été utilisé
+        const existing = await db.collection(collectionName).findOne({
+            [type === 'livreur' ? 'id_livreur' : 'restaurant_id']: identifiant
+        });
+
+        if (existing) {
+            return createResponse(409, {
+                success: false,
+                message: 'Cet identifiant a déjà été utilisé'
+            });
+        }
+
+        console.log(`✅ Identifiant ${identifiant} vérifié avec succès`);
+
+        return createResponse(200, {
+            success: true,
+            message: 'Identifiant valide',
+            demandeInfo: {
+                nom: demande.nom,
+                dateCreation: demande.dateCreation
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur verifyIdentifiant:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la vérification'
+        });
+    }
+}
+
+// Finalisation inscription livreur
+async function finalizeInscription(db, data) {
+    try {
+        console.log(`✅ Finalisation inscription livreur: ${data.identifiant}`);
+
+        const { identifiant, password } = data;
+
+        if (!identifiant || !password) {
+            return createResponse(400, {
+                success: false,
+                message: 'Identifiant et mot de passe requis'
+            });
+        }
+
+        // Récupérer la demande approuvée
+        const demande = await db.collection('demande_livreur').findOne({
+            identifiantGenere: identifiant,
+            statut: 'approuvee'
+        });
+
+        if (!demande) {
+            return createResponse(404, {
+                success: false,
+                message: 'Demande non trouvée ou non approuvée'
+            });
+        }
+
+        // Vérifier que l'identifiant n'est pas déjà utilisé
+        const existingLivreur = await db.collection('Res_livreur').findOne({
+            id_livreur: identifiant
+        });
+
+        if (existingLivreur) {
+            return createResponse(409, {
+                success: false,
+                message: 'Cet identifiant a déjà été utilisé'
+            });
+        }
+
+        // Créer le livreur dans la collection finale
+        const hashedPassword = await bcrypt.hash(password, 12);
+        
+        const livreurDocument = {
+            id_livreur: identifiant,
+            nom: demande.nom,
+            prenom: demande.prenom,
+            whatsapp: demande.whatsapp,
+            telephone: demande.telephone,
+            quartier: demande.quartier,
+            dateNaissance: demande.dateNaissance,
+            vehicule: demande.vehicule,
+            immatriculation: demande.immatriculation,
+            experience: demande.experience,
+            contactUrgence: demande.contactUrgence,
+            password: hashedPassword,
+            status: 'actif',
+            date_inscription: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: {
+                createdBy: 'auto-inscription',
+                source: 'demande_recrutement',
+                demandeId: demande._id,
+                version: 1
+            }
+        };
+
+        // Ajouter la photo si disponible
+        if (demande.hasPhoto && demande.photoInfo) {
+            livreurDocument.photo = demande.photoInfo;
+        }
+
+        const result = await db.collection('Res_livreur').insertOne(livreurDocument);
+
+        // Marquer la demande comme finalisée
+        await db.collection('demande_livreur').updateOne(
+            { _id: demande._id },
+            { 
+                $set: { 
+                    statut: 'finalisee',
+                    dateFinalization: new Date(),
+                    livreurId: result.insertedId
+                } 
+            }
+        );
+
+        console.log(`✅ Livreur ${identifiant} créé avec succès`);
+
+        return createResponse(201, {
+            success: true,
+            message: 'Inscription finalisée avec succès',
+            livreurId: result.insertedId,
+            id_livreur: identifiant
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur finalizeInscription:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la finalisation de l\'inscription'
+        });
+    }
+}
+
+// Finalisation partenariat restaurant
+async function finalizePartenariat(db, data) {
+    try {
+        console.log(`✅ Finalisation partenariat restaurant: ${data.identifiant}`);
+
+        const { identifiant, password } = data;
+
+        if (!identifiant || !password) {
+            return createResponse(400, {
+                success: false,
+                message: 'Identifiant et mot de passe requis'
+            });
+        }
+
+        // Récupérer la demande approuvée
+        const demande = await db.collection('demande_restau').findOne({
+            identifiantGenere: identifiant,
+            statut: 'approuvee'
+        });
+
+        if (!demande) {
+            return createResponse(404, {
+                success: false,
+                message: 'Demande non trouvée ou non approuvée'
+            });
+        }
+
+        // Vérifier que l'identifiant n'est pas déjà utilisé
+        const existingRestaurant = await db.collection('Restau').findOne({
+            restaurant_id: identifiant
+        });
+
+        if (existingRestaurant) {
+            return createResponse(409, {
+                success: false,
+                message: 'Cet identifiant a déjà été utilisé'
+            });
+        }
+
+        // Créer le restaurant dans la collection finale
+        const hashedPassword = await bcrypt.hash(password, 12);
+        
+        const restaurantDocument = {
+            restaurant_id: identifiant,
+            nom: demande.nom,
+            nomCommercial: demande.nomCommercial,
+            telephone: demande.telephone,
+            email: demande.email,
+            adresse: demande.adresse,
+            quartier: demande.quartier,
+            cuisine: demande.cuisine,
+            specialites: demande.specialites,
+            heureOuverture: demande.heureOuverture,
+            heureFermeture: demande.heureFermeture,
+            horairesDetails: demande.horairesDetails,
+            responsableNom: demande.responsableNom,
+            responsableTel: demande.responsableTel,
+            description: demande.description,
+            latitude: demande.coordinates.latitude,
+            longitude: demande.coordinates.longitude,
+            coordinates: {
+                type: "Point",
+                coordinates: [demande.coordinates.longitude, demande.coordinates.latitude]
+            },
+            password: hashedPassword,
+            statut: 'actif',
+            date_creation: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: {
+                createdBy: 'auto-partenariat',
+                source: 'demande_partenariat',
+                demandeId: demande._id,
+                version: 1,
+                gpsAccuracy: demande.coordinates.accuracy
+            }
+        };
+
+        // Ajouter les fichiers si disponibles
+        if (demande.hasLogo && demande.logoInfo) {
+            restaurantDocument.logo = demande.logoInfo;
+        }
+
+        if (demande.hasPhotos && demande.photosInfo) {
+            restaurantDocument.photos = demande.photosInfo;
+        }
+
+        const result = await db.collection('Restau').insertOne(restaurantDocument);
+
+        // Marquer la demande comme finalisée
+        await db.collection('demande_restau').updateOne(
+            { _id: demande._id },
+            { 
+                $set: { 
+                    statut: 'finalisee',
+                    dateFinalization: new Date(),
+                    restaurantId: result.insertedId
+                } 
+            }
+        );
+
+        console.log(`✅ Restaurant ${identifiant} créé avec succès`);
+
+        return createResponse(201, {
+            success: true,
+            message: 'Partenariat finalisé avec succès',
+            restaurantId: result.insertedId,
+            restaurant_id: identifiant
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur finalizePartenariat:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la finalisation du partenariat'
+        });
+    }
+}
+
+// ===== FONCTIONS D'AUTHENTIFICATION CLASSIQUES (INCHANGÉES) =====
+
+// Gestion de l'inscription classique (conservée pour compatibilité)
+async function handleClassicRegistration(db, data) {
     try {
         const { username, whatsapp, secondNumber, type, identificationCode, password } = data;
         
-        console.log('Tentative d\'inscription:', { username, type, whatsapp });
+        console.log('Tentative d\'inscription classique:', { username, type, whatsapp });
 
         // Validation des données de base
         const validationError = validateRegistrationData(data);
@@ -121,7 +644,7 @@ async function handleRegistration(db, data) {
         }
 
     } catch (error) {
-        console.error('Erreur lors de l\'inscription:', error);
+        console.error('Erreur lors de l\'inscription classique:', error);
         return createResponse(500, { 
             success: false, 
             message: 'Erreur lors de l\'inscription' 
@@ -129,7 +652,7 @@ async function handleRegistration(db, data) {
     }
 }
 
-// Inscription d'un livreur
+// Inscription d'un livreur classique
 async function registerDeliveryDriver(db, data) {
     const { username, whatsapp, secondNumber, identificationCode, password } = data;
     
@@ -146,22 +669,14 @@ async function registerDeliveryDriver(db, data) {
         console.log('Recherche du livreur avec le code:', cleanCode);
 
         // Rechercher le livreur dans la collection Res_livreur
-const livreur = await db.collection('Res_livreur').findOne({
-    $or: [
-        { id_livreur: { $regex: new RegExp(`^${cleanCode}$`, 'i') } },
-        { morceau: { $regex: new RegExp(`^${cleanCode}$`, 'i') } }
-    ],
-    status: "actif" // Notez le nom correct du champ dans vos données
-});
+        const livreur = await db.collection('Res_livreur').findOne({
+            $or: [
+                { id_livreur: { $regex: new RegExp(`^${cleanCode}$`, 'i') } },
+                { morceau: { $regex: new RegExp(`^${cleanCode}$`, 'i') } }
+            ],
+            status: "actif"
+        });
 
-
-console.log('Recherche avec:', {
-    $or: [
-        { id_livreur: cleanCode },
-        { morceau: cleanCode }
-    ],
-    statut: "actif"
-});
         if (!livreur) {
             console.log('Code d\'identification non trouvé:', cleanCode);
             return createResponse(404, { 
@@ -484,7 +999,19 @@ async function loginAdmin(db, data) {
     }
 }
 
-// Fonctions utilitaires
+// ===== FONCTIONS UTILITAIRES =====
+
+function validateRequiredFields(data, requiredFields) {
+    const missingFields = requiredFields.filter(field => 
+        !data[field] || data[field].toString().trim() === ''
+    );
+    
+    return {
+        isValid: missingFields.length === 0,
+        missingFields: missingFields
+    };
+}
+
 function validateRegistrationData(data) {
     const { username, whatsapp, type, password, identificationCode } = data;
 
