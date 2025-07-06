@@ -170,19 +170,44 @@ async function handleDemandeRecrutement(db, data, event) {
             experience: data.experience || '',
             contactUrgence: data.contactUrgence || {},
             hasPhoto: data.hasPhoto || false,
-            photoInfo: data.hasPhoto ? {
-                name: data.photoName,
-                size: data.photoSize,
-                type: data.photoType
-            } : null,
+           documents: {
+        photoIdentite: data.documents.photoIdentite,
+        documentVehicule: data.documents.documentVehicule
+    },
+   
             statut: 'en_attente',
             dateCreation: new Date(),
             dateTraitement: null,
             traiteePar: null,
             identifiantGenere: null,
             notificationEnvoyee: false,
-            ip: event.headers['x-forwarded-for'] || 'unknown'
-        };
+            ip: event.headers['x-forwarded-for'] || 'unknown',
+
+            // Optimisation du stockage
+            metadata: {
+                documentSizes: {
+            photoIdentite: data.documents.photoIdentite?.size || 0,
+            documentVehicule: data.documents.documentVehicule?.size || 0
+        },
+        totalSize: (data.documents.photoIdentite?.size || 0) + 
+                  (data.documents.documentVehicule?.size || 0)
+    }
+};
+
+        // Ajouter les documents en base64
+        if (data.documents.photoIdentite) {
+            demandeDocument.documents.photoIdentite = {
+                ...data.documents.photoIdentite,
+                base64: await convertToBase64(data.documents.photoIdentite)
+            };
+        }
+
+        if (data.documents.documentVehicule) {
+            demandeDocument.documents.documentVehicule = {
+                ...data.documents.documentVehicule,
+                base64: await convertToBase64(data.documents.documentVehicule)
+            };
+        }
 
         const result = await db.collection('demande_livreur').insertOne(demandeDocument);
 
