@@ -124,29 +124,38 @@ exports.handler = async (event, context) => {
 
 async function handleDemandeRecrutement(db, data, event) {
     try {
-        console.log('👤 Nouvelle demande de recrutement livreur');
-
-        // Validation des données requises
+        // Validation des champs requis
         const requiredFields = ['nom', 'prenom', 'whatsapp', 'quartier', 'vehicule', 'immatriculation'];
-        const missingFields = requiredFields.filter(field => 
-            !data[field] || data[field].toString().trim() === ''
-        );
-        
+        const missingFields = requiredFields.filter(field => {
+            const value = data[field];
+            return !value || (typeof value === 'string' && value.trim() === '');
+        });
+
         if (missingFields.length > 0) {
             return createResponse(400, {
                 success: false,
-                message: `Champs obligatoires manquants: ${missingFields.join(', ')}`
+                message: `Champs obligatoires manquants ou invalides: ${missingFields.join(', ')}`,
+                missingFields
             });
         }
 
-// Vérification du numéro WhatsApp
-const whatsapp = data.whatsapp.replace(/\D/g, '');
-if (whatsapp.length !== 8 || !/^\d+$/.test(whatsapp)) {
-    return createResponse(400, {
-        success: false,
-        message: 'Numéro WhatsApp invalide (doit contenir exactement 8 chiffres)'
-    });
-}
+        // Validation spécifique du quartier
+        if (!/^[A-Za-zÀ-ÿ\s\-']{2,}$/.test(data.quartier.trim())) {
+            return createResponse(400, {
+                success: false,
+                message: 'Nom de quartier invalide (2 caractères minimum, lettres uniquement)'
+            });
+        }
+
+        // Vérification du numéro WhatsApp
+        const whatsapp = data.whatsapp.replace(/\D/g, '');
+        if (whatsapp.length !== 8 || !/^\d+$/.test(whatsapp)) {
+            return createResponse(400, {
+                success: false,
+                message: 'Numéro WhatsApp invalide (doit contenir exactement 8 chiffres)'
+            });
+        }
+
         // Vérifier les doublons par WhatsApp
         const existingDemande = await db.collection('demande_livreur').findOne({
             whatsapp: data.whatsapp
