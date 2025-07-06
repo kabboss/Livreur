@@ -139,15 +139,14 @@ async function handleDemandeRecrutement(db, data, event) {
             });
         }
 
-        // Vérification du numéro WhatsApp
-        const whatsapp = data.whatsapp.replace(/\D/g, '');
-        if (whatsapp.length !== 8) {
-            return createResponse(400, {
-                success: false,
-                message: 'Numéro WhatsApp invalide (doit contenir 8 chiffres)'
-            });
-        }
-
+// Vérification du numéro WhatsApp
+const whatsapp = data.whatsapp.replace(/\D/g, '');
+if (whatsapp.length !== 8 || !/^\d+$/.test(whatsapp)) {
+    return createResponse(400, {
+        success: false,
+        message: 'Numéro WhatsApp invalide (doit contenir exactement 8 chiffres)'
+    });
+}
         // Vérifier les doublons par WhatsApp
         const existingDemande = await db.collection('demande_livreur').findOne({
             whatsapp: data.whatsapp
