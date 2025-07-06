@@ -23,8 +23,6 @@ async function connectToMongoDB() {
     try {
         if (!mongoClient) {
             mongoClient = new MongoClient(MONGODB_URI, {
-                useNewUrlParser: true,
-                useUnifiedTopology: true,
                 connectTimeoutMS: 30000,
                 serverSelectionTimeoutMS: 30000,
                 maxPoolSize: 10,
@@ -39,6 +37,8 @@ async function connectToMongoDB() {
         console.error('❌ Erreur de connexion MongoDB:', error);
         throw error;
     }
+
+    
 }
 
 // Function principale
@@ -83,7 +83,7 @@ exports.handler = async (event, context) => {
                 return await handleLogin(db, body);
             
             case 'demandeRecrutement':
-                return await handleDemandeRecrutement(db, body);
+                return await handleDemandeRecrutement(db, body, event);
             
             case 'demandePartenariat':
                 return await handleDemandePartenariat(db, body);
@@ -117,8 +117,8 @@ exports.handler = async (event, context) => {
 // ===== NOUVELLES FONCTIONS POUR LE SYSTÈME DE RECRUTEMENT =====
 
 // Gestion des demandes de recrutement (livreurs)
-async function handleDemandeRecrutement(db, data) {
-    try {
+async function handleDemandeRecrutement(db, data, event) {
+        try {
         console.log('👤 Nouvelle demande de recrutement livreur');
 
         // Validation des données requises
@@ -1064,3 +1064,5 @@ function createResponse(statusCode, body) {
         body: JSON.stringify(body)
     };
 }
+
+
