@@ -37,8 +37,14 @@ async function connectToMongoDB() {
         console.error('❌ Erreur de connexion MongoDB:', error);
         throw error;
     }
+}
 
-    
+function createResponse(statusCode, body) {
+    return {
+        statusCode,
+        headers: corsHeaders,
+        body: JSON.stringify(body)
+    };
 }
 
 // Function principale
@@ -114,21 +120,31 @@ exports.handler = async (event, context) => {
     }
 };
 
-// ===== NOUVELLES FONCTIONS POUR LE SYSTÈME DE RECRUTEMENT =====
+// ===== FONCTIONS POUR LE SYSTÈME DE RECRUTEMENT =====
 
-// Gestion des demandes de recrutement (livreurs)
 async function handleDemandeRecrutement(db, data, event) {
-        try {
+    try {
         console.log('👤 Nouvelle demande de recrutement livreur');
 
         // Validation des données requises
         const requiredFields = ['nom', 'prenom', 'whatsapp', 'quartier', 'vehicule', 'immatriculation'];
-        const validation = validateRequiredFields(data, requiredFields);
+        const missingFields = requiredFields.filter(field => 
+            !data[field] || data[field].toString().trim() === ''
+        );
         
-        if (!validation.isValid) {
+        if (missingFields.length > 0) {
             return createResponse(400, {
                 success: false,
-                message: `Champs obligatoires manquants: ${validation.missingFields.join(', ')}`
+                message: `Champs obligatoires manquants: ${missingFields.join(', ')}`
+            });
+        }
+
+        // Vérification du numéro WhatsApp
+        const whatsapp = data.whatsapp.replace(/\D/g, '');
+        if (whatsapp.length !== 8) {
+            return createResponse(400, {
+                success: false,
+                message: 'Numéro WhatsApp invalide (doit contenir 8 chiffres)'
             });
         }
 
@@ -157,6 +173,14 @@ async function handleDemandeRecrutement(db, data, event) {
             });
         }
 
+        // Vérification des documents obligatoires
+        if (!data.documents?.photoIdentite || !data.documents?.documentVehicule) {
+            return createResponse(400, {
+                success: false,
+                message: 'Les deux documents (photo et carte grise/permis) sont obligatoires'
+            });
+        }
+
         // Créer la demande
         const demandeDocument = {
             nom: data.nom.trim(),
@@ -169,12 +193,10 @@ async function handleDemandeRecrutement(db, data, event) {
             immatriculation: data.immatriculation.trim(),
             experience: data.experience || '',
             contactUrgence: data.contactUrgence || {},
-            hasPhoto: data.hasPhoto || false,
-           documents: {
-        photoIdentite: data.documents.photoIdentite,
-        documentVehicule: data.documents.documentVehicule
-    },
-   
+            documents: {
+                photoIdentite: data.documents.photoIdentite,
+                documentVehicule: data.documents.documentVehicule
+            },
             statut: 'en_attente',
             dateCreation: new Date(),
             dateTraitement: null,
@@ -182,32 +204,15 @@ async function handleDemandeRecrutement(db, data, event) {
             identifiantGenere: null,
             notificationEnvoyee: false,
             ip: event.headers['x-forwarded-for'] || 'unknown',
-
-            // Optimisation du stockage
             metadata: {
                 documentSizes: {
-            photoIdentite: data.documents.photoIdentite?.size || 0,
-            documentVehicule: data.documents.documentVehicule?.size || 0
-        },
-        totalSize: (data.documents.photoIdentite?.size || 0) + 
-                  (data.documents.documentVehicule?.size || 0)
-    }
-};
-
-        // Ajouter les documents en base64
-        if (data.documents.photoIdentite) {
-            demandeDocument.documents.photoIdentite = {
-                ...data.documents.photoIdentite,
-                base64: await convertToBase64(data.documents.photoIdentite)
-            };
-        }
-
-        if (data.documents.documentVehicule) {
-            demandeDocument.documents.documentVehicule = {
-                ...data.documents.documentVehicule,
-                base64: await convertToBase64(data.documents.documentVehicule)
-            };
-        }
+                    photoIdentite: data.documents.photoIdentite?.size || 0,
+                    documentVehicule: data.documents.documentVehicule?.size || 0
+                },
+                totalSize: (data.documents.photoIdentite?.size || 0) + 
+                          (data.documents.documentVehicule?.size || 0)
+            }
+        };
 
         const result = await db.collection('demande_livreur').insertOne(demandeDocument);
 
@@ -229,120 +234,6 @@ async function handleDemandeRecrutement(db, data, event) {
     }
 }
 
-// Gestion des demandes de partenariat (restaurants)
-async function handleDemandePartenariat(db, data) {
-    try {
-        console.log('🏪 Nouvelle demande de partenariat restaurant');
-
-        // Validation des données requises
-        const requiredFields = ['nom', 'telephone', 'adresse'];
-        const validation = validateRequiredFields(data, requiredFields);
-        
-        if (!validation.isValid) {
-            return createResponse(400, {
-                success: false,
-                message: `Champs obligatoires manquants: ${validation.missingFields.join(', ')}`
-            });
-        }
-
-        // Vérifier la présence des coordonnées GPS
-        if (!data.coordinates || !data.coordinates.latitude || !data.coordinates.longitude) {
-            return createResponse(400, {
-                success: false,
-                message: 'Coordonnées GPS requises pour la localisation du restaurant'
-            });
-        }
-
-        // Vérifier les doublons par nom ou téléphone
-        const existingDemande = await db.collection('demande_restau').findOne({
-            $or: [
-                { nom: data.nom.trim() },
-                { telephone: data.telephone }
-            ]
-        });
-
-        if (existingDemande) {
-            return createResponse(409, {
-                success: false,
-                message: 'Une demande existe déjà avec ce nom ou ce numéro de téléphone'
-            });
-        }
-
-        // Vérifier si déjà un restaurant actif
-        const existingRestaurant = await db.collection('Restau').findOne({
-            $or: [
-                { nom: data.nom.trim() },
-                { telephone: data.telephone }
-            ],
-            statut: 'actif'
-        });
-
-        if (existingRestaurant) {
-            return createResponse(409, {
-                success: false,
-                message: 'Ce restaurant est déjà enregistré et actif'
-            });
-        }
-
-        // Créer la demande
-        const demandeDocument = {
-            nom: data.nom.trim(),
-            nomCommercial: data.nomCommercial?.trim() || '',
-            telephone: data.telephone,
-            email: data.email?.trim() || '',
-            adresse: data.adresse.trim(),
-            quartier: data.quartier?.trim() || '',
-            cuisine: data.cuisine || '',
-            specialites: data.specialites?.trim() || '',
-            heureOuverture: data.heureOuverture || '',
-            heureFermeture: data.heureFermeture || '',
-            horairesDetails: data.horairesDetails?.trim() || '',
-            responsableNom: data.responsableNom?.trim() || '',
-            responsableTel: data.responsableTel || '',
-            description: data.description?.trim() || '',
-            coordinates: {
-                latitude: data.coordinates.latitude,
-                longitude: data.coordinates.longitude,
-                accuracy: data.coordinates.accuracy
-            },
-            hasLogo: data.hasLogo || false,
-            logoInfo: data.hasLogo ? {
-                name: data.logoName,
-                size: data.logoSize,
-                type: data.logoType
-            } : null,
-            hasPhotos: data.hasPhotos || false,
-            photosInfo: data.hasPhotos ? data.photosInfo : null,
-            statut: 'en_attente',
-            dateCreation: new Date(),
-            dateTraitement: null,
-            traiteePar: null,
-            identifiantGenere: null,
-            notificationEnvoyee: false,
-            ip: event.headers['x-forwarded-for'] || 'unknown'
-        };
-
-        const result = await db.collection('demande_restau').insertOne(demandeDocument);
-
-        console.log(`✅ Demande de partenariat créée: ${result.insertedId}`);
-
-        return createResponse(201, {
-            success: true,
-            message: 'Demande de partenariat envoyée avec succès',
-            demandeId: result.insertedId,
-            estimatedProcessingTime: '24-48 heures'
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur handleDemandePartenariat:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de l\'enregistrement de la demande'
-        });
-    }
-}
-
-// Vérification d'identifiant pour finalisation
 async function verifyIdentifiant(db, data) {
     try {
         console.log(`🔍 Vérification identifiant: ${data.identifiant} (${data.type})`);
@@ -416,7 +307,6 @@ async function verifyIdentifiant(db, data) {
     }
 }
 
-// Finalisation inscription livreur
 async function finalizeInscription(db, data) {
     try {
         console.log(`✅ Finalisation inscription livreur: ${data.identifiant}`);
@@ -483,9 +373,23 @@ async function finalizeInscription(db, data) {
             }
         };
 
-        // Ajouter la photo si disponible
-        if (demande.hasPhoto && demande.photoInfo) {
-            livreurDocument.photo = demande.photoInfo;
+        // Ajouter les documents
+        if (demande.documents?.photoIdentite) {
+            livreurDocument.photo = {
+                name: 'photo_identite.jpg',
+                type: 'image/jpeg',
+                size: demande.metadata?.documentSizes?.photoIdentite || 0,
+                data: demande.documents.photoIdentite.data
+            };
+        }
+
+        if (demande.documents?.documentVehicule) {
+            livreurDocument.documentVehicule = {
+                name: 'document_vehicule.jpg',
+                type: 'image/jpeg',
+                size: demande.metadata?.documentSizes?.documentVehicule || 0,
+                data: demande.documents.documentVehicule.data
+            };
         }
 
         const result = await db.collection('Res_livreur').insertOne(livreurDocument);
@@ -520,128 +424,8 @@ async function finalizeInscription(db, data) {
     }
 }
 
-// Finalisation partenariat restaurant
-async function finalizePartenariat(db, data) {
-    try {
-        console.log(`✅ Finalisation partenariat restaurant: ${data.identifiant}`);
+// ===== FONCTIONS D'AUTHENTIFICATION CLASSIQUES =====
 
-        const { identifiant, password } = data;
-
-        if (!identifiant || !password) {
-            return createResponse(400, {
-                success: false,
-                message: 'Identifiant et mot de passe requis'
-            });
-        }
-
-        // Récupérer la demande approuvée
-        const demande = await db.collection('demande_restau').findOne({
-            identifiantGenere: identifiant,
-            statut: 'approuvee'
-        });
-
-        if (!demande) {
-            return createResponse(404, {
-                success: false,
-                message: 'Demande non trouvée ou non approuvée'
-            });
-        }
-
-        // Vérifier que l'identifiant n'est pas déjà utilisé
-        const existingRestaurant = await db.collection('Restau').findOne({
-            restaurant_id: identifiant
-        });
-
-        if (existingRestaurant) {
-            return createResponse(409, {
-                success: false,
-                message: 'Cet identifiant a déjà été utilisé'
-            });
-        }
-
-        // Créer le restaurant dans la collection finale
-        const hashedPassword = await bcrypt.hash(password, 12);
-        
-        const restaurantDocument = {
-            restaurant_id: identifiant,
-            nom: demande.nom,
-            nomCommercial: demande.nomCommercial,
-            telephone: demande.telephone,
-            email: demande.email,
-            adresse: demande.adresse,
-            quartier: demande.quartier,
-            cuisine: demande.cuisine,
-            specialites: demande.specialites,
-            heureOuverture: demande.heureOuverture,
-            heureFermeture: demande.heureFermeture,
-            horairesDetails: demande.horairesDetails,
-            responsableNom: demande.responsableNom,
-            responsableTel: demande.responsableTel,
-            description: demande.description,
-            latitude: demande.coordinates.latitude,
-            longitude: demande.coordinates.longitude,
-            coordinates: {
-                type: "Point",
-                coordinates: [demande.coordinates.longitude, demande.coordinates.latitude]
-            },
-            password: hashedPassword,
-            statut: 'actif',
-            date_creation: new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            metadata: {
-                createdBy: 'auto-partenariat',
-                source: 'demande_partenariat',
-                demandeId: demande._id,
-                version: 1,
-                gpsAccuracy: demande.coordinates.accuracy
-            }
-        };
-
-        // Ajouter les fichiers si disponibles
-        if (demande.hasLogo && demande.logoInfo) {
-            restaurantDocument.logo = demande.logoInfo;
-        }
-
-        if (demande.hasPhotos && demande.photosInfo) {
-            restaurantDocument.photos = demande.photosInfo;
-        }
-
-        const result = await db.collection('Restau').insertOne(restaurantDocument);
-
-        // Marquer la demande comme finalisée
-        await db.collection('demande_restau').updateOne(
-            { _id: demande._id },
-            { 
-                $set: { 
-                    statut: 'finalisee',
-                    dateFinalization: new Date(),
-                    restaurantId: result.insertedId
-                } 
-            }
-        );
-
-        console.log(`✅ Restaurant ${identifiant} créé avec succès`);
-
-        return createResponse(201, {
-            success: true,
-            message: 'Partenariat finalisé avec succès',
-            restaurantId: result.insertedId,
-            restaurant_id: identifiant
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur finalizePartenariat:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la finalisation du partenariat'
-        });
-    }
-}
-
-// ===== FONCTIONS D'AUTHENTIFICATION CLASSIQUES (INCHANGÉES) =====
-
-// Gestion de l'inscription classique (conservée pour compatibilité)
 async function handleClassicRegistration(db, data) {
     try {
         const { username, whatsapp, secondNumber, type, identificationCode, password } = data;
@@ -677,7 +461,36 @@ async function handleClassicRegistration(db, data) {
     }
 }
 
-// Inscription d'un livreur classique
+function validateRegistrationData(data) {
+    const { username, whatsapp, type, password, identificationCode } = data;
+
+    if (!username || username.length < 3) {
+        return 'Le nom d\'utilisateur doit comporter au moins 3 caractères';
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        return 'Le nom d\'utilisateur ne peut contenir que des lettres, des chiffres et des tirets bas';
+    }
+
+    if (!whatsapp || !/^\+226\d{8}$/.test(whatsapp)) {
+        return 'Numéro WhatsApp invalide. Format attendu: +226XXXXXXXX';
+    }
+
+    if (!type || !['livreur', 'admin'].includes(type)) {
+        return 'Type de compte invalide. Choisissez "livreur" ou "admin"';
+    }
+
+    if (!password || password.length < 8) {
+        return 'Le mot de passe doit comporter au moins 8 caractères';
+    }
+
+    if ((type === 'livreur' || type === 'admin') && !identificationCode) {
+        return 'Code d\'identification requis';
+    }
+
+    return null;
+}
+
 async function registerDeliveryDriver(db, data) {
     const { username, whatsapp, secondNumber, identificationCode, password } = data;
     
@@ -717,7 +530,7 @@ async function registerDeliveryDriver(db, data) {
             $or: [
                 { id_livreur: livreur.id_livreur },
                 { username: username.toLowerCase().trim() },
-                { whatsapp: cleanPhoneNumber(whatsapp) }
+                { whatsapp: whatsapp }
             ]
         });
 
@@ -727,7 +540,7 @@ async function registerDeliveryDriver(db, data) {
                 message = 'Un compte existe déjà pour ce livreur';
             } else if (existingAccount.username === username.toLowerCase().trim()) {
                 message = 'Ce nom d\'utilisateur est déjà utilisé';
-            } else if (existingAccount.whatsapp === cleanPhoneNumber(whatsapp)) {
+            } else if (existingAccount.whatsapp === whatsapp) {
                 message = 'Ce numéro WhatsApp est déjà utilisé';
             }
             
@@ -743,10 +556,10 @@ async function registerDeliveryDriver(db, data) {
             id_livreur: livreur.id_livreur,
             username: username.toLowerCase().trim(),
             nom: livreur.nom,
-            prenom: livreur['prénom'] || livreur.prenom,
-            whatsapp: cleanPhoneNumber(whatsapp),
-            secondNumber: secondNumber ? cleanPhoneNumber(secondNumber) : null,
-            telephone: livreur.téléphone || livreur.telephone,
+            prenom: livreur.prenom || livreur['prénom'],
+            whatsapp: whatsapp,
+            secondNumber: secondNumber || null,
+            telephone: livreur.telephone || livreur.téléphone,
             quartier: livreur.quartier,
             morceau: livreur.morceau,
             contact_urgence: livreur.contact_urgence,
@@ -754,12 +567,7 @@ async function registerDeliveryDriver(db, data) {
             statut: "actif",
             type_compte: "livreur",
             password: hashedPassword,
-            photo: livreur.données_photo ? {
-                nom: livreur.photo_nom,
-                type: livreur.phototype,
-                taille: livreur.photo_taille,
-                données: livreur.données_photo
-            } : null,
+            photo: livreur.photo || null,
             derniere_connexion: null,
             created_at: new Date(),
             updated_at: new Date()
@@ -787,7 +595,6 @@ async function registerDeliveryDriver(db, data) {
     }
 }
 
-// Inscription d'un admin
 async function registerAdmin(db, data) {
     const { username, identificationCode, password } = data;
     
@@ -847,7 +654,6 @@ async function registerAdmin(db, data) {
     }
 }
 
-// Gestion de la connexion
 async function handleLogin(db, data) {
     try {
         const { username, type, password } = data;
@@ -882,7 +688,6 @@ async function handleLogin(db, data) {
     }
 }
 
-// Connexion d'un livreur
 async function loginDeliveryDriver(db, data) {
     const { username, password } = data;
 
@@ -956,7 +761,6 @@ async function loginDeliveryDriver(db, data) {
     }
 }
 
-// Connexion d'un admin
 async function loginAdmin(db, data) {
     const { username, password } = data;
 
@@ -1024,70 +828,8 @@ async function loginAdmin(db, data) {
     }
 }
 
-// ===== FONCTIONS UTILITAIRES =====
-
-function validateRequiredFields(data, requiredFields) {
-    const missingFields = requiredFields.filter(field => 
-        !data[field] || data[field].toString().trim() === ''
-    );
-    
-    return {
-        isValid: missingFields.length === 0,
-        missingFields: missingFields
-    };
-}
-
-function validateRegistrationData(data) {
-    const { username, whatsapp, type, password, identificationCode } = data;
-
-    if (!username || username.length < 3) {
-        return 'Le nom d\'utilisateur doit comporter au moins 3 caractères';
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-        return 'Le nom d\'utilisateur ne peut contenir que des lettres, des chiffres et des tirets bas';
-    }
-
-    if (!whatsapp || !isValidPhoneNumber(whatsapp)) {
-        return 'Numéro WhatsApp invalide. Format attendu: +226 XX XX XX XX ou 0X XX XX XX';
-    }
-
-    if (!type || !['livreur', 'admin'].includes(type)) {
-        return 'Type de compte invalide. Choisissez "livreur" ou "admin"';
-    }
-
-    if (!password || password.length < 8) {
-        return 'Le mot de passe doit comporter au moins 8 caractères';
-    }
-
-    if ((type === 'livreur' || type === 'admin') && !identificationCode) {
-        return 'Code d\'identification requis';
-    }
-
-    return null;
-}
-
-function isValidPhoneNumber(phone) {
-    const cleanPhone = phone.replace(/\s/g, '');
-    return /^(\+226|0)[0-9]{8}$/.test(cleanPhone);
-}
-
-function cleanPhoneNumber(phone) {
-    return phone ? phone.replace(/\s/g, '') : null;
-}
-
 function generateSimpleToken(userId, userType) {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2);
     return Buffer.from(`${userId}:${userType}:${timestamp}:${randomString}`).toString('base64');
 }
-
-function createResponse(statusCode, body) {
-    return {
-        statusCode,
-        headers: corsHeaders,
-        body: JSON.stringify(body)
-    };
-}
-
-
