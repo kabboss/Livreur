@@ -646,13 +646,6 @@ async function handleDemandePartenariat(db, data, event) {
             });
         }
 
-        // Validation du téléphone
-        if (!validatePhone(data.telephone)) {
-            return createResponse(400, {
-                success: false,
-                message: 'Numéro de téléphone invalide (doit être au format +226XXXXXXXX)'
-            });
-        }
 
         // Validation des coordonnées GPS
         if (!data.location || !data.location.latitude || !data.location.longitude) {
