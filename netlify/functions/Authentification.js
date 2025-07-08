@@ -2,8 +2,8 @@ const { MongoClient, ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
 
 // Configuration MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority";
-const DB_NAME = "SEND2_0_Pro";
+const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const DB_NAME = 'FarmsConnect';
 
 // Headers CORS
 const corsHeaders = {
