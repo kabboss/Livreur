@@ -867,6 +867,5 @@ module.exports = {
     handler: exports.handler,
     connectToMongoDB,
     generateUniqueCode,
-    validatePhoneNumber,
     validateEmail
 };
