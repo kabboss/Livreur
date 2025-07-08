@@ -698,7 +698,7 @@ async function handleDemandePartenariat(db, data, event) {
             signature: data.signature || null,
             menu: data.menu || [],
             statut: 'en_attente',
-            codeAutorisation: null, // Pas de code généré ici
+            codeAutorisation: null,
             dateCreation: new Date(),
             dateTraitement: null,
             traiteePar: null,
@@ -751,196 +751,56 @@ async function handleDemandePartenariat(db, data, event) {
     }
 }
 
-// Fonction pour l'admin - À appeler depuis l'interface admin
-async function validerDemandeRestaurant(db, data) {
-    try {
-        // Vérifier que l'utilisateur est admin
-        if (!data.adminId || !data.isAdmin) {
-            return createResponse(403, {
-                success: false,
-                message: 'Action non autorisée'
-            });
-        }
+// Fonction principale avec gestion CORS complète
+exports.handler = async (event, context) => {
+    context.callbackWaitsForEmptyEventLoop = false;
 
-        // Générer le code d'autorisation
-        const codeAutorisation = 'REST' + Math.floor(1000 + Math.random() * 9000);
+    // Gestion des requêtes OPTIONS (preflight CORS)
+    if (event.httpMethod === 'OPTIONS') {
+        return handleOptions();
+    }
 
-        // Mettre à jour la demande
-        const result = await db.collection('demande_restau').updateOne(
-            { _id: new ObjectId(data.demandeId) },
-            {
-                $set: {
-                    statut: 'approuvee',
-                    codeAutorisation: codeAutorisation,
-                    dateTraitement: new Date(),
-                    traiteePar: data.adminId,
-                    notesAdmin: data.notes || ''
-                }
-            }
-        );
-
-        if (result.modifiedCount === 0) {
-            return createResponse(404, {
-                success: false,
-                message: 'Demande non trouvée'
-            });
-        }
-
-        // Ici vous devriez ajouter l'envoi du code au restaurant (SMS/email)
-
-        return createResponse(200, {
-            success: true,
-            message: 'Demande approuvée avec succès',
-            codeAutorisation: codeAutorisation
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur validerDemandeRestaurant:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la validation de la demande'
+    // Vérification de la méthode HTTP
+    if (event.httpMethod !== 'POST') {
+        return createResponse(405, { 
+            success: false, 
+            message: 'Méthode non autorisée' 
         });
     }
-}
 
-async function finalizePartenariat(db, data) {
+    let db;
+    
     try {
-        console.log(`🤝 Finalisation partenariat restaurant: ${data.code}`);
+        // Parse du body de la requête
+        const body = JSON.parse(event.body || '{}');
+        const { action } = body;
 
-        if (!data.code) {
-            return createResponse(400, {
-                success: false,
-                message: 'Code d\'autorisation requis'
-            });
+        console.log(`🚀 Action reçue: ${action}`);
+
+        // Connexion à MongoDB
+        db = await connectToMongoDB();
+
+        // Router vers la fonction appropriée
+        switch (action) {
+            case 'demandePartenariat':
+                return await handleDemandePartenariat(db, body, event);
+            
+            case 'finalizePartenariat':
+                return await finalizePartenariat(db, body);
+            
+            default:
+                return createResponse(400, { 
+                    success: false, 
+                    message: 'Action non supportée' 
+                });
         }
-
-        // Récupérer la demande approuvée
-        const demande = await db.collection('demande_restau').findOne({
-            codeAutorisation: data.code.toUpperCase(),
-            statut: 'approuvee'
-        });
-
-        if (!demande) {
-            return createResponse(404, {
-                success: false,
-                message: 'Code non trouvé ou demande non approuvée'
-            });
-        }
-
-        // Vérifier que le code n'a pas déjà été utilisé
-        const existingRestaurant = await db.collection('Restau').findOne({
-            codeAutorisation: data.code.toUpperCase()
-        });
-
-        if (existingRestaurant) {
-            return createResponse(409, {
-                success: false,
-                message: 'Ce code a déjà été utilisé'
-            });
-        }
-
-        // Générer un identifiant unique pour le restaurant
-        const restaurant_id = 'R' + Math.floor(10000000 + Math.random() * 90000000);
-
-        // Créer le document restaurant
-        const restaurantDocument = {
-            _id: new ObjectId(),
-            restaurant_id: restaurant_id,
-            nom: demande.nom,
-            nomCommercial: demande.nomCommercial,
-            telephone: demande.telephone,
-            email: demande.email,
-            adresse: demande.adresse,
-            quartier: demande.quartier,
-            location: demande.location,
-            coordinates: {
-                type: 'Point',
-                coordinates: [demande.location.longitude, demande.location.latitude]
-            },
-            cuisine: demande.cuisine,
-            specialites: demande.specialites,
-            horaires: demande.horairesDetails,
-            responsable: {
-                nom: demande.responsableNom,
-                telephone: demande.responsableTel
-            },
-            description: demande.description,
-            signature: demande.signature,
-            menu: demande.menu.map(item => ({
-                ...item,
-                plat_id: 'P' + Math.floor(1000 + Math.random() * 9000),
-                disponible: true,
-                popularite: 0
-            })),
-            media: {
-                logo: demande.logo || null,
-                photos: demande.photos || []
-            },
-            statut: 'actif',
-            codeAutorisation: demande.codeAutorisation,
-            dateCreation: new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date()
-        };
-
-        // Insérer le restaurant
-        const result = await db.collection('Restau').insertOne(restaurantDocument);
-
-        // Mettre à jour la demande
-        await db.collection('demande_restau').updateOne(
-            { _id: demande._id },
-            {
-                $set: {
-                    statut: 'finalisee',
-                    dateFinalisation: new Date(),
-                    restaurantId: result.insertedId
-                }
-            }
-        );
-
-        console.log(`✅ Restaurant créé: ${restaurant_id}`);
-
-        return createResponse(200, {
-            success: true,
-            message: 'Partenariat finalisé avec succès',
-            restaurant: {
-                id: restaurant_id,
-                nom: restaurantDocument.nom,
-                telephone: restaurantDocument.telephone
-            }
-        });
 
     } catch (error) {
-        console.error('❌ Erreur finalizePartenariat:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la finalisation du partenariat'
+        console.error('💥 Erreur serveur:', error);
+        return createResponse(500, { 
+            success: false, 
+            message: 'Erreur interne du serveur',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
-}
-
-// Fonction helper pour créer des réponses standardisées
-function createResponse(statusCode, body) {
-    return {
-        statusCode,
-        body: JSON.stringify(body),
-        headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-        }
-    };
-}
-// ===== UTILITAIRES =====
-function generateSimpleToken(userId, userType) {
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substring(2);
-    return Buffer.from(`${userId}:${userType}:${timestamp}:${randomString}`).toString('base64');
-}
-
-// Export des fonctions pour les tests (optionnel)
-module.exports = {
-    handler: exports.handler,
-    connectToMongoDB,
-    generateUniqueCode,
-    validateEmail
 };
