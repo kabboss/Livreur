@@ -635,7 +635,7 @@ async function handleDemandePartenariat(db, data, event) {
         console.log('🏪 Nouvelle demande de partenariat restaurant');
         
         // Validation des champs requis
-        const requiredFields = ['nom', 'telephone', 'adresse'];
+        const requiredFields = ['nom', 'telephone', 'adresse', 'location'];
         const missingFields = requiredFields.filter(field => !data[field] || (typeof data[field] === 'string' && data[field].trim() === ''));
         
         if (missingFields.length > 0) {
@@ -647,7 +647,7 @@ async function handleDemandePartenariat(db, data, event) {
         }
 
         // Validation du téléphone
-        if (!/^\+226\d{8}$/.test(data.telephone)) {
+        if (!validatePhone(data.telephone)) {
             return createResponse(400, {
                 success: false,
                 message: 'Numéro de téléphone invalide (doit être au format +226XXXXXXXX)'
@@ -706,27 +706,32 @@ async function handleDemandePartenariat(db, data, event) {
             metadata: {
                 hasSignature: !!data.signature,
                 hasGPS: true,
-                hasLogo: !!data.hasLogo,
-                hasPhotos: !!data.hasPhotos,
-                photosCount: data.photosCount || 0,
+                hasLogo: !!data.logo,
+                hasPhotos: !!data.photos,
+                photosCount: data.photos?.length || 0,
                 menuItemsCount: data.menu?.length || 0,
                 userAgent: event.headers['user-agent'] || 'unknown'
             }
         };
 
-        // Si logo/photos sont fournis
-        if (data.hasLogo) {
+        // Si logo est fourni
+        if (data.logo) {
             demandeDocument.logo = {
-                name: data.logoName,
-                size: data.logoSize,
-                type: data.logoType,
+                name: data.logo.name,
+                type: data.logo.type,
+                size: data.logo.size,
+                base64: data.logo.base64,
                 uploaded: false
             };
         }
 
-        if (data.hasPhotos) {
-            demandeDocument.photos = data.photosInfo.map(photo => ({
-                ...photo,
+        // Si photos sont fournies
+        if (data.photos && data.photos.length > 0) {
+            demandeDocument.photos = data.photos.map(photo => ({
+                name: photo.name,
+                type: photo.type,
+                size: photo.size,
+                base64: photo.base64,
                 uploaded: false
             }));
         }
@@ -751,56 +756,128 @@ async function handleDemandePartenariat(db, data, event) {
     }
 }
 
-// Fonction principale avec gestion CORS complète
-exports.handler = async (event, context) => {
-    context.callbackWaitsForEmptyEventLoop = false;
-
-    // Gestion des requêtes OPTIONS (preflight CORS)
-    if (event.httpMethod === 'OPTIONS') {
-        return handleOptions();
-    }
-
-    // Vérification de la méthode HTTP
-    if (event.httpMethod !== 'POST') {
-        return createResponse(405, { 
-            success: false, 
-            message: 'Méthode non autorisée' 
-        });
-    }
-
-    let db;
-    
+async function finalizePartenariat(db, data) {
     try {
-        // Parse du body de la requête
-        const body = JSON.parse(event.body || '{}');
-        const { action } = body;
+        console.log(`✅ Finalisation partenariat restaurant: ${data.code}`);
 
-        console.log(`🚀 Action reçue: ${action}`);
+        const { code } = data;
 
-        // Connexion à MongoDB
-        db = await connectToMongoDB();
-
-        // Router vers la fonction appropriée
-        switch (action) {
-            case 'demandePartenariat':
-                return await handleDemandePartenariat(db, body, event);
-            
-            case 'finalizePartenariat':
-                return await finalizePartenariat(db, body);
-            
-            default:
-                return createResponse(400, { 
-                    success: false, 
-                    message: 'Action non supportée' 
-                });
+        if (!code) {
+            return createResponse(400, {
+                success: false,
+                message: 'Code d\'autorisation requis'
+            });
         }
 
+        // Vérifier que le code existe et est autorisé
+        const demande = await db.collection('demande_restau').findOne({
+            codeAutorisation: code.toUpperCase(),
+            statut: 'autorisee'
+        });
+
+        if (!demande) {
+            return createResponse(404, {
+                success: false,
+                message: 'Code non trouvé ou demande non autorisée'
+            });
+        }
+
+        // Vérifier que le code n'a pas déjà été utilisé
+        const existingRestaurant = await db.collection('Restau').findOne({
+            codeAutorisation: code.toUpperCase()
+        });
+
+        if (existingRestaurant) {
+            return createResponse(409, {
+                success: false,
+                message: 'Ce code a déjà été utilisé'
+            });
+        }
+
+        // Générer un identifiant unique pour le restaurant
+        const restaurantId = generateUniqueCode('restaurant', 8);
+
+        // Créer le document restaurant
+        const restaurantDocument = {
+            restaurantId: restaurantId,
+            nom: demande.nom,
+            nomCommercial: demande.nomCommercial,
+            telephone: demande.telephone,
+            email: demande.email,
+            adresse: demande.adresse,
+            quartier: demande.quartier,
+            location: demande.location,
+            cuisine: demande.cuisine,
+            specialites: demande.specialites,
+            horairesDetails: demande.horairesDetails,
+            responsableNom: demande.responsableNom,
+            responsableTel: demande.responsableTel,
+            description: demande.description,
+            signature: demande.signature,
+            menu: demande.menu,
+            codeAutorisation: code.toUpperCase(),
+            statut: 'actif',
+            dateCreation: new Date(),
+            dateAutorisation: new Date(),
+            metadata: {
+                hasLogo: demande.metadata.hasLogo,
+                hasPhotos: demande.metadata.hasPhotos,
+                photosCount: demande.metadata.photosCount
+            }
+        };
+
+        // Si logo existe
+        if (demande.logo) {
+            restaurantDocument.logo = {
+                name: demande.logo.name,
+                type: demande.logo.type,
+                size: demande.logo.size,
+                base64: demande.logo.base64
+            };
+        }
+
+        // Si photos existent
+        if (demande.photos && demande.photos.length > 0) {
+            restaurantDocument.photos = demande.photos.map(photo => ({
+                name: photo.name,
+                type: photo.type,
+                size: photo.size,
+                base64: photo.base64
+            }));
+        }
+
+        // Insérer dans la collection Restau
+        const restaurantResult = await db.collection('Restau').insertOne(restaurantDocument);
+
+        // Mettre à jour la demande comme finalisée
+        await db.collection('demande_restau').updateOne(
+            { _id: demande._id },
+            { 
+                $set: { 
+                    statut: 'finalisee',
+                    dateFinalization: new Date(),
+                    restaurantId: restaurantResult.insertedId
+                } 
+            }
+        );
+
+        console.log(`✅ Restaurant ${restaurantId} créé avec succès`);
+
+        return createResponse(201, {
+            success: true,
+            message: 'Partenariat finalisé avec succès',
+            restaurant: {
+                restaurantId: restaurantId,
+                nom: demande.nom,
+                telephone: demande.telephone
+            }
+        });
+
     } catch (error) {
-        console.error('💥 Erreur serveur:', error);
-        return createResponse(500, { 
-            success: false, 
-            message: 'Erreur interne du serveur',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        console.error('❌ Erreur finalizePartenariat:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la finalisation du partenariat'
         });
     }
-};
+}
