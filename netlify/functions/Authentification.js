@@ -633,14 +633,11 @@ async function finalizeInscription(db, data) {
 async function handleDemandePartenariat(db, data, event) {
     try {
         console.log('🏪 Nouvelle demande de partenariat restaurant');
-
+        
         // Validation des champs requis
         const requiredFields = ['nom', 'telephone', 'adresse'];
-        const missingFields = requiredFields.filter(field => {
-            const value = data[field];
-            return !value || (typeof value === 'string' && value.trim() === '');
-        });
-
+        const missingFields = requiredFields.filter(field => !data[field] || (typeof data[field] === 'string' && data[field].trim() === ''));
+        
         if (missingFields.length > 0) {
             return createResponse(400, {
                 success: false,
@@ -649,16 +646,16 @@ async function handleDemandePartenariat(db, data, event) {
             });
         }
 
-        // Validation de l'email si fourni
-        if (data.email && !validateEmail(data.email)) {
+        // Validation du téléphone
+        if (!/^\+226\d{8}$/.test(data.telephone)) {
             return createResponse(400, {
                 success: false,
-                message: 'Adresse email invalide'
+                message: 'Numéro de téléphone invalide (doit être au format +226XXXXXXXX)'
             });
         }
 
         // Validation des coordonnées GPS
-        if (!data.coordinates || !data.coordinates.latitude || !data.coordinates.longitude) {
+        if (!data.location || !data.location.latitude || !data.location.longitude) {
             return createResponse(400, {
                 success: false,
                 message: 'Coordonnées GPS requises'
@@ -669,12 +666,11 @@ async function handleDemandePartenariat(db, data, event) {
         const existingDemande = await db.collection('demande_restau').findOne({
             $or: [
                 { telephone: data.telephone },
-                { email: data.email && data.email.trim() },
                 { 
                     nom: data.nom.trim(),
                     adresse: data.adresse.trim()
                 }
-            ].filter(Boolean)
+            ]
         });
 
         if (existingDemande) {
@@ -684,7 +680,7 @@ async function handleDemandePartenariat(db, data, event) {
             });
         }
 
-        // Créer la demande
+        // Créer la demande sans code d'autorisation
         const demandeDocument = {
             nom: data.nom.trim(),
             nomCommercial: data.nomCommercial?.trim() || '',
@@ -694,32 +690,46 @@ async function handleDemandePartenariat(db, data, event) {
             quartier: data.quartier?.trim() || '',
             cuisine: data.cuisine || '',
             specialites: data.specialites?.trim() || '',
-            heureOuverture: data.heureOuverture || '',
-            heureFermeture: data.heureFermeture || '',
             horairesDetails: data.horairesDetails?.trim() || '',
             responsableNom: data.responsableNom?.trim() || '',
             responsableTel: data.responsableTel || '',
             description: data.description?.trim() || '',
-            coordinates: data.coordinates,
             location: data.location,
             signature: data.signature || null,
-            hasLogo: data.hasLogo || false,
-            hasPhotos: data.hasPhotos || false,
-            hasMenu: data.hasMenu || false,
-            photosInfo: data.photosInfo || [],
-            menuInfo: data.menuInfo || [],
+            menu: data.menu || [],
             statut: 'en_attente',
-            codeAutorisation: null,
+            codeAutorisation: null, // Pas de code généré ici
             dateCreation: new Date(),
             dateTraitement: null,
             traiteePar: null,
             ip: event.headers['x-forwarded-for'] || 'unknown',
             metadata: {
                 hasSignature: !!data.signature,
-                hasGPS: !!(data.coordinates?.latitude && data.coordinates?.longitude),
+                hasGPS: true,
+                hasLogo: !!data.hasLogo,
+                hasPhotos: !!data.hasPhotos,
+                photosCount: data.photosCount || 0,
+                menuItemsCount: data.menu?.length || 0,
                 userAgent: event.headers['user-agent'] || 'unknown'
             }
         };
+
+        // Si logo/photos sont fournis
+        if (data.hasLogo) {
+            demandeDocument.logo = {
+                name: data.logoName,
+                size: data.logoSize,
+                type: data.logoType,
+                uploaded: false
+            };
+        }
+
+        if (data.hasPhotos) {
+            demandeDocument.photos = data.photosInfo.map(photo => ({
+                ...photo,
+                uploaded: false
+            }));
+        }
 
         const result = await db.collection('demande_restau').insertOne(demandeDocument);
 
@@ -727,10 +737,9 @@ async function handleDemandePartenariat(db, data, event) {
 
         return createResponse(201, {
             success: true,
-            message: 'Demande de partenariat envoyée avec succès',
+            message: 'Demande de partenariat envoyée avec succès. Notre équipe vous contactera sous 24-48h.',
             demandeId: result.insertedId,
-            numeroReference: result.insertedId.toString().substring(18),
-            estimatedProcessingTime: '24-48 heures'
+            nextStep: 'attente_validation'
         });
 
     } catch (error) {
@@ -742,107 +751,162 @@ async function handleDemandePartenariat(db, data, event) {
     }
 }
 
+// Fonction pour l'admin - À appeler depuis l'interface admin
+async function validerDemandeRestaurant(db, data) {
+    try {
+        // Vérifier que l'utilisateur est admin
+        if (!data.adminId || !data.isAdmin) {
+            return createResponse(403, {
+                success: false,
+                message: 'Action non autorisée'
+            });
+        }
+
+        // Générer le code d'autorisation
+        const codeAutorisation = 'REST' + Math.floor(1000 + Math.random() * 9000);
+
+        // Mettre à jour la demande
+        const result = await db.collection('demande_restau').updateOne(
+            { _id: new ObjectId(data.demandeId) },
+            {
+                $set: {
+                    statut: 'approuvee',
+                    codeAutorisation: codeAutorisation,
+                    dateTraitement: new Date(),
+                    traiteePar: data.adminId,
+                    notesAdmin: data.notes || ''
+                }
+            }
+        );
+
+        if (result.modifiedCount === 0) {
+            return createResponse(404, {
+                success: false,
+                message: 'Demande non trouvée'
+            });
+        }
+
+        // Ici vous devriez ajouter l'envoi du code au restaurant (SMS/email)
+
+        return createResponse(200, {
+            success: true,
+            message: 'Demande approuvée avec succès',
+            codeAutorisation: codeAutorisation
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur validerDemandeRestaurant:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la validation de la demande'
+        });
+    }
+}
+
 async function finalizePartenariat(db, data) {
     try {
         console.log(`🤝 Finalisation partenariat restaurant: ${data.code}`);
 
-        const { code } = data;
-
-        if (!code) {
+        if (!data.code) {
             return createResponse(400, {
                 success: false,
                 message: 'Code d\'autorisation requis'
             });
         }
 
-        // Récupérer la demande autorisée
+        // Récupérer la demande approuvée
         const demande = await db.collection('demande_restau').findOne({
-            codeAutorisation: code.toUpperCase(),
-            statut: 'autorisee'
+            codeAutorisation: data.code.toUpperCase(),
+            statut: 'approuvee'
         });
 
         if (!demande) {
             return createResponse(404, {
                 success: false,
-                message: 'Code non trouvé ou demande non autorisée'
+                message: 'Code non trouvé ou demande non approuvée'
             });
         }
 
-        // Vérifier que le code n'est pas déjà utilisé
-        const existingRestau = await db.collection('Restau').findOne({
-            codeAutorisation: code.toUpperCase()
+        // Vérifier que le code n'a pas déjà été utilisé
+        const existingRestaurant = await db.collection('Restau').findOne({
+            codeAutorisation: data.code.toUpperCase()
         });
 
-        if (existingRestau) {
+        if (existingRestaurant) {
             return createResponse(409, {
                 success: false,
                 message: 'Ce code a déjà été utilisé'
             });
         }
 
-        // Créer l'identifiant restaurant unique
-        const restaurant_id = generateUniqueCode('restaurant', 8);
+        // Générer un identifiant unique pour le restaurant
+        const restaurant_id = 'R' + Math.floor(10000000 + Math.random() * 90000000);
 
-        // Transférer vers Restau
+        // Créer le document restaurant
         const restaurantDocument = {
             _id: new ObjectId(),
             restaurant_id: restaurant_id,
             nom: demande.nom,
             nomCommercial: demande.nomCommercial,
-            adresse: demande.adresse,
-            quartier: demande.quartier,
             telephone: demande.telephone,
             email: demande.email,
+            adresse: demande.adresse,
+            quartier: demande.quartier,
+            location: demande.location,
+            coordinates: {
+                type: 'Point',
+                coordinates: [demande.location.longitude, demande.location.latitude]
+            },
             cuisine: demande.cuisine,
             specialites: demande.specialites,
-            horaires: {
-                ouverture: demande.heureOuverture,
-                fermeture: demande.heureFermeture,
-                details: demande.horairesDetails
-            },
+            horaires: demande.horairesDetails,
             responsable: {
                 nom: demande.responsableNom,
                 telephone: demande.responsableTel
             },
             description: demande.description,
-            latitude: demande.coordinates.latitude,
-            longitude: demande.coordinates.longitude,
-            location: demande.location,
             signature: demande.signature,
-            logo: demande.hasLogo ? { placeholder: true } : null,
-            photos: demande.hasPhotos ? demande.photosInfo : [],
-            menu: demande.hasMenu ? demande.menuInfo : [],
-            codeAutorisation: code.toUpperCase(),
+            menu: demande.menu.map(item => ({
+                ...item,
+                plat_id: 'P' + Math.floor(1000 + Math.random() * 9000),
+                disponible: true,
+                popularite: 0
+            })),
+            media: {
+                logo: demande.logo || null,
+                photos: demande.photos || []
+            },
             statut: 'actif',
+            codeAutorisation: demande.codeAutorisation,
             dateCreation: new Date(),
-            dateAutorisation: new Date(),
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
+        // Insérer le restaurant
         const result = await db.collection('Restau').insertOne(restaurantDocument);
 
-        // Marquer la demande comme finalisée
+        // Mettre à jour la demande
         await db.collection('demande_restau').updateOne(
             { _id: demande._id },
-            { 
-                $set: { 
+            {
+                $set: {
                     statut: 'finalisee',
-                    dateFinalization: new Date(),
+                    dateFinalisation: new Date(),
                     restaurantId: result.insertedId
-                } 
+                }
             }
         );
 
-        console.log(`✅ Restaurant ${restaurant_id} créé avec succès`);
+        console.log(`✅ Restaurant créé: ${restaurant_id}`);
 
-        return createResponse(201, {
+        return createResponse(200, {
             success: true,
             message: 'Partenariat finalisé avec succès',
             restaurant: {
-                restaurant_id: restaurant_id,
-                nom: demande.nom,
-                adresse: demande.adresse
+                id: restaurant_id,
+                nom: restaurantDocument.nom,
+                telephone: restaurantDocument.telephone
             }
         });
 
@@ -855,6 +919,17 @@ async function finalizePartenariat(db, data) {
     }
 }
 
+// Fonction helper pour créer des réponses standardisées
+function createResponse(statusCode, body) {
+    return {
+        statusCode,
+        body: JSON.stringify(body),
+        headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        }
+    };
+}
 // ===== UTILITAIRES =====
 function generateSimpleToken(userId, userType) {
     const timestamp = Date.now();
