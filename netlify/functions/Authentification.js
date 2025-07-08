@@ -53,11 +53,6 @@ function generateUniqueCode(type, length = 6) {
     return `${prefix}${timestamp}${random}`;
 }
 
-function validatePhoneNumber(phone) {
-    const cleanPhone = phone.replace(/\D/g, '');
-    return cleanPhone.length === 8 && /^\d+$/.test(cleanPhone);
-}
-
 function validateEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
@@ -327,14 +322,6 @@ async function handleDemandeRecrutement(db, data, event) {
             });
         }
 
-        // Validation du numéro WhatsApp
-        const whatsappNumber = data.whatsapp.replace(/\D/g, '');
-        if (!validatePhoneNumber(whatsappNumber)) {
-            return createResponse(400, {
-                success: false,
-                message: 'Numéro WhatsApp invalide (8 chiffres requis)'
-            });
-        }
 
         // Validation du quartier
         if (!/^[A-Za-zÀ-ÿ\s\-']{2,}$/.test(data.quartier.trim())) {
@@ -659,15 +646,6 @@ async function handleDemandePartenariat(db, data, event) {
                 success: false,
                 message: `Champs obligatoires manquants: ${missingFields.join(', ')}`,
                 missingFields
-            });
-        }
-
-        // Validation du numéro de téléphone
-        const phoneNumber = data.telephone.replace(/\D/g, '');
-        if (!validatePhoneNumber(phoneNumber)) {
-            return createResponse(400, {
-                success: false,
-                message: 'Numéro de téléphone invalide (8 chiffres requis)'
             });
         }
 
