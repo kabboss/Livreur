@@ -410,42 +410,25 @@ async function verifyCode(db, data) {
             });
         }
 
-        let collectionName;
-        
-        if (type === 'livreur') {
-            collectionName = 'demande_livreur';
-        } else if (type === 'restaurant') {
-            collectionName = 'demande_restau';
-        } else {
+        // Vérifier que le type est bien 'livreur'
+        if (type !== 'livreur') {
             return createResponse(400, {
                 success: false,
-                message: 'Type invalide'
+                message: 'Type de demande invalide'
             });
         }
 
-        // Vérifier que le code existe et est autorisé
-        const demande = await db.collection(collectionName).findOne({
+        // Vérifier que le code existe et est approuvé
+        const demande = await db.collection('demande_livreur').findOne({
             codeAutorisation: code.toUpperCase(),
-            statut: 'autorisee'
+            statut: 'approuvee' // Notez que c'est 'approuvee' et non 'autorisee'
         });
 
         if (!demande) {
+            console.log('Demande non trouvée ou non approuvée pour le code:', code);
             return createResponse(404, {
                 success: false,
-                message: 'Code non trouvé ou demande non autorisée'
-            });
-        }
-
-        // Vérifier que le code n'a pas déjà été utilisé
-        let targetCollection = type === 'livreur' ? 'Res_livreur' : 'Restau';
-        const existing = await db.collection(targetCollection).findOne({
-            codeAutorisation: code.toUpperCase()
-        });
-
-        if (existing) {
-            return createResponse(409, {
-                success: false,
-                message: 'Ce code a déjà été utilisé'
+                message: 'Code non trouvé ou demande non approuvée'
             });
         }
 
@@ -456,6 +439,8 @@ async function verifyCode(db, data) {
             message: 'Code valide',
             demandeInfo: {
                 nom: demande.nom,
+                prenom: demande.prenom,
+                whatsapp: demande.whatsapp,
                 dateCreation: demande.dateCreation
             }
         });
@@ -468,7 +453,6 @@ async function verifyCode(db, data) {
         });
     }
 }
-
 async function finalizeInscription(db, data) {
     try {
         console.log(`✅ Finalisation inscription livreur: ${data.code}`);
