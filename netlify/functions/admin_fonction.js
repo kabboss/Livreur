@@ -1,8 +1,9 @@
 const { MongoClient, ObjectId } = require('mongodb');
+const bcrypt = require('bcryptjs');
 
 // Configuration MongoDB
-const MONGODB_URI = "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/?retryWrites=true&w=majority";
-const DB_NAME = "FarmsConnect";
+const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const DB_NAME = 'FarmsConnect';
 
 // Headers CORS
 const corsHeaders = {
@@ -19,7 +20,7 @@ let mongoClient = null;
 
 // Cache pour optimiser les performances
 const cache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
 async function connectToMongoDB() {
     try {
@@ -29,16 +30,16 @@ async function connectToMongoDB() {
                 useUnifiedTopology: true,
                 connectTimeoutMS: 30000,
                 serverSelectionTimeoutMS: 30000,
-                maxPoolSize: 10,
+                maxPoolSize: 50,
                 retryWrites: true,
                 w: 'majority'
             });
             await mongoClient.connect();
-            console.log('✅ Connexion MongoDB établie');
+            console.log('✅ Connexion MongoDB Admin établie');
         }
         return mongoClient.db(DB_NAME);
     } catch (error) {
-        console.error('❌ Erreur de connexion MongoDB:', error);
+        console.error('❌ Erreur de connexion MongoDB Admin:', error);
         throw error;
     }
 }
@@ -75,7 +76,7 @@ exports.handler = async (event, context) => {
 
         // Router vers la fonction appropriée
         switch (action) {
-            // Statistiques globales
+            // Statistiques générales
             case 'getStats':
                 return await getStats(db);
             
@@ -83,45 +84,34 @@ exports.handler = async (event, context) => {
             case 'getDemandesLivreurs':
                 return await getDemandesLivreurs(db, body);
             
-            case 'getDemandesRestaurants':
-                return await getDemandesRestaurants(db, body);
-            
             case 'approuverDemande':
                 return await approuverDemande(db, body);
             
             case 'rejeterDemande':
                 return await rejeterDemande(db, body);
             
-            case 'bulkApprove':
-                return await bulkApprove(db, body);
-            
             case 'envoyerNotification':
                 return await envoyerNotification(db, body);
             
-            // Gestion des collections existantes
-            case 'getData':
-                return await getData(db, body);
+            // Gestion des demandes de restaurants
+            case 'getDemandesRestaurants':
+                return await getDemandesRestaurants(db, body);
             
-            case 'deleteItem':
-                return await deleteItem(db, body);
+            // Gestion des collections
+            case 'getCollectionData':
+                return await getCollectionData(db, body);
             
-            case 'bulkDelete':
-                return await bulkDelete(db, body);
+            case 'updateCollectionItem':
+                return await updateCollectionItem(db, body);
             
-            case 'updateItem':
-                return await updateItem(db, body);
+            case 'deleteCollectionItem':
+                return await deleteCollectionItem(db, body);
             
-            case 'createItem':
-                return await createItem(db, body);
-            
-            // Recherche avancée
-            case 'searchGlobal':
-                return await searchGlobal(db, body);
-            
+            // Analyses
             case 'getAnalytics':
                 return await getAnalytics(db, body);
             
-            // Export de données
+            // Export
             case 'exportData':
                 return await exportData(db, body);
             
@@ -133,7 +123,7 @@ exports.handler = async (event, context) => {
         }
 
     } catch (error) {
-        console.error('💥 Erreur serveur:', error);
+        console.error('💥 Erreur serveur admin:', error);
         return createResponse(500, { 
             success: false, 
             message: 'Erreur interne du serveur',
@@ -142,33 +132,39 @@ exports.handler = async (event, context) => {
     }
 };
 
-// ===== FONCTIONS PRINCIPALES =====
+// ===== STATISTIQUES GÉNÉRALES =====
 
-// Obtenir les statistiques globales
 async function getStats(db) {
     try {
-        console.log('📊 Chargement des statistiques globales');
+        console.log('📊 Chargement des statistiques générales');
         
-        const cacheKey = 'global_stats';
+        const cacheKey = 'admin_stats_global';
         const cached = getCachedData(cacheKey);
         
         if (cached) {
+            console.log('📋 Statistiques récupérées du cache');
             return createResponse(200, { success: true, ...cached });
         }
 
-        // Statistiques des collections principales
+        // Obtenir les statistiques des collections principales
         const [
-            colis, livraison, livrees, livreurs, restaurants, commandes,
-            demandesLivreurs, demandesRestaurants
+            totalColis,
+            totalLivraison,
+            totalLivrees,
+            totalLivreurs,
+            totalRestaurants,
+            totalCommandes,
+            totalDemandesLivreurs,
+            totalDemandesRestaurants
         ] = await Promise.all([
-            db.collection('Colis').estimatedDocumentCount(),
-            db.collection('Livraison').estimatedDocumentCount(),
-            db.collection('LivraisonsEffectuees').estimatedDocumentCount(),
-            db.collection('Res_livreur').estimatedDocumentCount(),
-            db.collection('Restau').estimatedDocumentCount(),
-            db.collection('Commandes').estimatedDocumentCount(),
-            db.collection('demande_livreur').estimatedDocumentCount(),
-            db.collection('demande_restau').estimatedDocumentCount()
+            db.collection('Colis').countDocuments(),
+            db.collection('Livraison').countDocuments(),
+            db.collection('LivraisonsEffectuees').countDocuments(),
+            db.collection('Res_livreur').countDocuments({ status: 'actif' }),
+            db.collection('Restau').countDocuments({ statut: 'actif' }),
+            db.collection('Commandes').countDocuments(),
+            db.collection('demande_livreur').countDocuments(),
+            db.collection('demande_restau').countDocuments()
         ]);
 
         // Statistiques détaillées des demandes
@@ -181,37 +177,69 @@ async function getStats(db) {
             ]).toArray()
         ]);
 
+        // Statistiques temporelles (dernières 24h)
+        const derniere24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        const [
+            nouvellesDemandesLivreurs24h,
+            nouvellesDemandesRestaurants24h,
+            nouvellesLivraisons24h,
+            nouveauxColis24h
+        ] = await Promise.all([
+            db.collection('demande_livreur').countDocuments({ 
+                dateCreation: { $gte: derniere24h } 
+            }),
+            db.collection('demande_restau').countDocuments({ 
+                dateCreation: { $gte: derniere24h } 
+            }),
+            db.collection('Livraison').countDocuments({ 
+                createdAt: { $gte: derniere24h } 
+            }),
+            db.collection('Colis').countDocuments({ 
+                createdAt: { $gte: derniere24h } 
+            })
+        ]);
+
         const result = {
             collections: {
-                colis,
-                livraison,
-                livrees,
-                livreurs,
-                restaurants,
-                commandes
+                colis: totalColis,
+                livraison: totalLivraison,
+                livrees: totalLivrees,
+                livreurs: totalLivreurs,
+                restaurants: totalRestaurants,
+                commandes: totalCommandes
             },
             demandes: {
                 livreurs: {
-                    total: demandesLivreurs,
+                    total: totalDemandesLivreurs,
+                    nouvelles24h: nouvellesDemandesLivreurs24h,
                     parStatut: statsDemandesLivreurs.reduce((acc, item) => {
                         acc[item._id || 'sans_statut'] = item.count;
                         return acc;
-                    }, { en_attente: 0, approuvee: 0, rejetee: 0, finalisee: 0 })
+                    }, {})
                 },
                 restaurants: {
-                    total: demandesRestaurants,
+                    total: totalDemandesRestaurants,
+                    nouvelles24h: nouvellesDemandesRestaurants24h,
                     parStatut: statsDemandesRestaurants.reduce((acc, item) => {
                         acc[item._id || 'sans_statut'] = item.count;
                         return acc;
-                    }, { en_attente: 0, approuvee: 0, rejetee: 0, finalisee: 0 })
+                    }, {})
                 }
+            },
+            activite24h: {
+                nouvellesLivraisons: nouvellesLivraisons24h,
+                nouveauxColis: nouveauxColis24h,
+                nouvellesDemandesLivreurs: nouvellesDemandesLivreurs24h,
+                nouvellesDemandesRestaurants: nouvellesDemandesRestaurants24h
             },
             timestamp: new Date().toISOString()
         };
 
+        // Mettre en cache
         setCachedData(cacheKey, result);
         
-        console.log('✅ Statistiques chargées avec succès');
+        console.log('✅ Statistiques générales chargées');
         return createResponse(200, { success: true, ...result });
 
     } catch (error) {
@@ -223,17 +251,25 @@ async function getStats(db) {
     }
 }
 
-// Récupérer les demandes de livreurs
+// ===== GESTION DES DEMANDES DE LIVREURS =====
+
 async function getDemandesLivreurs(db, data) {
     try {
         console.log('📋 Récupération des demandes de livreurs');
 
-        const { statut, limit = 20, offset = 0, search = '' } = data;
+        const { 
+            statut = 'en_attente', 
+            limit = 50, 
+            offset = 0, 
+            search = '',
+            sortBy = 'dateCreation',
+            sortOrder = 'desc' 
+        } = data;
 
         // Construction de la requête
         let query = {};
         
-        if (statut && statut !== 'tous') {
+        if (statut && statut !== 'tous' && statut !== '') {
             query.statut = statut;
         }
 
@@ -250,18 +286,22 @@ async function getDemandesLivreurs(db, data) {
             ];
         }
 
-        // Récupérer les demandes avec pagination
+        // Tri
+        const sortQuery = {};
+        sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+        // Exécution des requêtes
         const [demandes, totalCount] = await Promise.all([
             db.collection('demande_livreur')
                 .find(query)
-                .sort({ dateCreation: -1 })
+                .sort(sortQuery)
                 .skip(offset)
-                .limit(limit)
+                .limit(Math.min(limit, 100))
                 .toArray(),
             db.collection('demande_livreur').countDocuments(query)
         ]);
 
-        // Statistiques par statut
+        // Statistiques par statut (pour les filtres)
         const statsStatut = await db.collection('demande_livreur').aggregate([
             { $group: { _id: '$statut', count: { $sum: 1 } } }
         ]).toArray();
@@ -270,7 +310,8 @@ async function getDemandesLivreurs(db, data) {
             en_attente: 0,
             approuvee: 0,
             rejetee: 0,
-            finalisee: 0
+            finalisee: 0,
+            total: totalCount
         };
 
         statsStatut.forEach(stat => {
@@ -279,16 +320,40 @@ async function getDemandesLivreurs(db, data) {
             }
         });
 
+        // Enrichir les demandes avec des informations supplémentaires
+        const enrichedDemandes = demandes.map(demande => ({
+            ...demande,
+            hasDocuments: !!(demande.documents?.photoIdentite && demande.documents?.documentVehicule),
+            hasSignature: !!demande.signature,
+            dateCreationFormatted: new Date(demande.dateCreation).toLocaleDateString('fr-FR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }),
+            tempsEcoule: getTempsEcoule(demande.dateCreation)
+        }));
+
         console.log(`✅ ${demandes.length} demandes de livreurs récupérées`);
 
         return createResponse(200, {
             success: true,
-            data: demandes,
+            data: enrichedDemandes,
             totalCount,
             stats,
-            currentPage: Math.floor(offset / limit) + 1,
-            totalPages: Math.ceil(totalCount / limit),
-            hasMore: offset + demandes.length < totalCount
+            pagination: {
+                currentPage: Math.floor(offset / limit) + 1,
+                totalPages: Math.ceil(totalCount / limit),
+                hasMore: offset + demandes.length < totalCount,
+                itemsPerPage: limit
+            },
+            filters: {
+                statut,
+                search,
+                sortBy,
+                sortOrder
+            }
         });
 
     } catch (error) {
@@ -300,88 +365,9 @@ async function getDemandesLivreurs(db, data) {
     }
 }
 
-// Récupérer les demandes de restaurants
-async function getDemandesRestaurants(db, data) {
-    try {
-        console.log('📋 Récupération des demandes de restaurants');
-
-        const { statut, limit = 20, offset = 0, search = '' } = data;
-
-        // Construction de la requête
-        let query = {};
-        
-        if (statut && statut !== 'tous') {
-            query.statut = statut;
-        }
-
-        if (search && search.trim()) {
-            const searchRegex = new RegExp(search.trim(), 'i');
-            query.$or = [
-                { nom: searchRegex },
-                { nomCommercial: searchRegex },
-                { telephone: searchRegex },
-                { email: searchRegex },
-                { adresse: searchRegex },
-                { quartier: searchRegex },
-                { cuisine: searchRegex },
-                { responsableNom: searchRegex }
-            ];
-        }
-
-        // Récupérer les demandes avec pagination
-        const [demandes, totalCount] = await Promise.all([
-            db.collection('demande_restau')
-                .find(query)
-                .sort({ dateCreation: -1 })
-                .skip(offset)
-                .limit(limit)
-                .toArray(),
-            db.collection('demande_restau').countDocuments(query)
-        ]);
-
-        // Statistiques par statut
-        const statsStatut = await db.collection('demande_restau').aggregate([
-            { $group: { _id: '$statut', count: { $sum: 1 } } }
-        ]).toArray();
-
-        const stats = {
-            en_attente: 0,
-            approuvee: 0,
-            rejetee: 0,
-            finalisee: 0
-        };
-
-        statsStatut.forEach(stat => {
-            if (stat._id && stats.hasOwnProperty(stat._id)) {
-                stats[stat._id] = stat.count;
-            }
-        });
-
-        console.log(`✅ ${demandes.length} demandes de restaurants récupérées`);
-
-        return createResponse(200, {
-            success: true,
-            data: demandes,
-            totalCount,
-            stats,
-            currentPage: Math.floor(offset / limit) + 1,
-            totalPages: Math.ceil(totalCount / limit),
-            hasMore: offset + demandes.length < totalCount
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur getDemandesRestaurants:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la récupération des demandes de restaurants'
-        });
-    }
-}
-
-// Approuver une demande
 async function approuverDemande(db, data) {
     try {
-        const { demandeId, type, motif = '' } = data;
+        const { demandeId, type, comment = '' } = data;
 
         console.log(`✅ Approbation demande: ${demandeId} (${type})`);
 
@@ -394,27 +380,21 @@ async function approuverDemande(db, data) {
 
         const collectionName = type === 'livreur' ? 'demande_livreur' : 'demande_restau';
         
-        // Vérifier que la demande existe
+        // Vérifier que la demande existe et est en attente
         const demande = await db.collection(collectionName).findOne({
-            _id: new ObjectId(demandeId)
+            _id: new ObjectId(demandeId),
+            statut: 'en_attente'
         });
 
         if (!demande) {
             return createResponse(404, {
                 success: false,
-                message: 'Demande non trouvée'
+                message: 'Demande non trouvée ou déjà traitée'
             });
         }
 
-        if (demande.statut !== 'en_attente') {
-            return createResponse(400, {
-                success: false,
-                message: 'Cette demande a déjà été traitée'
-            });
-        }
-
-        // Générer un identifiant unique
-        const identifiant = await genererIdentifiantUnique(db, type);
+        // Générer un code d'autorisation unique
+        const codeAutorisation = await genererCodeAutorisation(db, type);
 
         // Mettre à jour la demande
         const updateResult = await db.collection(collectionName).updateOne(
@@ -423,9 +403,9 @@ async function approuverDemande(db, data) {
                 $set: {
                     statut: 'approuvee',
                     dateTraitement: new Date(),
-                    traiteePar: 'admin',
-                    identifiantGenere: identifiant,
-                    motifApprobation: motif,
+                    traiteePar: 'admin', // TODO: récupérer l'ID de l'admin connecté
+                    codeAutorisation: codeAutorisation,
+                    commentaireApprobation: comment,
                     updatedAt: new Date()
                 }
             }
@@ -434,21 +414,30 @@ async function approuverDemande(db, data) {
         if (updateResult.matchedCount === 0) {
             return createResponse(404, {
                 success: false,
-                message: 'Demande non trouvée'
+                message: 'Erreur lors de la mise à jour'
             });
         }
 
         // Nettoyer le cache
         clearCache();
 
-        console.log(`✅ Demande ${demandeId} approuvée avec l'identifiant ${identifiant}`);
+        // Préparer les données pour l'envoi de notification
+        const notificationData = {
+            destinataire: demande.whatsapp || demande.telephone,
+            nom: type === 'livreur' ? `${demande.nom} ${demande.prenom}` : demande.nom,
+            type: type,
+            code: codeAutorisation
+        };
+
+        console.log(`✅ Demande ${demandeId} approuvée avec le code ${codeAutorisation}`);
 
         return createResponse(200, {
             success: true,
             message: 'Demande approuvée avec succès',
-            identifiantGenere: identifiant,
+            codeAutorisation: codeAutorisation,
             demandeId: demandeId,
-            type: type
+            type: type,
+            notification: notificationData
         });
 
     } catch (error) {
@@ -460,7 +449,6 @@ async function approuverDemande(db, data) {
     }
 }
 
-// Rejeter une demande
 async function rejeterDemande(db, data) {
     try {
         const { demandeId, type, motif } = data;
@@ -476,22 +464,16 @@ async function rejeterDemande(db, data) {
 
         const collectionName = type === 'livreur' ? 'demande_livreur' : 'demande_restau';
         
-        // Vérifier que la demande existe
+        // Vérifier que la demande existe et est en attente
         const demande = await db.collection(collectionName).findOne({
-            _id: new ObjectId(demandeId)
+            _id: new ObjectId(demandeId),
+            statut: 'en_attente'
         });
 
         if (!demande) {
             return createResponse(404, {
                 success: false,
-                message: 'Demande non trouvée'
-            });
-        }
-
-        if (demande.statut !== 'en_attente') {
-            return createResponse(400, {
-                success: false,
-                message: 'Cette demande a déjà été traitée'
+                message: 'Demande non trouvée ou déjà traitée'
             });
         }
 
@@ -512,20 +494,30 @@ async function rejeterDemande(db, data) {
         if (updateResult.matchedCount === 0) {
             return createResponse(404, {
                 success: false,
-                message: 'Demande non trouvée'
+                message: 'Erreur lors de la mise à jour'
             });
         }
 
         // Nettoyer le cache
         clearCache();
 
+        // Préparer les données pour l'envoi de notification
+        const notificationData = {
+            destinataire: demande.whatsapp || demande.telephone,
+            nom: type === 'livreur' ? `${demande.nom} ${demande.prenom}` : demande.nom,
+            type: type,
+            motif: motif
+        };
+
         console.log(`✅ Demande ${demandeId} rejetée`);
 
         return createResponse(200, {
             success: true,
-            message: 'Demande rejetée',
+            message: 'Demande rejetée avec succès',
             demandeId: demandeId,
-            motif: motif
+            type: type,
+            motif: motif,
+            notification: notificationData
         });
 
     } catch (error) {
@@ -537,87 +529,216 @@ async function rejeterDemande(db, data) {
     }
 }
 
-// Approbation en masse
-async function bulkApprove(db, data) {
+async function envoyerNotification(db, data) {
     try {
-        const { type, itemIds } = data;
+        const { demandeId, type, message } = data;
 
-        console.log(`✅ Approbation en masse: ${itemIds.length} demandes (${type})`);
+        console.log(`📲 Envoi notification: ${demandeId} (${type})`);
 
-        if (!type || !itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        if (!demandeId || !type) {
             return createResponse(400, {
                 success: false,
-                message: 'Type et liste d\'IDs requis'
+                message: 'ID de demande et type requis'
             });
         }
 
         const collectionName = type === 'livreur' ? 'demande_livreur' : 'demande_restau';
         
-        // Vérifier que toutes les demandes existent et sont en attente
-        const demandes = await db.collection(collectionName).find({
-            _id: { $in: itemIds.map(id => new ObjectId(id)) },
-            statut: 'en_attente'
-        }).toArray();
+        // Récupérer la demande
+        const demande = await db.collection(collectionName).findOne({
+            _id: new ObjectId(demandeId)
+        });
 
-        if (demandes.length !== itemIds.length) {
-            return createResponse(400, {
+        if (!demande) {
+            return createResponse(404, {
                 success: false,
-                message: 'Certaines demandes ne peuvent pas être approuvées'
+                message: 'Demande non trouvée'
             });
         }
 
-        // Générer les identifiants
-        const identifiants = [];
-        for (let i = 0; i < demandes.length; i++) {
-            identifiants.push(await genererIdentifiantUnique(db, type));
-        }
+        // Créer la notification
+        const notification = {
+            demandeId: demandeId,
+            type: type,
+            destinataire: demande.whatsapp || demande.telephone,
+            nom: type === 'livreur' ? `${demande.nom} ${demande.prenom}` : demande.nom,
+            message: message || genererMessageNotification(demande, type),
+            statut: 'en_attente',
+            dateCreation: new Date(),
+            tentatives: 0,
+            maxTentatives: 3
+        };
 
-        // Mettre à jour toutes les demandes
-        const bulkOperations = demandes.map((demande, index) => ({
-            updateOne: {
-                filter: { _id: demande._id },
-                update: {
-                    $set: {
-                        statut: 'approuvee',
-                        dateTraitement: new Date(),
-                        traiteePar: 'admin',
-                        identifiantGenere: identifiants[index],
-                        motifApprobation: 'Approbation en masse',
-                        updatedAt: new Date()
-                    }
+        // Sauvegarder la notification
+        const notificationResult = await db.collection('notifications').insertOne(notification);
+
+        // Marquer la demande comme notifiée
+        await db.collection(collectionName).updateOne(
+            { _id: new ObjectId(demandeId) },
+            {
+                $set: {
+                    notificationEnvoyee: true,
+                    dateNotification: new Date(),
+                    notificationId: notificationResult.insertedId
                 }
             }
-        }));
+        );
 
-        const result = await db.collection(collectionName).bulkWrite(bulkOperations);
+        console.log(`✅ Notification créée pour ${notification.destinataire}`);
 
-        // Nettoyer le cache
-        clearCache();
-
-        console.log(`✅ ${result.modifiedCount} demandes approuvées en masse`);
+        // TODO: Intégrer ici un service réel de WhatsApp/SMS
+        // Exemples: Twilio, Africa's Talking, WhatsApp Business API
 
         return createResponse(200, {
             success: true,
-            message: `${result.modifiedCount} demandes approuvées`,
-            modifiedCount: result.modifiedCount,
-            identifiants: identifiants
+            message: 'Notification programmée avec succès',
+            notificationId: notificationResult.insertedId,
+            destinataire: notification.destinataire,
+            contenu: notification.message
         });
 
     } catch (error) {
-        console.error('❌ Erreur bulkApprove:', error);
+        console.error('❌ Erreur envoyerNotification:', error);
         return createResponse(500, {
             success: false,
-            message: 'Erreur lors de l\'approbation en masse'
+            message: 'Erreur lors de l\'envoi de la notification'
         });
     }
 }
 
-// Obtenir les données d'une collection
-async function getData(db, data) {
-    try {
-        const { collection, limit = 20, offset = 0, search = '', sort = 'createdAt', direction = 'desc', filters = {} } = data;
+// ===== GESTION DES DEMANDES DE RESTAURANTS =====
 
-        console.log(`📋 Chargement collection: ${collection}`);
+async function getDemandesRestaurants(db, data) {
+    try {
+        console.log('📋 Récupération des demandes de restaurants');
+
+        const { 
+            statut = 'en_attente', 
+            limit = 50, 
+            offset = 0, 
+            search = '',
+            sortBy = 'dateCreation',
+            sortOrder = 'desc' 
+        } = data;
+
+        // Construction de la requête
+        let query = {};
+        
+        if (statut && statut !== 'tous' && statut !== '') {
+            query.statut = statut;
+        }
+
+        if (search && search.trim()) {
+            const searchRegex = new RegExp(search.trim(), 'i');
+            query.$or = [
+                { nom: searchRegex },
+                { nomCommercial: searchRegex },
+                { telephone: searchRegex },
+                { email: searchRegex },
+                { adresse: searchRegex },
+                { quartier: searchRegex },
+                { cuisine: searchRegex },
+                { responsableNom: searchRegex }
+            ];
+        }
+
+        // Tri
+        const sortQuery = {};
+        sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+        // Exécution des requêtes
+        const [demandes, totalCount] = await Promise.all([
+            db.collection('demande_restau')
+                .find(query)
+                .sort(sortQuery)
+                .skip(offset)
+                .limit(Math.min(limit, 100))
+                .toArray(),
+            db.collection('demande_restau').countDocuments(query)
+        ]);
+
+        // Statistiques par statut
+        const statsStatut = await db.collection('demande_restau').aggregate([
+            { $group: { _id: '$statut', count: { $sum: 1 } } }
+        ]).toArray();
+
+        const stats = {
+            en_attente: 0,
+            approuvee: 0,
+            rejetee: 0,
+            finalisee: 0,
+            total: totalCount
+        };
+
+        statsStatut.forEach(stat => {
+            if (stat._id && stats.hasOwnProperty(stat._id)) {
+                stats[stat._id] = stat.count;
+            }
+        });
+
+        // Enrichir les demandes
+        const enrichedDemandes = demandes.map(demande => ({
+            ...demande,
+            hasLogo: !!demande.logo,
+            hasPhotos: !!(demande.photos && demande.photos.length > 0),
+            hasSignature: !!demande.signature,
+            hasGPS: !!(demande.location && demande.location.latitude && demande.location.longitude),
+            menuItemsCount: demande.menu ? demande.menu.length : 0,
+            dateCreationFormatted: new Date(demande.dateCreation).toLocaleDateString('fr-FR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }),
+            tempsEcoule: getTempsEcoule(demande.dateCreation)
+        }));
+
+        console.log(`✅ ${demandes.length} demandes de restaurants récupérées`);
+
+        return createResponse(200, {
+            success: true,
+            data: enrichedDemandes,
+            totalCount,
+            stats,
+            pagination: {
+                currentPage: Math.floor(offset / limit) + 1,
+                totalPages: Math.ceil(totalCount / limit),
+                hasMore: offset + demandes.length < totalCount,
+                itemsPerPage: limit
+            },
+            filters: {
+                statut,
+                search,
+                sortBy,
+                sortOrder
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur getDemandesRestaurants:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la récupération des demandes de restaurants'
+        });
+    }
+}
+
+// ===== GESTION DES COLLECTIONS =====
+
+async function getCollectionData(db, data) {
+    try {
+        const { 
+            collection, 
+            limit = 50, 
+            offset = 0, 
+            search = '', 
+            filters = {},
+            sortBy = 'createdAt',
+            sortOrder = 'desc' 
+        } = data;
+
+        console.log(`📋 Récupération collection: ${collection}`);
 
         if (!collection) {
             return createResponse(400, {
@@ -636,10 +757,11 @@ async function getData(db, data) {
             // Champs de recherche par collection
             const searchFields = {
                 'Res_livreur': ['nom', 'prenom', 'whatsapp', 'quartier', 'id_livreur'],
-                'Restau': ['nom', 'adresse', 'telephone', 'cuisine', 'restaurant_id'],
-                'Colis': ['sender', 'recipient', 'colisID', 'senderPhone', 'recipientPhone'],
-                'Livraison': ['livreur', 'restaurant', 'colisID', 'status'],
-                'Commandes': ['customerName', 'orderID', 'restaurant', 'status']
+                'Restau': ['nom', 'adresse', 'telephone', 'cuisine', 'restaurantId'],
+                'Colis': ['sender', 'recipient', 'colisID', 'status'],
+                'Livraison': ['livreur', 'status', 'destination'],
+                'LivraisonsEffectuees': ['livreur', 'destination', 'status'],
+                'Commandes': ['customerName', 'orderID', 'status', 'restaurant']
             };
 
             const fields = searchFields[collection] || ['nom', 'name', 'title'];
@@ -654,12 +776,8 @@ async function getData(db, data) {
         });
 
         // Tri
-        let sortQuery = {};
-        if (sort && sort !== 'createdAt') {
-            sortQuery[sort] = direction === 'asc' ? 1 : -1;
-        } else {
-            sortQuery = { $natural: -1 };
-        }
+        const sortQuery = {};
+        sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
         // Exécuter la requête
         const [documents, totalCount] = await Promise.all([
@@ -678,16 +796,18 @@ async function getData(db, data) {
             success: true,
             data: documents,
             totalCount,
-            count: documents.length,
-            offset,
-            limit,
-            hasMore: offset + documents.length < totalCount,
+            pagination: {
+                currentPage: Math.floor(offset / limit) + 1,
+                totalPages: Math.ceil(totalCount / limit),
+                hasMore: offset + documents.length < totalCount,
+                itemsPerPage: limit
+            },
             collection,
-            query: { search, filters, sort, direction }
+            filters: { search, ...filters, sortBy, sortOrder }
         });
 
     } catch (error) {
-        console.error('❌ Erreur getData:', error);
+        console.error('❌ Erreur getCollectionData:', error);
         return createResponse(500, {
             success: false,
             message: `Erreur lors du chargement de la collection ${data.collection}`
@@ -695,92 +815,11 @@ async function getData(db, data) {
     }
 }
 
-// Supprimer un élément
-async function deleteItem(db, data) {
-    try {
-        const { collection, itemId } = data;
-
-        console.log(`🗑️ Suppression élément: ${itemId} dans ${collection}`);
-
-        if (!collection || !itemId) {
-            return createResponse(400, {
-                success: false,
-                message: 'Collection et ID d\'élément requis'
-            });
-        }
-
-        const result = await db.collection(collection).deleteOne({
-            _id: new ObjectId(itemId)
-        });
-
-        if (result.deletedCount === 1) {
-            clearCache();
-            
-            console.log(`✅ Élément ${itemId} supprimé de ${collection}`);
-            return createResponse(200, {
-                success: true,
-                message: 'Élément supprimé avec succès',
-                deletedCount: 1
-            });
-        } else {
-            return createResponse(404, {
-                success: false,
-                message: 'Élément non trouvé'
-            });
-        }
-
-    } catch (error) {
-        console.error('❌ Erreur deleteItem:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la suppression'
-        });
-    }
-}
-
-// Suppression en masse
-async function bulkDelete(db, data) {
-    try {
-        const { collection, itemIds } = data;
-
-        console.log(`🗑️ Suppression en masse: ${itemIds.length} éléments dans ${collection}`);
-
-        if (!collection || !itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
-            return createResponse(400, {
-                success: false,
-                message: 'Collection et liste d\'IDs requis'
-            });
-        }
-
-        const result = await db.collection(collection).deleteMany({
-            _id: { $in: itemIds.map(id => new ObjectId(id)) }
-        });
-
-        clearCache();
-
-        console.log(`✅ ${result.deletedCount} éléments supprimés de ${collection}`);
-
-        return createResponse(200, {
-            success: true,
-            message: `${result.deletedCount} éléments supprimés`,
-            deletedCount: result.deletedCount
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur bulkDelete:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la suppression en masse'
-        });
-    }
-}
-
-// Mettre à jour un élément
-async function updateItem(db, data) {
+async function updateCollectionItem(db, data) {
     try {
         const { collection, itemId, updates } = data;
 
-        console.log(`✏️ Mise à jour élément: ${itemId} dans ${collection}`);
+        console.log(`✏️ Mise à jour ${collection}: ${itemId}`);
 
         if (!collection || !itemId || !updates) {
             return createResponse(400, {
@@ -814,7 +853,7 @@ async function updateItem(db, data) {
         }
 
     } catch (error) {
-        console.error('❌ Erreur updateItem:', error);
+        console.error('❌ Erreur updateCollectionItem:', error);
         return createResponse(500, {
             success: false,
             message: 'Erreur lors de la mise à jour'
@@ -822,136 +861,54 @@ async function updateItem(db, data) {
     }
 }
 
-// Créer un nouvel élément
-async function createItem(db, data) {
+async function deleteCollectionItem(db, data) {
     try {
-        const { collection, itemData } = data;
+        const { collection, itemId } = data;
 
-        console.log(`➕ Création élément dans ${collection}`);
+        console.log(`🗑️ Suppression ${collection}: ${itemId}`);
 
-        if (!collection || !itemData) {
+        if (!collection || !itemId) {
             return createResponse(400, {
                 success: false,
-                message: 'Collection et données requises'
+                message: 'Collection et ID requis'
             });
         }
 
-        // Ajouter les dates de création
-        itemData.createdAt = new Date();
-        itemData.updatedAt = new Date();
-
-        const result = await db.collection(collection).insertOne(itemData);
-
-        clearCache();
-
-        console.log(`✅ Élément créé dans ${collection}: ${result.insertedId}`);
-        return createResponse(201, {
-            success: true,
-            message: 'Élément créé avec succès',
-            insertedId: result.insertedId
+        const result = await db.collection(collection).deleteOne({
+            _id: new ObjectId(itemId)
         });
 
+        if (result.deletedCount === 1) {
+            clearCache();
+            
+            console.log(`✅ Élément ${itemId} supprimé de ${collection}`);
+            return createResponse(200, {
+                success: true,
+                message: 'Élément supprimé avec succès'
+            });
+        } else {
+            return createResponse(404, {
+                success: false,
+                message: 'Élément non trouvé'
+            });
+        }
+
     } catch (error) {
-        console.error('❌ Erreur createItem:', error);
+        console.error('❌ Erreur deleteCollectionItem:', error);
         return createResponse(500, {
             success: false,
-            message: 'Erreur lors de la création'
+            message: 'Erreur lors de la suppression'
         });
     }
 }
 
-// Recherche globale
-async function searchGlobal(db, data) {
-    try {
-        const { query, collections, limit = 10 } = data;
+// ===== ANALYSES =====
 
-        console.log(`🔍 Recherche globale: "${query}"`);
-
-        if (!query || query.trim().length < 2) {
-            return createResponse(400, {
-                success: false,
-                message: 'Requête de recherche trop courte (minimum 2 caractères)'
-            });
-        }
-
-        const searchCollections = collections || [
-            'demande_livreur', 'demande_restau', 'Res_livreur', 'Restau', 'Colis', 'Livraison', 'Commandes'
-        ];
-
-        const results = {};
-        let totalResults = 0;
-
-        const searchPromises = searchCollections.map(async (collection) => {
-            try {
-                const searchRegex = new RegExp(query.trim(), 'i');
-                let searchQuery = {};
-
-                // Définir les champs de recherche par collection
-                const searchFields = {
-                    'demande_livreur': ['nom', 'prenom', 'whatsapp', 'quartier', 'vehicule'],
-                    'demande_restau': ['nom', 'nomCommercial', 'telephone', 'adresse', 'cuisine'],
-                    'Res_livreur': ['nom', 'prenom', 'whatsapp', 'id_livreur', 'quartier'],
-                    'Restau': ['nom', 'adresse', 'telephone', 'cuisine', 'restaurant_id'],
-                    'Colis': ['sender', 'recipient', 'colisID', 'senderPhone'],
-                    'Livraison': ['livreur', 'restaurant', 'colisID'],
-                    'Commandes': ['customerName', 'orderID', 'restaurant']
-                };
-
-                const fields = searchFields[collection] || ['nom', 'name', 'title'];
-                searchQuery.$or = fields.map(field => ({ [field]: searchRegex }));
-
-                const items = await db.collection(collection)
-                    .find(searchQuery)
-                    .limit(limit)
-                    .toArray();
-
-                results[collection] = {
-                    data: items,
-                    count: items.length
-                };
-
-                totalResults += items.length;
-
-            } catch (error) {
-                console.warn(`⚠️ Erreur recherche dans ${collection}:`, error);
-                results[collection] = { data: [], count: 0 };
-            }
-        });
-
-        await Promise.all(searchPromises);
-
-        console.log(`✅ Recherche terminée: ${totalResults} résultats`);
-
-        return createResponse(200, {
-            success: true,
-            query,
-            results,
-            totalResults,
-            searchedCollections: searchCollections
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur searchGlobal:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de la recherche'
-        });
-    }
-}
-
-// Analyses avancées
 async function getAnalytics(db, data) {
     try {
-        const { collection, timeRange = '7d', type = 'timeline' } = data;
+        const { type = 'general', timeRange = '7d', collection } = data;
 
-        console.log(`📊 Analyses pour ${collection} (${timeRange})`);
-
-        if (!collection) {
-            return createResponse(400, {
-                success: false,
-                message: 'Collection requise'
-            });
-        }
+        console.log(`📊 Génération d'analyses: ${type} (${timeRange})`);
 
         // Définir la plage de temps
         const now = new Date();
@@ -971,65 +928,39 @@ async function getAnalytics(db, data) {
                 startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
                 groupFormat = "%Y-%m-%d";
                 break;
+            case '90d':
+                startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                groupFormat = "%Y-%U";
+                break;
             default:
                 startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
                 groupFormat = "%Y-%m-%d";
         }
 
-        // Analyser les tendances temporelles
-        const dateField = collection.includes('demande') ? 'dateCreation' : 'createdAt';
-        
-        const timeline = await db.collection(collection).aggregate([
-            {
-                $match: {
-                    [dateField]: { $gte: startDate }
-                }
-            },
-            {
-                $group: {
-                    _id: {
-                        $dateToString: {
-                            format: groupFormat,
-                            date: `$${dateField}`
-                        }
-                    },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { "_id": 1 } }
-        ]).toArray();
+        let analytics = {};
 
-        // Analyser la distribution par statut
-        const statusField = collection.includes('demande') ? 'statut' : 'status';
-        const statusDistribution = await db.collection(collection).aggregate([
-            {
-                $group: {
-                    _id: `$${statusField}`,
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { count: -1 } }
-        ]).toArray();
+        if (type === 'general') {
+            // Analyses générales
+            analytics = await getGeneralAnalytics(db, startDate, groupFormat);
+        } else if (type === 'demandes') {
+            // Analyses des demandes
+            analytics = await getDemandesAnalytics(db, startDate, groupFormat);
+        } else if (type === 'collection' && collection) {
+            // Analyses d'une collection spécifique
+            analytics = await getCollectionAnalytics(db, collection, startDate, groupFormat);
+        }
 
-        // Statistiques générales
-        const totalCount = await db.collection(collection).countDocuments();
-        const recentCount = await db.collection(collection).countDocuments({
-            [dateField]: { $gte: startDate }
-        });
-
-        console.log(`✅ Analyses terminées pour ${collection}`);
+        console.log(`✅ Analyses ${type} générées`);
 
         return createResponse(200, {
             success: true,
-            collection,
+            type,
             timeRange,
-            analytics: {
-                timeline,
-                statusDistribution,
-                totalCount,
-                recentCount,
-                startDate: startDate.toISOString(),
-                endDate: now.toISOString()
+            collection,
+            analytics,
+            period: {
+                start: startDate.toISOString(),
+                end: now.toISOString()
             }
         });
 
@@ -1037,78 +968,275 @@ async function getAnalytics(db, data) {
         console.error('❌ Erreur getAnalytics:', error);
         return createResponse(500, {
             success: false,
-            message: 'Erreur lors de l\'analyse'
+            message: 'Erreur lors de la génération des analyses'
         });
     }
 }
 
-// Export de données
+async function getGeneralAnalytics(db, startDate, groupFormat) {
+    // Analyses générales du système
+    const [
+        evolutionColis,
+        evolutionLivraisons,
+        evolutionDemandes,
+        topQuartiers,
+        performanceLivreurs
+    ] = await Promise.all([
+        // Évolution des colis
+        db.collection('Colis').aggregate([
+            { $match: { createdAt: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: groupFormat, date: "$createdAt" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ]).toArray(),
+        
+        // Évolution des livraisons
+        db.collection('Livraison').aggregate([
+            { $match: { createdAt: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: groupFormat, date: "$createdAt" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ]).toArray(),
+        
+        // Évolution des demandes
+        db.collection('demande_livreur').aggregate([
+            { $match: { dateCreation: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: groupFormat, date: "$dateCreation" } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ]).toArray(),
+        
+        // Top quartiers
+        db.collection('Res_livreur').aggregate([
+            { $group: { _id: '$quartier', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 }
+        ]).toArray(),
+        
+        // Performance des livreurs
+        db.collection('LivraisonsEffectuees').aggregate([
+            { $match: { createdAt: { $gte: startDate } } },
+            { $group: { _id: '$livreur', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 }
+        ]).toArray()
+    ]);
+
+    return {
+        evolutionColis,
+        evolutionLivraisons,
+        evolutionDemandes,
+        topQuartiers,
+        performanceLivreurs
+    };
+}
+
+async function getDemandesAnalytics(db, startDate, groupFormat) {
+    // Analyses spécifiques aux demandes
+    const [
+        evolutionDemandesLivreurs,
+        evolutionDemandesRestaurants,
+        tempsTraitement,
+        tauxApprobation
+    ] = await Promise.all([
+        // Évolution demandes livreurs
+        db.collection('demande_livreur').aggregate([
+            { $match: { dateCreation: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: { 
+                        date: { $dateToString: { format: groupFormat, date: "$dateCreation" } },
+                        statut: '$statut'
+                    },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id.date": 1 } }
+        ]).toArray(),
+        
+        // Évolution demandes restaurants
+        db.collection('demande_restau').aggregate([
+            { $match: { dateCreation: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: { 
+                        date: { $dateToString: { format: groupFormat, date: "$dateCreation" } },
+                        statut: '$statut'
+                    },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id.date": 1 } }
+        ]).toArray(),
+        
+        // Temps de traitement moyen
+        db.collection('demande_livreur').aggregate([
+            { 
+                $match: { 
+                    dateCreation: { $gte: startDate },
+                    dateTraitement: { $exists: true }
+                }
+            },
+            {
+                $project: {
+                    tempsTraitement: {
+                        $divide: [
+                            { $subtract: ['$dateTraitement', '$dateCreation'] },
+                            1000 * 60 * 60 // Convertir en heures
+                        ]
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    tempsTraitementMoyen: { $avg: '$tempsTraitement' },
+                    tempsTraitementMin: { $min: '$tempsTraitement' },
+                    tempsTraitementMax: { $max: '$tempsTraitement' }
+                }
+            }
+        ]).toArray(),
+        
+        // Taux d'approbation
+        db.collection('demande_livreur').aggregate([
+            { $match: { dateCreation: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: '$statut',
+                    count: { $sum: 1 }
+                }
+            }
+        ]).toArray()
+    ]);
+
+    return {
+        evolutionDemandesLivreurs,
+        evolutionDemandesRestaurants,
+        tempsTraitement: tempsTraitement[0] || {},
+        tauxApprobation
+    };
+}
+
+async function getCollectionAnalytics(db, collection, startDate, groupFormat) {
+    // Analyses d'une collection spécifique
+    const dateField = collection.includes('demande') ? 'dateCreation' : 'createdAt';
+    
+    const [
+        evolution,
+        distribution,
+        statistiques
+    ] = await Promise.all([
+        // Évolution temporelle
+        db.collection(collection).aggregate([
+            { $match: { [dateField]: { $gte: startDate } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: groupFormat, date: `$${dateField}` } },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id": 1 } }
+        ]).toArray(),
+        
+        // Distribution par statut
+        db.collection(collection).aggregate([
+            {
+                $group: {
+                    _id: '$statut',
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { count: -1 } }
+        ]).toArray(),
+        
+        // Statistiques de base
+        db.collection(collection).aggregate([
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: 1 },
+                    recent: {
+                        $sum: {
+                            $cond: [
+                                { $gte: [`$${dateField}`, startDate] },
+                                1,
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]).toArray()
+    ]);
+
+    return {
+        evolution,
+        distribution,
+        statistiques: statistiques[0] || { total: 0, recent: 0 }
+    };
+}
+
+// ===== EXPORT =====
+
 async function exportData(db, data) {
     try {
-        const { collection, format = 'json', filters = {} } = data;
+        const { type, format = 'json', filters = {} } = data;
 
-        console.log(`📁 Export données: ${collection} (${format})`);
+        console.log(`📤 Export de données: ${type} (${format})`);
 
-        if (!collection) {
-            return createResponse(400, {
-                success: false,
-                message: 'Collection requise'
-            });
+        let exportData = {};
+
+        switch (type) {
+            case 'demandes_livreurs':
+                exportData = await exportDemandesLivreurs(db, filters);
+                break;
+            case 'demandes_restaurants':
+                exportData = await exportDemandesRestaurants(db, filters);
+                break;
+            case 'stats_general':
+                exportData = await exportStatsGeneral(db);
+                break;
+            default:
+                return createResponse(400, {
+                    success: false,
+                    message: 'Type d\'export non supporté'
+                });
         }
 
-        // Construire la requête
-        let query = {};
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value && value !== 'tous') {
-                query[key] = value;
-            }
-        });
-
-        // Récupérer les données
-        const documents = await db.collection(collection)
-            .find(query)
-            .limit(10000) // Limite de sécurité
-            .toArray();
+        // Formater les données selon le format demandé
+        let formattedData;
+        let contentType;
 
         if (format === 'csv') {
-            // Conversion en CSV
-            if (documents.length === 0) {
-                return createResponse(200, {
-                    success: true,
-                    data: '',
-                    format: 'csv',
-                    count: 0
-                });
-            }
-
-            const headers = Object.keys(documents[0]).filter(key => !key.startsWith('_'));
-            const csvData = [
-                headers.join(','),
-                ...documents.map(doc => 
-                    headers.map(header => {
-                        const value = doc[header];
-                        if (typeof value === 'object' && value !== null) {
-                            return `"${JSON.stringify(value).replace(/"/g, '""')}"`;
-                        }
-                        return `"${String(value || '').replace(/"/g, '""')}"`;
-                    }).join(',')
-                )
-            ].join('\n');
-
-            return createResponse(200, {
-                success: true,
-                data: csvData,
-                format: 'csv',
-                count: documents.length
-            });
+            formattedData = convertToCSV(exportData);
+            contentType = 'text/csv';
+        } else {
+            formattedData = JSON.stringify(exportData, null, 2);
+            contentType = 'application/json';
         }
 
-        // Format JSON par défaut
+        console.log(`✅ Export ${type} généré (${format})`);
+
         return createResponse(200, {
             success: true,
-            data: documents,
-            format: 'json',
-            count: documents.length
+            type,
+            format,
+            data: formattedData,
+            contentType,
+            filename: `export_${type}_${new Date().toISOString().split('T')[0]}.${format}`,
+            size: formattedData.length
         });
 
     } catch (error) {
@@ -1120,100 +1248,126 @@ async function exportData(db, data) {
     }
 }
 
-// Envoyer une notification
-async function envoyerNotification(db, data) {
-    try {
-        const { demandeId, type, message } = data;
-
-        console.log(`📲 Envoi notification: ${demandeId} (${type})`);
-
-        if (!demandeId || !type) {
-            return createResponse(400, {
-                success: false,
-                message: 'ID de demande et type requis'
-            });
-        }
-
-        const collectionName = type === 'livreur' ? 'demande_livreur' : 'demande_restau';
-        
-        // Récupérer la demande
-        const demande = await db.collection(collectionName).findOne({
-            _id: new ObjectId(demandeId)
-        });
-
-        if (!demande) {
-            return createResponse(404, {
-                success: false,
-                message: 'Demande non trouvée'
-            });
-        }
-
-        // Simuler l'envoi de notification
-        const notification = {
-            destinataire: demande.whatsapp || demande.telephone,
-            message: message || `Votre demande a été traitée. Identifiant: ${demande.identifiantGenere || 'N/A'}`,
-            statut: 'envoye',
-            dateEnvoi: new Date(),
-            type: 'whatsapp',
-            demandeId: demandeId,
-            typeDestination: type
-        };
-
-        // Enregistrer la notification
-        await db.collection('notifications').insertOne(notification);
-
-        // Marquer la demande comme notifiée
-        await db.collection(collectionName).updateOne(
-            { _id: new ObjectId(demandeId) },
-            {
-                $set: {
-                    notificationEnvoyee: true,
-                    dateNotification: new Date()
-                }
-            }
-        );
-
-        console.log(`✅ Notification envoyée à ${notification.destinataire}`);
-
-        return createResponse(200, {
-            success: true,
-            message: 'Notification envoyée avec succès',
-            destinataire: notification.destinataire,
-            dateEnvoi: notification.dateEnvoi
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur envoyerNotification:', error);
-        return createResponse(500, {
-            success: false,
-            message: 'Erreur lors de l\'envoi de la notification'
-        });
+async function exportDemandesLivreurs(db, filters) {
+    const query = {};
+    
+    if (filters.statut && filters.statut !== 'tous') {
+        query.statut = filters.statut;
     }
+    
+    if (filters.dateDebut && filters.dateFin) {
+        query.dateCreation = {
+            $gte: new Date(filters.dateDebut),
+            $lte: new Date(filters.dateFin)
+        };
+    }
+
+    const demandes = await db.collection('demande_livreur')
+        .find(query)
+        .sort({ dateCreation: -1 })
+        .toArray();
+
+    return {
+        type: 'demandes_livreurs',
+        count: demandes.length,
+        filters,
+        data: demandes.map(demande => ({
+            id: demande._id,
+            nom: demande.nom,
+            prenom: demande.prenom,
+            whatsapp: demande.whatsapp,
+            telephone: demande.telephone,
+            quartier: demande.quartier,
+            vehicule: demande.vehicule,
+            immatriculation: demande.immatriculation,
+            experience: demande.experience,
+            statut: demande.statut,
+            dateCreation: demande.dateCreation,
+            dateTraitement: demande.dateTraitement,
+            codeAutorisation: demande.codeAutorisation,
+            motifRejet: demande.motifRejet
+        }))
+    };
+}
+
+async function exportDemandesRestaurants(db, filters) {
+    const query = {};
+    
+    if (filters.statut && filters.statut !== 'tous') {
+        query.statut = filters.statut;
+    }
+    
+    if (filters.dateDebut && filters.dateFin) {
+        query.dateCreation = {
+            $gte: new Date(filters.dateDebut),
+            $lte: new Date(filters.dateFin)
+        };
+    }
+
+    const demandes = await db.collection('demande_restau')
+        .find(query)
+        .sort({ dateCreation: -1 })
+        .toArray();
+
+    return {
+        type: 'demandes_restaurants',
+        count: demandes.length,
+        filters,
+        data: demandes.map(demande => ({
+            id: demande._id,
+            nom: demande.nom,
+            nomCommercial: demande.nomCommercial,
+            telephone: demande.telephone,
+            email: demande.email,
+            adresse: demande.adresse,
+            quartier: demande.quartier,
+            cuisine: demande.cuisine,
+            statut: demande.statut,
+            dateCreation: demande.dateCreation,
+            dateTraitement: demande.dateTraitement,
+            codeAutorisation: demande.codeAutorisation,
+            motifRejet: demande.motifRejet,
+            hasGPS: !!(demande.location && demande.location.latitude),
+            menuItemsCount: demande.menu ? demande.menu.length : 0
+        }))
+    };
+}
+
+async function exportStatsGeneral(db) {
+    const stats = await getStats(db);
+    return {
+        type: 'stats_general',
+        generatedAt: new Date().toISOString(),
+        data: stats
+    };
 }
 
 // ===== FONCTIONS UTILITAIRES =====
 
-// Générer un identifiant unique
-async function genererIdentifiantUnique(db, type) {
+async function genererCodeAutorisation(db, type) {
     const prefix = type === 'livreur' ? 'LIV' : 'REST';
     const collectionExistante = type === 'livreur' ? 'Res_livreur' : 'Restau';
     const collectionDemande = type === 'livreur' ? 'demande_livreur' : 'demande_restau';
-    const fieldName = type === 'livreur' ? 'id_livreur' : 'restaurant_id';
     
     let isUnique = false;
-    let newId = '';
+    let newCode = '';
     let attempts = 0;
     const maxAttempts = 100;
     
     while (!isUnique && attempts < maxAttempts) {
-        const random = Math.floor(Math.random() * 9000) + 1000;
-        newId = `${prefix}${random}`;
+        const timestamp = Date.now().toString().slice(-4);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        newCode = `${prefix}${timestamp}${random}`;
         
         // Vérifier dans la collection existante
-        const [existingInCollection, existingInDemandes] = await Promise.all([
-            db.collection(collectionExistante).findOne({ [fieldName]: newId }),
-            db.collection(collectionDemande).findOne({ identifiantGenere: newId })
-        ]);
+        const existingInCollection = await db.collection(collectionExistante).findOne({
+            codeAutorisation: newCode
+        });
+        
+        // Vérifier dans les demandes
+        const existingInDemandes = await db.collection(collectionDemande).findOne({
+            codeAutorisation: newCode
+        });
         
         if (!existingInCollection && !existingInDemandes) {
             isUnique = true;
@@ -1222,15 +1376,66 @@ async function genererIdentifiantUnique(db, type) {
     }
     
     if (!isUnique) {
-        // Fallback avec timestamp
-        const timestamp = Date.now().toString().slice(-6);
-        newId = `${prefix}${timestamp}`;
+        // Fallback avec timestamp complet
+        newCode = `${prefix}${Date.now()}`;
     }
     
-    return newId;
+    return newCode;
 }
 
-// Gestion du cache
+function genererMessageNotification(demande, type) {
+    const nom = type === 'livreur' ? `${demande.nom} ${demande.prenom}` : demande.nom;
+    const code = demande.codeAutorisation;
+    
+    if (demande.statut === 'approuvee') {
+        return `🎉 Félicitations ${nom} ! Votre demande a été approuvée. Votre code d'autorisation est : ${code}. Finalisez votre inscription sur notre site avec ce code.`;
+    } else if (demande.statut === 'rejetee') {
+        return `❌ Bonjour ${nom}, nous regrettons de vous informer que votre demande a été rejetée. Motif : ${demande.motifRejet}. Vous pouvez soumettre une nouvelle demande après correction.`;
+    }
+    
+    return `📋 Bonjour ${nom}, votre demande est en cours de traitement. Vous recevrez une notification dès qu'elle sera traitée.`;
+}
+
+function getTempsEcoule(dateCreation) {
+    const now = new Date();
+    const created = new Date(dateCreation);
+    const diff = now - created;
+    
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) {
+        return `${days}j`;
+    } else if (hours > 0) {
+        return `${hours}h`;
+    } else {
+        return `${minutes}min`;
+    }
+}
+
+function convertToCSV(data) {
+    if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+        return '';
+    }
+    
+    const headers = Object.keys(data.data[0]);
+    const csvHeaders = headers.join(',');
+    
+    const csvRows = data.data.map(row => {
+        return headers.map(header => {
+            const value = row[header];
+            if (typeof value === 'string' && value.includes(',')) {
+                return `"${value.replace(/"/g, '""')}"`;
+            }
+            return value;
+        }).join(',');
+    });
+    
+    return [csvHeaders, ...csvRows].join('\n');
+}
+
+// Fonctions de cache
 function getCachedData(key) {
     const cached = cache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
@@ -1251,38 +1456,10 @@ function clearCache() {
     cache.clear();
 }
 
-// Créer une réponse standardisée
 function createResponse(statusCode, body) {
     return {
         statusCode,
         headers: corsHeaders,
-        body: JSON.stringify(body, null, 2)
+        body: JSON.stringify(body)
     };
-}
-
-// Fonction de logging avancée
-function logActivity(action, details = {}) {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] ${action}:`, JSON.stringify(details, null, 2));
-}
-
-// Validation des données
-function validateData(data, requiredFields) {
-    const missingFields = requiredFields.filter(field => !data[field]);
-    if (missingFields.length > 0) {
-        throw new Error(`Champs manquants: ${missingFields.join(', ')}`);
-    }
-    return true;
-}
-
-// Nettoyage des données sensibles
-function sanitizeData(data) {
-    const sanitized = { ...data };
-    
-    // Supprimer les champs sensibles
-    delete sanitized.ip;
-    delete sanitized.metadata;
-    delete sanitized.__v;
-    
-    return sanitized;
 }
