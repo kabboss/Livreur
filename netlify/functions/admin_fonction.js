@@ -569,22 +569,6 @@ async function envoyerNotification(db, data) {
             maxTentatives: 3
         };
 
-        // Sauvegarder la notification
-        const notificationResult = await db.collection('notifications').insertOne(notification);
-
-        // Marquer la demande comme notifiée
-        await db.collection(collectionName).updateOne(
-            { _id: new ObjectId(demandeId) },
-            {
-                $set: {
-                    notificationEnvoyee: true,
-                    dateNotification: new Date(),
-                    notificationId: notificationResult.insertedId
-                }
-            }
-        );
-
-        console.log(`✅ Notification créée pour ${notification.destinataire}`);
 
         // TODO: Intégrer ici un service réel de WhatsApp/SMS
         // Exemples: Twilio, Africa's Talking, WhatsApp Business API

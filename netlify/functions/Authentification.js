@@ -685,7 +685,7 @@ async function finalizePartenariat(db, data) {
         // Vérifier que le code existe et est autorisé
         const demande = await db.collection('demande_restau').findOne({
             codeAutorisation: code.toUpperCase(),
-            statut: 'autorisee'
+            statut: 'approuvee'
         });
 
         if (!demande) {
