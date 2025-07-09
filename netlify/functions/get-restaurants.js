@@ -6,7 +6,8 @@ const COLLECTION_NAME = 'Restau';
 
 const client = new MongoClient(MONGODB_URI, {
     connectTimeoutMS: 5000,
-    serverSelectionTimeoutMS: 5000
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 30000
 });
 
 const COMMON_HEADERS = {
@@ -17,7 +18,6 @@ const COMMON_HEADERS = {
 };
 
 exports.handler = async (event) => {
-    // Gestion des requêtes OPTIONS pour CORS
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
@@ -26,18 +26,74 @@ exports.handler = async (event) => {
         };
     }
 
+    if (event.httpMethod !== 'GET') {
+        return {
+            statusCode: 405,
+            headers: COMMON_HEADERS,
+            body: JSON.stringify({ error: 'Method Not Allowed' })
+        };
+    }
+
     try {
         await client.connect();
         const db = client.db(DB_NAME);
         const collection = db.collection(COLLECTION_NAME);
         
-        // Récupérer uniquement les restaurants actifs
-        const restaurants = await collection.find({ statut: 'actif' }).toArray();
-        
+        // Projection pour optimiser le transfert de données
+        const projection = {
+            restaurantId: 1,
+            nom: 1,
+            nomCommercial: 1,
+            telephone: 1,
+            adresse: 1,
+            quartier: 1,
+            'location.latitude': 1,
+            'location.longitude': 1,
+            cuisine: 1,
+            specialites: 1,
+            description: 1,
+            menu: 1,
+            logo: 1,
+            photos: 1,
+            statut: 1,
+            horairesDetails: 1
+        };
+
+        // Récupération avec projection et filtre sur statut actif
+        const restaurants = await collection.find(
+            { statut: 'actif' },
+            { projection }
+        ).toArray();
+
+        // Optimisation des données pour le frontend
+        const optimizedRestaurants = restaurants.map(resto => ({
+            _id: resto.restaurantId,
+            nom: resto.nomCommercial || resto.nom,
+            adresse: `${resto.adresse}, ${resto.quartier}`,
+            telephone: resto.telephone,
+            location: {
+                latitude: resto.location.latitude,
+                longitude: resto.location.longitude
+            },
+            cuisine: resto.cuisine,
+            specialites: resto.specialites,
+            description: resto.description,
+            menu: resto.menu || [],
+            logo: resto.logo ? {
+                data: resto.logo.base64,
+                type: resto.logo.type
+            } : null,
+            photos: resto.photos?.map(photo => ({
+                data: photo.base64,
+                type: photo.type
+            })) || [],
+            horaires: resto.horairesDetails
+        }));
+
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
-            body: JSON.stringify(restaurants)
+            body: JSON.stringify(optimizedRestaurants)
         };
     } catch (error) {
         console.error('Error:', error);
