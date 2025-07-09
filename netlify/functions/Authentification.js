@@ -53,6 +53,14 @@ function generateUniqueCode(type, length = 6) {
     return `${prefix}${timestamp}${random}`;
 }
 
+
+// Fonction pour générer un token simple
+function generateSimpleToken(userId, userType) {
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 15);
+    return Buffer.from(`${userId}|${userType}|${timestamp}|${randomString}`).toString('base64');
+}
+
 function validateEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
@@ -146,7 +154,8 @@ async function handleLogin(db, data) {
         if (type === 'livreur') {
             return await loginLivreur(db, data);
         } else if (type === 'admin') {
-            return await loginAdmin(db, data);
+         return await loginAdmin(password); 
+
         } else {
             return createResponse(400, { 
                 success: false, 
@@ -167,42 +176,35 @@ async function loginLivreur(db, data) {
     const { username, password } = data;
 
     try {
-        // Rechercher le compte livreur
+        // 1. Recherche du compte livreur
         const compte = await db.collection('compte_livreur').findOne({
             username: username.toLowerCase().trim(),
             statut: "actif"
         });
 
         if (!compte) {
-            console.log('Compte livreur non trouvé:', username);
             return createResponse(401, { 
                 success: false, 
-                message: 'Nom d\'utilisateur ou mot de passe incorrect' 
+                message: 'Identifiants incorrects' 
             });
         }
 
-        // Vérifier le mot de passe
+        // 2. Vérification du mot de passe
         const passwordValid = await bcrypt.compare(password, compte.password);
         if (!passwordValid) {
-            console.log('Mot de passe incorrect pour:', username);
             return createResponse(401, { 
                 success: false, 
-                message: 'Nom d\'utilisateur ou mot de passe incorrect' 
+                message: 'Identifiants incorrects' 
             });
         }
 
-        // Mettre à jour la dernière connexion
+        // 3. Mise à jour de la dernière connexion
         await db.collection('compte_livreur').updateOne(
             { _id: compte._id },
-            { 
-                $set: { 
-                    derniere_connexion: new Date(),
-                    updated_at: new Date()
-                } 
-            }
+            { $set: { derniere_connexion: new Date() } }
         );
 
-        // Préparer les données utilisateur (sans le mot de passe)
+        // 4. Préparation des données utilisateur
         const userData = {
             id: compte._id,
             id_livreur: compte.id_livreur,
@@ -210,15 +212,11 @@ async function loginLivreur(db, data) {
             nom: compte.nom,
             prenom: compte.prenom,
             whatsapp: compte.whatsapp,
-            telephone: compte.telephone,
             quartier: compte.quartier,
-            type_compte: compte.type_compte,
-            statut: compte.statut,
-            photo: compte.photo
+            type_compte: 'livreur'
         };
 
-        console.log('✅ Connexion livreur réussie:', username);
-
+        // 5. Réponse avec token
         return createResponse(200, { 
             success: true,
             message: 'Connexion réussie',
@@ -227,79 +225,34 @@ async function loginLivreur(db, data) {
         });
 
     } catch (error) {
-        console.error('❌ Erreur loginLivreur:', error);
+        console.error('Erreur loginLivreur:', error);
         return createResponse(500, { 
             success: false, 
-            message: 'Erreur lors de la connexion du livreur' 
+            message: 'Erreur serveur' 
         });
     }
 }
 
-async function loginAdmin(db, data) {
-    const { username, password } = data;
-
-    try {
-        // Rechercher le compte admin
-        const compte = await db.collection('compte_admin').findOne({
-            username: username.toLowerCase().trim(),
-            statut: "actif"
-        });
-
-        if (!compte) {
-            console.log('Compte admin non trouvé:', username);
-            return createResponse(401, { 
-                success: false, 
-                message: 'Nom d\'utilisateur ou mot de passe incorrect' 
-            });
-        }
-
-        // Vérifier le mot de passe
-        const passwordValid = await bcrypt.compare(password, compte.password);
-        if (!passwordValid) {
-            console.log('Mot de passe incorrect pour admin:', username);
-            return createResponse(401, { 
-                success: false, 
-                message: 'Nom d\'utilisateur ou mot de passe incorrect' 
-            });
-        }
-
-        // Mettre à jour la dernière connexion
-        await db.collection('compte_admin').updateOne(
-            { _id: compte._id },
-            { 
-                $set: { 
-                    derniere_connexion: new Date(),
-                    updated_at: new Date()
-                } 
-            }
-        );
-
-        // Préparer les données utilisateur (sans le mot de passe)
-        const userData = {
-            id: compte._id,
-            username: compte.username,
-            role: compte.role,
-            permissions: compte.permissions,
-            type_compte: 'admin',
-            statut: compte.statut
-        };
-
-        console.log('✅ Connexion admin réussie:', username);
-
-        return createResponse(200, { 
-            success: true,
-            message: 'Connexion administrateur réussie',
-            user: userData,
-            token: generateSimpleToken(compte._id, 'admin')
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur loginAdmin:', error);
-        return createResponse(500, { 
+async function loginAdmin(password) {
+    const ADMIN_PASSWORD = "ka23bo23re23"; // Votre mot de passe admin fixe
+    
+    if (password !== ADMIN_PASSWORD) {
+        return createResponse(401, { 
             success: false, 
-            message: 'Erreur lors de la connexion administrateur' 
+            message: 'Mot de passe administrateur incorrect' 
         });
     }
+
+    return createResponse(200, { 
+        success: true,
+        message: 'Connexion admin réussie',
+        user: {
+            id: "admin-root",
+            username: "admin",
+            type_compte: "admin"
+        },
+        token: generateSimpleToken("admin-root", 'admin')
+    });
 }
 
 // ===== SYSTÈME LIVREURS =====
