@@ -474,48 +474,33 @@ async function finalizeInscription(db, data) {
             });
         }
 
-        // Validation de l'email si fourni
-        if (email && !validateEmail(email)) {
-            return createResponse(400, {
-                success: false,
-                message: 'Adresse email invalide'
-            });
-        }
-
-        // Validation du mot de passe
-        if (password.length < 8) {
-            return createResponse(400, {
-                success: false,
-                message: 'Le mot de passe doit contenir au moins 8 caractères'
-            });
-        }
-
-        // Récupérer la demande autorisée
+        // Vérifier que la demande existe et est approuvée
         const demande = await db.collection('demande_livreur').findOne({
             codeAutorisation: code.toUpperCase(),
-            statut: 'autorisee'
+            statut: 'approuvee' // Changé de 'autorisee' à 'approuvee'
         });
 
         if (!demande) {
+            console.log('Demande non trouvée:', code);
             return createResponse(404, {
                 success: false,
-                message: 'Code non trouvé ou demande non autorisée'
+                message: 'Code non trouvé ou demande non approuvée'
             });
         }
 
-        // Vérifier que le code n'est pas déjà utilisé
-        const existingRes = await db.collection('Res_livreur').findOne({
+        // Vérifier si le code a déjà été utilisé
+        const existingLivreur = await db.collection('Res_livreur').findOne({
             codeAutorisation: code.toUpperCase()
         });
 
-        if (existingRes) {
+        if (existingLivreur) {
             return createResponse(409, {
                 success: false,
                 message: 'Ce code a déjà été utilisé'
             });
         }
 
-        // Vérifier unicité du nom d'utilisateur
+        // Vérifier l'unicité du username
         const existingUser = await db.collection('compte_livreur').findOne({
             username: username.toLowerCase().trim()
         });
@@ -527,14 +512,14 @@ async function finalizeInscription(db, data) {
             });
         }
 
-        // Créer l'identifiant livreur unique
-        const id_livreur = generateUniqueCode('livreur', 8);
-
         // Hasher le mot de passe
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        // Transférer vers Res_livreur
-        const resLivreurDocument = {
+        // Générer un ID livreur unique
+        const id_livreur = generateUniqueCode('livreur', 8);
+
+        // Créer le document dans Res_livreur
+        const resLivreurDoc = {
             id_livreur: id_livreur,
             nom: demande.nom,
             prenom: demande.prenom,
@@ -549,16 +534,15 @@ async function finalizeInscription(db, data) {
             documents: demande.documents,
             signature: demande.signature,
             codeAutorisation: code.toUpperCase(),
-            status: 'actif',
-            dateAutorisation: new Date(),
+            statut: 'actif',
             createdAt: new Date(),
             updatedAt: new Date()
         };
 
-        const resResult = await db.collection('Res_livreur').insertOne(resLivreurDocument);
+        const resLivreurResult = await db.collection('Res_livreur').insertOne(resLivreurDoc);
 
         // Créer le compte de connexion
-        const compteDocument = {
+        const compteDoc = {
             id_livreur: id_livreur,
             username: username.toLowerCase().trim(),
             email: email || null,
@@ -571,23 +555,23 @@ async function finalizeInscription(db, data) {
             statut: 'actif',
             type_compte: 'livreur',
             derniere_connexion: null,
-            resLivreurId: resResult.insertedId,
             created_at: new Date(),
-            updated_at: new Date()
+            updated_at: new Date(),
+            resLivreurId: resLivreurResult.insertedId
         };
 
-        const compteResult = await db.collection('compte_livreur').insertOne(compteDocument);
+        const compteResult = await db.collection('compte_livreur').insertOne(compteDoc);
 
-        // Marquer la demande comme finalisée
+        // Mettre à jour la demande
         await db.collection('demande_livreur').updateOne(
             { _id: demande._id },
-            { 
-                $set: { 
+            {
+                $set: {
                     statut: 'finalisee',
                     dateFinalization: new Date(),
-                    resLivreurId: resResult.insertedId,
+                    resLivreurId: resLivreurResult.insertedId,
                     compteId: compteResult.insertedId
-                } 
+                }
             }
         );
 
@@ -598,7 +582,7 @@ async function finalizeInscription(db, data) {
             message: 'Inscription finalisée avec succès',
             livreur: {
                 id_livreur: id_livreur,
-                username: username.toLowerCase().trim(),
+                username: username,
                 nom: demande.nom,
                 prenom: demande.prenom
             }
@@ -608,11 +592,10 @@ async function finalizeInscription(db, data) {
         console.error('❌ Erreur finalizeInscription:', error);
         return createResponse(500, {
             success: false,
-            message: 'Erreur lors de la finalisation de l\'inscription'
+            message: 'Erreur lors de la finalisation'
         });
     }
 }
-
 // ===== SYSTÈME RESTAURANTS =====
 async function handleDemandePartenariat(db, data, event) {
     try {
