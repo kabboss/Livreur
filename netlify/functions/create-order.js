@@ -52,19 +52,27 @@ exports.handler = async (event) => {
         
         // Construction du document de commande
         const orderDocument = {
-            ...orderData,
-            restaurantId: orderData.restaurant.id,
-            restaurantName: orderData.restaurant.name,
-            clientPhone: orderData.client.phone,
-            status: 'en attente',
+            type: orderData.type || "food", // Type par défaut
+            restaurant: {
+                name: orderData.restaurant.name,
+                position: {
+                    lat: orderData.restaurant.position.lat,
+                    lng: orderData.restaurant.position.lng
+                }
+            },
+            client: {
+                name: orderData.client.name,
+                phone: orderData.client.phone,
+                position: orderData.client.position
+            },
+            items: orderData.items,
+            deliveryFee: orderData.deliveryFee || 0,
+            status: orderData.status || 'en attente',
+            orderDate: new Date(orderData.orderDate) || new Date(),
             dateCreation: new Date(),
             lastUpdate: new Date(),
             codeCommande: generateOrderCode(),
-            items: orderData.items.map(item => ({
-                ...item,
-                status: 'à préparer'
-            })),
-            metadata: {
+            metadata: orderData.metadata || {
                 appVersion: '1.0',
                 source: 'web'
             }

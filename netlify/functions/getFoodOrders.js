@@ -35,6 +35,7 @@ exports.handler = async (event) => {
 
         const orders = await db.collection('Commandes')
             .find({ 
+                type: 'food', // Filtre pour ne récupérer que les commandes de type "food"
                 $or: [
                     { statut: 'en attente' },
                     { status: 'en attente' }
