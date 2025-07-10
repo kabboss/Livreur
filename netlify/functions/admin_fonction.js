@@ -27,70 +27,83 @@ const COLLECTIONS_CONFIG = {
         name: 'Colis',
         deleteAfterDays: 2,
         deleteCondition: { status: { $in: ['pending', 'created'] } },
-        cleanupField: 'createdAt'
+        cleanupField: 'createdAt',
+        searchFields: ['colisID', 'sender', 'recipient', 'address', 'description']
     },
     'Livraison': {
         name: 'Livraison',
         deleteAfterDays: 2,
         deleteCondition: { statut: { $in: ['pending', 'en_attente'] } },
-        cleanupField: 'dateCreation'
+        cleanupField: 'dateCreation',
+        searchFields: ['livraisonID', 'expediteur.nom', 'destinataire.nom', 'destinataire.adresse']
     },
     'cour_expedition': {
         name: 'cour_expedition',
-        deleteAfterDays: null, // Pas de suppression auto
-        cleanupField: 'assignedAt'
+        deleteAfterDays: null,
+        cleanupField: 'assignedAt',
+        searchFields: ['colisID', 'driverName', 'driverId']
     },
     'LivraisonsEffectuees': {
         name: 'LivraisonsEffectuees',
         deleteAfterDays: 3,
         deleteCondition: {},
-        cleanupField: 'deliveredAt'
+        cleanupField: 'deliveredAt',
+        searchFields: ['colisID', 'driverName', 'deliveryNotes']
     },
     'Refus': {
         name: 'Refus',
         deleteAfterDays: 1,
         deleteCondition: {},
-        cleanupField: 'dateRefus'
+        cleanupField: 'dateRefus',
+        searchFields: ['colisID', 'raison']
     },
     'Commandes': {
         name: 'Commandes',
         deleteAfterDays: null,
-        cleanupField: 'orderDate'
+        cleanupField: 'orderDate',
+        searchFields: ['codeCommande', 'restaurant.name', 'client.name', 'client.phone']
     },
     'pharmacyOrders': {
         name: 'pharmacyOrders',
         deleteAfterDays: null,
-        cleanupField: 'orderDate'
+        cleanupField: 'orderDate',
+        searchFields: ['phoneNumber', 'secondaryPhone', 'medicaments.name']
     },
     'shopping_orders': {
         name: 'shopping_orders',
         deleteAfterDays: null,
-        cleanupField: 'orderDate'
+        cleanupField: 'orderDate',
+        searchFields: ['phone1', 'phone2', 'shoppingList.nom']
     },
     'demande_livreur': {
         name: 'demande_livreur',
         deleteAfterDays: null,
-        cleanupField: 'dateCreation'
+        cleanupField: 'dateCreation',
+        searchFields: ['nom', 'prenom', 'whatsapp', 'telephone', 'quartier', 'vehicule', 'immatriculation']
     },
     'demande_restau': {
         name: 'demande_restau',
         deleteAfterDays: null,
-        cleanupField: 'dateCreation'
+        cleanupField: 'dateCreation',
+        searchFields: ['nom', 'nomCommercial', 'telephone', 'email', 'adresse', 'quartier', 'cuisine']
     },
     'Res_livreur': {
         name: 'Res_livreur',
         deleteAfterDays: null,
-        cleanupField: 'createdAt'
+        cleanupField: 'createdAt',
+        searchFields: ['id_livreur', 'nom', 'prenom', 'whatsapp', 'telephone', 'quartier']
     },
     'Restau': {
         name: 'Restau',
         deleteAfterDays: null,
-        cleanupField: 'dateCreation'
+        cleanupField: 'dateCreation',
+        searchFields: ['restaurantId', 'nom', 'nomCommercial', 'telephone', 'email', 'adresse', 'quartier', 'cuisine']
     },
     'compte_livreur': {
         name: 'compte_livreur',
         deleteAfterDays: null,
-        cleanupField: 'created_at'
+        cleanupField: 'created_at',
+        searchFields: ['id_livreur', 'username', 'nom', 'prenom', 'email']
     }
 };
 
@@ -155,6 +168,9 @@ exports.handler = async (event, context) => {
             // Gestion des collections
             case 'getCollectionData':
                 return await getCollectionData(db, body);
+            
+            case 'getItemDetails':
+                return await getItemDetails(db, body);
             
             case 'updateCollectionItem':
                 return await updateCollectionItem(db, body);
@@ -253,7 +269,6 @@ async function getStats(db) {
 
         // Statistiques temporelles (dernières 24h)
         const derniere24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        
         const activite24h = await getActivity24h(db, derniere24h);
 
         const result = {
@@ -360,11 +375,11 @@ async function getCollectionData(db, data) {
         const { 
             collection, 
             page = 1, 
-            limit = 25, 
+            limit = 20, 
             search = '', 
             status = '',
             period = '',
-            sortBy = 'createdAt',
+            sortBy = null,
             sortOrder = 'desc' 
         } = data;
 
@@ -407,9 +422,13 @@ async function getCollectionData(db, data) {
             }
         }
 
+        // Déterminer le tri par défaut
+        let defaultSortField = getDateField(collection) || '_id';
+        const actualSortBy = sortBy || defaultSortField;
+        
         // Tri
         const sortQuery = {};
-        sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
+        sortQuery[actualSortBy] = sortOrder === 'asc' ? 1 : -1;
 
         // Exécution des requêtes
         const [documents, totalCount] = await Promise.all([
@@ -435,7 +454,7 @@ async function getCollectionData(db, data) {
                 itemsPerPage: limit
             },
             collection,
-            filters: { search, status, period, sortBy, sortOrder }
+            filters: { search, status, period, sortBy: actualSortBy, sortOrder }
         });
 
     } catch (error) {
@@ -447,97 +466,63 @@ async function getCollectionData(db, data) {
     }
 }
 
-function getSearchFields(collection, searchRegex) {
-    const searchFieldsMap = {
-        'Colis': [
-            { colisID: searchRegex },
-            { sender: searchRegex },
-            { recipient: searchRegex },
-            { address: searchRegex },
-            { description: searchRegex }
-        ],
-        'Livraison': [
-            { livraisonID: searchRegex },
-            { 'expediteur.nom': searchRegex },
-            { 'destinataire.nom': searchRegex },
-            { 'destinataire.adresse': searchRegex }
-        ],
-        'cour_expedition': [
-            { colisID: searchRegex },
-            { driverName: searchRegex },
-            { driverId: searchRegex }
-        ],
-        'LivraisonsEffectuees': [
-            { colisID: searchRegex },
-            { driverName: searchRegex },
-            { deliveryNotes: searchRegex }
-        ],
-        'Refus': [
-            { colisID: searchRegex },
-            { raison: searchRegex }
-        ],
-        'Commandes': [
-            { codeCommande: searchRegex },
-            { 'restaurant.name': searchRegex },
-            { 'client.name': searchRegex },
-            { 'client.phone': searchRegex }
-        ],
-        'pharmacyOrders': [
-            { phoneNumber: searchRegex },
-            { secondaryPhone: searchRegex },
-            { 'medicaments.name': searchRegex }
-        ],
-        'shopping_orders': [
-            { phone1: searchRegex },
-            { phone2: searchRegex },
-            { 'shoppingList.nom': searchRegex }
-        ],
-        'Res_livreur': [
-            { id_livreur: searchRegex },
-            { nom: searchRegex },
-            { prenom: searchRegex },
-            { whatsapp: searchRegex },
-            { telephone: searchRegex },
-            { quartier: searchRegex }
-        ],
-        'Restau': [
-            { restaurantId: searchRegex },
-            { nom: searchRegex },
-            { nomCommercial: searchRegex },
-            { telephone: searchRegex },
-            { email: searchRegex },
-            { adresse: searchRegex },
-            { quartier: searchRegex },
-            { cuisine: searchRegex }
-        ],
-        'compte_livreur': [
-            { id_livreur: searchRegex },
-            { username: searchRegex },
-            { nom: searchRegex },
-            { prenom: searchRegex },
-            { email: searchRegex }
-        ],
-        'demande_livreur': [
-            { nom: searchRegex },
-            { prenom: searchRegex },
-            { whatsapp: searchRegex },
-            { telephone: searchRegex },
-            { quartier: searchRegex },
-            { vehicule: searchRegex },
-            { immatriculation: searchRegex }
-        ],
-        'demande_restau': [
-            { nom: searchRegex },
-            { nomCommercial: searchRegex },
-            { telephone: searchRegex },
-            { email: searchRegex },
-            { adresse: searchRegex },
-            { quartier: searchRegex },
-            { cuisine: searchRegex }
-        ]
-    };
+async function getItemDetails(db, data) {
+    try {
+        const { collection, itemId } = data;
 
-    return searchFieldsMap[collection] || [{ _id: searchRegex }];
+        console.log(`🔍 Récupération détails: ${collection}/${itemId}`);
+
+        if (!collection || !itemId) {
+            return createResponse(400, {
+                success: false,
+                message: 'Collection et ID requis'
+            });
+        }
+
+        if (!COLLECTIONS_CONFIG[collection]) {
+            return createResponse(400, {
+                success: false,
+                message: 'Collection non supportée'
+            });
+        }
+
+        // Rechercher l'élément
+        const item = await db.collection(collection).findOne({
+            _id: new ObjectId(itemId)
+        });
+
+        if (!item) {
+            return createResponse(404, {
+                success: false,
+                message: 'Élément non trouvé'
+            });
+        }
+
+        console.log(`✅ Détails récupérés pour ${collection}/${itemId}`);
+
+        return createResponse(200, {
+            success: true,
+            data: item,
+            collection,
+            itemId
+        });
+
+    } catch (error) {
+        console.error('❌ Erreur getItemDetails:', error);
+        return createResponse(500, {
+            success: false,
+            message: 'Erreur lors de la récupération des détails'
+        });
+    }
+}
+
+function getSearchFields(collection, searchRegex) {
+    const config = COLLECTIONS_CONFIG[collection];
+    if (!config || !config.searchFields) {
+        return [{ _id: searchRegex }];
+    }
+
+    return config.searchFields.map(field => ({ [field]: searchRegex }));
 }
 
 function getStatusField(collection) {
@@ -560,23 +545,8 @@ function getStatusField(collection) {
 }
 
 function getDateField(collection) {
-    const dateFieldMap = {
-        'Colis': 'createdAt',
-        'Livraison': 'dateCreation',
-        'cour_expedition': 'assignedAt',
-        'LivraisonsEffectuees': 'deliveredAt',
-        'Refus': 'dateRefus',
-        'Commandes': 'orderDate',
-        'pharmacyOrders': 'orderDate',
-        'shopping_orders': 'orderDate',
-        'Res_livreur': 'createdAt',
-        'Restau': 'dateCreation',
-        'compte_livreur': 'created_at',
-        'demande_livreur': 'dateCreation',
-        'demande_restau': 'dateCreation'
-    };
-
-    return dateFieldMap[collection];
+    const config = COLLECTIONS_CONFIG[collection];
+    return config ? config.cleanupField : 'createdAt';
 }
 
 function getPeriodFilter(period) {
@@ -673,14 +643,24 @@ async function deleteCollectionItem(db, data) {
             });
         }
 
-        // Pour les livraisons effectuées, supprimer aussi des autres collections
-        if (collection === 'LivraisonsEffectuees') {
-            const item = await db.collection(collection).findOne({ _id: new ObjectId(itemId) });
-            if (item && item.colisID) {
-                await cleanupRelatedCollections(db, item.colisID);
-            }
+        // Vérifier que l'élément existe avant de le supprimer
+        const existingItem = await db.collection(collection).findOne({
+            _id: new ObjectId(itemId)
+        });
+
+        if (!existingItem) {
+            return createResponse(404, {
+                success: false,
+                message: 'Élément non trouvé'
+            });
         }
 
+        // Pour les livraisons effectuées, supprimer aussi des autres collections
+        if (collection === 'LivraisonsEffectuees' && existingItem.colisID) {
+            await cleanupRelatedCollections(db, existingItem.colisID);
+        }
+
+        // Effectuer la suppression
         const result = await db.collection(collection).deleteOne({
             _id: new ObjectId(itemId)
         });
@@ -691,17 +671,27 @@ async function deleteCollectionItem(db, data) {
             console.log(`✅ Élément ${itemId} supprimé de ${collection}`);
             return createResponse(200, {
                 success: true,
-                message: 'Élément supprimé avec succès'
+                message: 'Élément supprimé avec succès',
+                deletedCount: result.deletedCount
             });
         } else {
-            return createResponse(404, {
+            return createResponse(500, {
                 success: false,
-                message: 'Élément non trouvé'
+                message: 'Erreur lors de la suppression'
             });
         }
 
     } catch (error) {
         console.error('❌ Erreur deleteCollectionItem:', error);
+        
+        // Gestion spécifique des erreurs ObjectId
+        if (error.message && error.message.includes('ObjectId')) {
+            return createResponse(400, {
+                success: false,
+                message: 'ID d\'élément invalide'
+            });
+        }
+        
         return createResponse(500, {
             success: false,
             message: 'Erreur lors de la suppression'
@@ -729,7 +719,22 @@ async function bulkDeleteItems(db, data) {
             });
         }
 
-        const objectIds = itemIds.map(id => new ObjectId(id));
+        // Convertir les IDs en ObjectId
+        const objectIds = itemIds.map(id => {
+            try {
+                return new ObjectId(id);
+            } catch (error) {
+                console.warn(`⚠️ ID invalide ignoré: ${id}`);
+                return null;
+            }
+        }).filter(id => id !== null);
+
+        if (objectIds.length === 0) {
+            return createResponse(400, {
+                success: false,
+                message: 'Aucun ID valide fourni'
+            });
+        }
 
         const result = await db.collection(collection).deleteMany({
             _id: { $in: objectIds }
@@ -741,7 +746,8 @@ async function bulkDeleteItems(db, data) {
         return createResponse(200, {
             success: true,
             message: `${result.deletedCount} éléments supprimés avec succès`,
-            deletedCount: result.deletedCount
+            deletedCount: result.deletedCount,
+            requestedCount: itemIds.length
         });
 
     } catch (error) {
@@ -750,6 +756,22 @@ async function bulkDeleteItems(db, data) {
             success: false,
             message: 'Erreur lors de la suppression en lot'
         });
+    }
+}
+
+async function cleanupRelatedCollections(db, colisID) {
+    try {
+        // Supprimer de toutes les collections liées
+        const collections = ['Colis', 'Livraison', 'cour_expedition'];
+        
+        for (const collection of collections) {
+            const result = await db.collection(collection).deleteMany({ colisID: colisID });
+            console.log(`🧹 ${collection}: ${result.deletedCount} éléments liés supprimés pour ${colisID}`);
+        }
+
+        console.log(`🧹 Nettoyage des collections liées terminé pour le colis: ${colisID}`);
+    } catch (error) {
+        console.warn(`⚠️ Erreur nettoyage collections liées:`, error);
     }
 }
 
@@ -1238,21 +1260,6 @@ async function cleanupCollection(db, collectionName, config) {
     };
 }
 
-async function cleanupRelatedCollections(db, colisID) {
-    try {
-        // Supprimer de toutes les collections liées
-        const collections = ['Colis', 'Livraison', 'cour_expedition'];
-        
-        for (const collection of collections) {
-            await db.collection(collection).deleteMany({ colisID: colisID });
-        }
-
-        console.log(`🧹 Nettoyage des collections liées pour le colis: ${colisID}`);
-    } catch (error) {
-        console.warn(`⚠️ Erreur nettoyage collections liées:`, error);
-    }
-}
-
 async function cleanupRelatedCollectionsForCompleted(db, cutoffDate) {
     try {
         // Récupérer les IDs des colis livrés avant la date limite
@@ -1413,16 +1420,16 @@ async function getAnalytics(db, data) {
         console.log(`📊 Génération d'analyses: ${type} (${timeRange})`);
 
         // Définir la plage de temps
-        const { startDate, groupFormat } = getTimeRange(timeRange);
+        const { startDate } = getTimeRange(timeRange);
 
         let analytics = {};
 
         switch (type) {
             case 'general':
-                analytics = await getGeneralAnalytics(db, startDate, groupFormat);
+                analytics = await getGeneralAnalytics(db, startDate);
                 break;
             case 'deliveries':
-                analytics = await getDeliveryAnalytics(db, startDate, groupFormat);
+                analytics = await getDeliveryAnalytics(db, startDate);
                 break;
             case 'performance':
                 analytics = await getPerformanceAnalytics(db, startDate);
@@ -1462,50 +1469,38 @@ function getTimeRange(timeRange) {
     switch (timeRange) {
         case '24h':
             return {
-                startDate: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-                groupFormat: "%Y-%m-%d %H"
+                startDate: new Date(now.getTime() - 24 * 60 * 60 * 1000)
             };
         case '7d':
             return {
-                startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-                groupFormat: "%Y-%m-%d"
+                startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
             };
         case '30d':
             return {
-                startDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-                groupFormat: "%Y-%m-%d"
+                startDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
             };
         case '90d':
             return {
-                startDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
-                groupFormat: "%Y-%U"
+                startDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
             };
         default:
             return {
-                startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-                groupFormat: "%Y-%m-%d"
+                startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
             };
     }
 }
 
-async function getGeneralAnalytics(db, startDate, groupFormat) {
+async function getGeneralAnalytics(db, startDate) {
     try {
-        const [
-            colisEvolution,
-            livraisonsEvolution,
-            commandesEvolution,
-            efficaciteGlobale
-        ] = await Promise.all([
-            getEvolutionData(db, 'Colis', 'createdAt', startDate, groupFormat),
-            getEvolutionData(db, 'LivraisonsEffectuees', 'deliveredAt', startDate, groupFormat),
-            getEvolutionData(db, 'Commandes', 'orderDate', startDate, groupFormat),
+        const [totalColis, totalLivrees, efficaciteGlobale] = await Promise.all([
+            safeCount(db, 'Colis', { createdAt: { $gte: startDate } }),
+            safeCount(db, 'LivraisonsEffectuees', { deliveredAt: { $gte: startDate } }),
             calculateGlobalEfficiency(db, startDate)
         ]);
 
         return {
-            colisEvolution,
-            livraisonsEvolution,
-            commandesEvolution,
+            totalColis,
+            totalLivrees,
             efficaciteGlobale
         };
     } catch (error) {
@@ -1514,22 +1509,14 @@ async function getGeneralAnalytics(db, startDate, groupFormat) {
     }
 }
 
-async function getDeliveryAnalytics(db, startDate, groupFormat) {
+async function getDeliveryAnalytics(db, startDate) {
     try {
-        const [
-            tempsLivraisonMoyen,
-            tauxReussite,
-            performanceLivreurs
-        ] = await Promise.all([
-            calculateAverageDeliveryTime(db, startDate),
-            calculateSuccessRate(db, startDate),
-            getDeliveryDriverPerformance(db, startDate)
+        const [tauxReussite] = await Promise.all([
+            calculateSuccessRate(db, startDate)
         ]);
 
         return {
-            tempsLivraisonMoyen,
-            tauxReussite,
-            performanceLivreurs
+            tauxReussite
         };
     } catch (error) {
         console.warn('⚠️ Erreur analyses livraisons:', error.message);
@@ -1539,42 +1526,16 @@ async function getDeliveryAnalytics(db, startDate, groupFormat) {
 
 async function getPerformanceAnalytics(db, startDate) {
     try {
-        const [
-            topQuartiers,
-            topRestaurants,
-            satisfactionClient
-        ] = await Promise.all([
-            getTopQuartiers(db, startDate),
-            getTopRestaurants(db, startDate),
-            calculateCustomerSatisfaction(db, startDate)
+        const [topRestaurants] = await Promise.all([
+            getTopRestaurants(db, startDate)
         ]);
 
         return {
-            topQuartiers,
-            topRestaurants,
-            satisfactionClient
+            topRestaurants
         };
     } catch (error) {
         console.warn('⚠️ Erreur analyses performance:', error.message);
         return {};
-    }
-}
-
-async function getEvolutionData(db, collection, dateField, startDate, groupFormat) {
-    try {
-        return await db.collection(collection).aggregate([
-            { $match: { [dateField]: { $gte: startDate } } },
-            {
-                $group: {
-                    _id: { $dateToString: { format: groupFormat, date: `$${dateField}` } },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { "_id": 1 } }
-        ]).toArray();
-    } catch (error) {
-        console.warn(`⚠️ Erreur évolution ${collection}:`, error.message);
-        return [];
     }
 }
 
@@ -1595,42 +1556,6 @@ async function calculateGlobalEfficiency(db, startDate) {
     } catch (error) {
         console.warn('⚠️ Erreur calcul efficacité:', error.message);
         return { efficiency: 0 };
-    }
-}
-
-async function calculateAverageDeliveryTime(db, startDate) {
-    try {
-        const results = await db.collection('LivraisonsEffectuees').aggregate([
-            { 
-                $match: { 
-                    deliveredAt: { $gte: startDate },
-                    'deliveryProcess.assignedAt': { $exists: true }
-                }
-            },
-            {
-                $project: {
-                    deliveryTime: {
-                        $divide: [
-                            { $subtract: ['$deliveredAt', '$deliveryProcess.assignedAt'] },
-                            1000 * 60 // Convertir en minutes
-                        ]
-                    }
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    avgTime: { $avg: '$deliveryTime' },
-                    minTime: { $min: '$deliveryTime' },
-                    maxTime: { $max: '$deliveryTime' }
-                }
-            }
-        ]).toArray();
-
-        return results[0] || { avgTime: 0, minTime: 0, maxTime: 0 };
-    } catch (error) {
-        console.warn('⚠️ Erreur temps livraison:', error.message);
-        return { avgTime: 0 };
     }
 }
 
@@ -1658,48 +1583,6 @@ async function calculateSuccessRate(db, startDate) {
     }
 }
 
-async function getDeliveryDriverPerformance(db, startDate) {
-    try {
-        return await db.collection('LivraisonsEffectuees').aggregate([
-            { $match: { deliveredAt: { $gte: startDate } } },
-            {
-                $group: {
-                    _id: {
-                        driverId: '$driverId',
-                        driverName: '$driverName'
-                    },
-                    deliveries: { $sum: 1 },
-                    avgRating: { $avg: '$rating' }
-                }
-            },
-            { $sort: { deliveries: -1 } },
-            { $limit: 10 }
-        ]).toArray();
-    } catch (error) {
-        console.warn('⚠️ Erreur performance livreurs:', error.message);
-        return [];
-    }
-}
-
-async function getTopQuartiers(db, startDate) {
-    try {
-        return await db.collection('LivraisonsEffectuees').aggregate([
-            { $match: { deliveredAt: { $gte: startDate } } },
-            {
-                $group: {
-                    _id: '$destinataire.quartier',
-                    deliveries: { $sum: 1 }
-                }
-            },
-            { $sort: { deliveries: -1 } },
-            { $limit: 10 }
-        ]).toArray();
-    } catch (error) {
-        console.warn('⚠️ Erreur top quartiers:', error.message);
-        return [];
-    }
-}
-
 async function getTopRestaurants(db, startDate) {
     try {
         return await db.collection('Commandes').aggregate([
@@ -1717,20 +1600,6 @@ async function getTopRestaurants(db, startDate) {
     } catch (error) {
         console.warn('⚠️ Erreur top restaurants:', error.message);
         return [];
-    }
-}
-
-async function calculateCustomerSatisfaction(db, startDate) {
-    try {
-        // Simulation - à remplacer par de vraies données de satisfaction
-        return {
-            averageRating: 4.2,
-            totalReviews: 150,
-            satisfaction: 84
-        };
-    } catch (error) {
-        console.warn('⚠️ Erreur satisfaction client:', error.message);
-        return { averageRating: 0 };
     }
 }
 
