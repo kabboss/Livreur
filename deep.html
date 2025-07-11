@@ -11,13 +11,15 @@
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    const deepLink = `send20://track?code=${code}`;
-    const fallbackUrl = 'https://send20.netlify.app/index.html'; // 👉 ton APK
+    
+    // URL de deep link modifiée pour aller directement sur client.html
+    const deepLink = `send20://track?code=${code}#/client?code=${code}`;
+    const fallbackUrl = `https://send20.netlify.app/index.html`;
 
-    // Ouvre l'app
+    // Essaye d'ouvrir l'app avec le deep link
     window.location.href = deepLink;
 
-    // Si rien ne se passe (app non installée), redirige vers APK
+    // Si l'app n'est pas installée, redirige vers la version web
     setTimeout(() => {
       if (!document.hidden) {
         window.location.href = fallbackUrl;
