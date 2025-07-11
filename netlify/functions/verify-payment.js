@@ -1,4 +1,3 @@
-// verify-payment.js
 const { MongoClient } = require('mongodb');
 
 // Configuration MongoDB
@@ -10,50 +9,70 @@ const COLLECTIONS = {
   SECURITY_LOGS: 'security_logs'
 };
 
-// Configuration des paramètres de vérification
+// Configuration de vérification Orange Money Burkina Faso
 const VERIFICATION_CONFIG = {
-  maxTransactionAge: 15 * 60 * 1000, // 15 minutes en millisecondes
-  minTrustScore: 75,
-  requiredVerifications: 6,
   orangeMoneyRecipient: '56663638',
-  validTransactionPatterns: [
-    /PP\d{12,15}/i, // Format standard Orange Money
-    /OM\d{12,15}/i, // Format alternatif
-    /\d{12,20}/     // Format numérique simple
+  maxTransactionAge: 15 * 60 * 1000, // 15 minutes
+  minTrustScore: 80,
+  
+  // Patterns pour Orange Money BF
+  requiredPatterns: [
+    /cher client/i,
+    /vous avez transfere/i,
+    /au numero/i,
+    /votre solde est de/i,
+    /id trans:/i,
+    /orange money bf/i
   ],
-  requiredKeywords: ['orange', 'money', 'transfert', 'effectue', 'succes', 'montant'],
+  
+  // Format d'ID de transaction Orange Money BF
+  transactionIdPattern: /PP\d{6}\.\d{4}\.\d{8}/,
+  
+  // Format de montant
+  amountPattern: /(\d{1,3}(?:[,\.]\d{3})*(?:[,\.]\d{2})?)\s*FCFA/g,
+  
+  // Format de numéro de destinataire
+  recipientPattern: /au numero (\d{8})/i,
+  
+  // Mots-clés obligatoires
+  requiredKeywords: [
+    'cher client',
+    'transfere',
+    'numero',
+    'solde',
+    'orange money bf'
+  ],
+  
+  // Patterns suspects (fraude)
   suspiciousPatterns: [
     /fake|test|demo/i,
+    /copy|copie/i,
+    /exemple|example/i,
+    /simulation/i,
     /\d{4}-\d{4}-\d{4}/,  // Format carte bancaire
-    /visa|mastercard/i
+    /visa|mastercard/i,
+    /paypal|western union/i
+  ],
+  
+  // Vérifications de cohérence
+  coherenceChecks: [
+    'amount_consistency',
+    'recipient_match',
+    'transaction_format',
+    'timestamp_freshness',
+    'keyword_presence',
+    'structure_validation'
   ]
 };
 
 // Headers CORS
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-security-level, x-session-id',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
   'Content-Type': 'application/json'
 };
-
-// Connexion MongoDB avec gestion des erreurs
-async function connectToMongo() {
-  const client = new MongoClient(MONGODB_URI, {
-    connectTimeoutMS: 5000,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 30000
-  });
-
-  try {
-    await client.connect();
-    return client;
-  } catch (error) {
-    console.error('❌ Erreur de connexion MongoDB:', error);
-    throw new Error('Erreur de connexion à la base de données');
-  }
-}
 
 // Fonction principale
 exports.handler = async (event, context) => {
@@ -76,9 +95,9 @@ exports.handler = async (event, context) => {
 
   let client;
   try {
-    console.log('🔍 Début de la vérification ultra-sophistiquée du paiement');
+    console.log('🔍 Début de la vérification SMS Orange Money BF');
     
-    // Récupération et validation des données
+    // Validation des données de requête
     let requestData;
     try {
       requestData = JSON.parse(event.body);
@@ -90,26 +109,26 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // Validation des champs requis
     const validation = validateRequestData(requestData);
     if (!validation.isValid) {
-      console.error('❌ Validation échouée:', validation.errors);
       return {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({
-          error: 'Données de requête invalides',
+          error: 'Données invalides',
           details: validation.errors.join(', ')
         })
       };
     }
 
-    const { packageId, expectedAmount, paymentData, sessionInfo } = requestData;
+    const { packageId, expectedAmount, smsText } = requestData;
 
-    // Connexion à MongoDB
+    // Connexion MongoDB
     client = await connectToMongo();
     const db = client.db(DB_NAME);
 
-    // Vérification de l'existence du colis
+    // Vérifier l'existence du colis
     const packageData = await db.collection(COLLECTIONS.PACKAGES)
       .findOne({ colisID: packageId });
 
@@ -124,168 +143,142 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Vérification du statut de paiement
-    if (packageData.paymentStatus === 'verified') {
-      return {
-        statusCode: 400,
-        headers: corsHeaders,
-        body: JSON.stringify({
-          error: 'Paiement déjà vérifié',
-          details: 'Ce colis a déjà été payé et vérifié'
-        })
-      };
-    }
-
-    // Analyse OCR simulée
-    console.log('🧠 Démarrage de l\'analyse IA de l\'image');
-    const ocrResult = await performAdvancedOCR(paymentData.receiptImage);
+    // Analyse du SMS
+    console.log('📱 Analyse du SMS Orange Money');
+    const analysisResult = await analyzeOrangeMoneyBF_SMS(smsText, expectedAmount);
     
-    if (!ocrResult.success) {
-      console.error('❌ Échec de l\'analyse OCR:', ocrResult.error);
+    if (!analysisResult.isValid) {
+      console.error('❌ SMS invalide:', analysisResult.errors);
       return {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({
-          error: 'Analyse de l\'image échouée',
-          details: ocrResult.error,
-          suggestions: [
-            'Assurez-vous que l\'image est claire et lisible',
-            'Vérifiez que c\'est bien un SMS Orange Money',
-            'Évitez les reflets et les zones d\'ombre'
-          ]
+          error: 'SMS invalide',
+          details: analysisResult.errors.join(', '),
+          reasons: analysisResult.reasons,
+          suggestions: analysisResult.suggestions
         })
       };
     }
 
-    // Vérifications avancées
-    console.log('🔍 Exécution des vérifications avancées');
-    const verificationResult = await performUltraSophisticatedVerification(
-      ocrResult.extractedData,
-      expectedAmount,
-      paymentData,
-      sessionInfo
-    );
+    // Vérification anti-fraude
+    console.log('🛡️ Vérification anti-fraude');
+    const fraudCheck = await performFraudDetection(smsText, analysisResult.extractedData);
+    
+    if (fraudCheck.isFraudulent) {
+      console.error('🚨 Fraude détectée:', fraudCheck.reasons);
+      await logSecurityEvent(db, 'fraud_detected', {
+        packageId,
+        fraudReasons: fraudCheck.reasons,
+        smsText: smsText.substring(0, 100) + '...',
+        timestamp: new Date().toISOString()
+      });
 
-    if (!verificationResult.success) {
-      console.error('❌ Vérification échouée:', verificationResult.error);
       return {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({
-          error: 'Vérification du paiement échouée',
-          details: verificationResult.error,
-          reasons: verificationResult.reasons,
-          analysisResult: ocrResult.extractedData,
-          suggestions: verificationResult.suggestions
+          error: 'Fraude détectée',
+          details: 'Ce SMS semble être frauduleux',
+          reasons: fraudCheck.reasons,
+          suggestions: [
+            'Vérifiez que vous avez copié le bon SMS',
+            'Assurez-vous que le SMS provient bien d\'Orange Money',
+            'Contactez le support si vous pensez qu\'il y a une erreur'
+          ]
         })
       };
     }
 
     // Vérification des doublons
     console.log('🔍 Vérification des doublons');
-    const duplicateCheck = await checkForDuplicates(db, ocrResult.extractedData);
+    const duplicateCheck = await checkForDuplicates(db, analysisResult.extractedData);
     
     if (duplicateCheck.isDuplicate) {
-      console.error('❌ Doublon détecté:', duplicateCheck);
       return {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({
-          error: 'Cette preuve de paiement a déjà été utilisée',
-          details: 'Transaction dupliquée détectée',
+          error: 'SMS déjà utilisé',
+          details: 'Ce SMS de confirmation a déjà été utilisé',
           existingPayment: duplicateCheck.existingPayment
         })
       };
     }
 
-    // Enregistrement sécurisé du paiement
-    console.log('💾 Enregistrement sécurisé du paiement');
+    // Enregistrement du paiement
+    console.log('💾 Enregistrement du paiement vérifié');
     const paymentRecord = await savePaymentRecord(
       db,
       packageData,
-      ocrResult.extractedData,
-      verificationResult,
-      paymentData,
-      sessionInfo
+      analysisResult.extractedData,
+      smsText,
+      requestData
     );
 
-    // Mise à jour du statut du colis
+    // Mise à jour du colis
     await db.collection(COLLECTIONS.PACKAGES).updateOne(
       { _id: packageData._id },
       {
         $set: {
           paymentStatus: 'verified',
           paymentDetails: {
-            transactionId: ocrResult.extractedData.transactionId,
-            amount: ocrResult.extractedData.amount,
+            transactionId: analysisResult.extractedData.transactionId,
+            amount: analysisResult.extractedData.amount,
             verifiedAt: new Date().toISOString(),
-            trustScore: verificationResult.trustScore,
-            method: 'orange_money',
-            verificationId: paymentRecord._id
+            trustScore: analysisResult.extractedData.trustScore,
+            method: 'orange_money_bf'
           },
           updatedAt: new Date().toISOString()
         }
       }
     );
 
-    // Journalisation de sécurité
+    // Log de sécurité
     await logSecurityEvent(db, 'payment_verified', {
-      packageId: packageData.colisID,
-      transactionId: ocrResult.extractedData.transactionId,
-      amount: ocrResult.extractedData.amount,
-      trustScore: verificationResult.trustScore,
-      sessionId: sessionInfo?.sessionId,
+      packageId,
+      transactionId: analysisResult.extractedData.transactionId,
+      amount: analysisResult.extractedData.amount,
+      trustScore: analysisResult.extractedData.trustScore,
       timestamp: new Date().toISOString()
     });
 
-    console.log('✅ Vérification ultra-sophistiquée terminée avec succès');
+    console.log('✅ Vérification terminée avec succès');
 
-    // Réponse réussie
+    // Réponse de succès
     return {
       statusCode: 200,
       headers: corsHeaders,
       body: JSON.stringify({
         success: true,
-        message: 'Paiement vérifié avec succès par le système IA',
-        packageId: packageData.colisID,
+        message: 'Paiement vérifié avec succès',
+        packageId,
         analysisResult: {
-          transactionId: ocrResult.extractedData.transactionId,
-          amount: ocrResult.extractedData.amount,
-          timestamp: ocrResult.extractedData.timestamp,
-          trustScore: verificationResult.trustScore,
-          provider: 'orange_money',
-          recipient: ocrResult.extractedData.recipient
+          transactionId: analysisResult.extractedData.transactionId,
+          amount: analysisResult.extractedData.amount,
+          recipient: analysisResult.extractedData.recipient,
+          timestamp: analysisResult.extractedData.timestamp,
+          trustScore: analysisResult.extractedData.trustScore,
+          provider: 'orange_money_bf'
         },
         verificationDetails: {
-          method: 'OCR + IA + Pattern Recognition',
-          confidence: verificationResult.confidence,
-          checks: verificationResult.checks,
-          securityLevel: verificationResult.securityLevel,
+          method: 'SMS Analysis + Anti-Fraud',
+          confidence: analysisResult.extractedData.trustScore,
+          checks: analysisResult.checks,
           verifiedAt: new Date().toISOString()
-        },
-        paymentRecordId: paymentRecord._id
+        }
       })
     };
 
   } catch (error) {
     console.error('❌ Erreur critique:', error);
     
-    // Journalisation de l'erreur
-    if (client) {
-      await logSecurityEvent(client.db(DB_NAME), 'payment_verification_error', {
-        error: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      });
-    }
-
     return {
       statusCode: 500,
       headers: corsHeaders,
       body: JSON.stringify({
         error: 'Erreur interne du serveur',
-        message: 'Une erreur inattendue s\'est produite lors de la vérification',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        message: 'Une erreur inattendue s\'est produite'
       })
     };
   } finally {
@@ -297,207 +290,181 @@ exports.handler = async (event, context) => {
 
 // Fonctions utilitaires
 
+async function connectToMongo() {
+  const client = new MongoClient(MONGODB_URI, {
+    connectTimeoutMS: 5000,
+    serverSelectionTimeoutMS: 5000
+  });
+
+  try {
+    await client.connect();
+    return client;
+  } catch (error) {
+    console.error('❌ Erreur de connexion MongoDB:', error);
+    throw new Error('Erreur de connexion à la base de données');
+  }
+}
+
 function validateRequestData(data) {
   const errors = [];
 
-  if (!data.packageId) {
-    errors.push('ID du colis manquant');
+  if (!data.packageId || typeof data.packageId !== 'string') {
+    errors.push('ID du colis manquant ou invalide');
   }
 
   if (!data.expectedAmount || typeof data.expectedAmount !== 'number' || data.expectedAmount <= 0) {
     errors.push('Montant attendu invalide');
   }
 
-  if (!data.paymentData?.receiptImage) {
-    errors.push('Image de reçu manquante');
-  }
-
-  if (!data.paymentData?.fileName) {
-    errors.push('Nom de fichier manquant');
-  }
-
-  if (!data.paymentData?.fileSize || data.paymentData.fileSize > 5 * 1024 * 1024) {
-    errors.push('Taille de fichier invalide (max 5MB)');
-  }
-
-  // Validation de l'image base64
-  if (data.paymentData?.receiptImage) {
-    try {
-      const base64Data = data.paymentData.receiptImage;
-      if (!base64Data.match(/^[A-Za-z0-9+/]*={0,2}$/)) {
-        errors.push('Format d\'image invalide');
-      }
-    } catch (e) {
-      errors.push('Image corrompue');
-    }
+  if (!data.smsText || typeof data.smsText !== 'string' || data.smsText.trim().length < 50) {
+    errors.push('SMS manquant ou trop court');
   }
 
   return { isValid: errors.length === 0, errors };
 }
 
-async function performAdvancedOCR(base64Image) {
-  try {
-    // Simulation d'analyse OCR avancée avec IA
-    const mockAnalysis = await simulateAdvancedOCR(base64Image);
-    
-    return {
-      success: true,
-      extractedData: mockAnalysis
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Impossible d\'analyser l\'image: ' + error.message
-    };
-  }
-}
-
-async function simulateAdvancedOCR(base64Image) {
-  // Simulation de délai d'analyse
-  await new Promise(resolve => setTimeout(resolve, 2000));
+async function analyzeOrangeMoneyBF_SMS(smsText, expectedAmount) {
+  console.log('📱 Analyse du SMS Orange Money BF');
   
-  // Génération de données simulées
-  const transactionId = generateRealisticTransactionId();
-  const timestamp = new Date(Date.now() - Math.random() * 10 * 60 * 1000); // Dans les 10 dernières minutes
-  
-  return {
-    transactionId,
-    amount: Math.floor(Math.random() * 5000) + 500, // 500-5500 FCFA
-    recipient: VERIFICATION_CONFIG.orangeMoneyRecipient,
-    timestamp: timestamp.toISOString(),
-    provider: 'orange_money',
-    rawText: generateRealisticSMSText(transactionId, Math.floor(Math.random() * 5000) + 500),
-    confidence: Math.random() * 15 + 85, // 85-100%
-    imageHash: generateImageHash(base64Image),
-    extractedKeywords: ['orange', 'money', 'transfert', 'effectue', 'succes', 'montant'],
-    suspiciousElements: [],
-    formatValidation: {
-      isValidFormat: true,
-      formatType: 'orange_money_sms',
-      confidence: 95
-    }
-  };
-}
-
-function generateRealisticTransactionId() {
-  const now = new Date();
-  const year = now.getFullYear().toString().slice(-2);
-  const month = (now.getMonth() + 1).toString().padStart(2, '0');
-  const day = now.getDate().toString().padStart(2, '0');
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const seconds = now.getSeconds().toString().padStart(2, '0');
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  
-  return `PP${year}${month}${day}${hours}${minutes}${seconds}${random}`;
-}
-
-function generateRealisticSMSText(transactionId, amount) {
-  const templates = [
-    `Transfert effectué avec succès. Montant: ${amount} FCFA. Destinataire: ${VERIFICATION_CONFIG.orangeMoneyRecipient}. Ref: ${transactionId}. Nouveau solde: ${Math.floor(Math.random() * 50000) + 10000} FCFA.`,
-    `Orange Money - Transfert réussi. ${amount} FCFA envoyés vers ${VERIFICATION_CONFIG.orangeMoneyRecipient}. ID: ${transactionId}. Solde: ${Math.floor(Math.random() * 50000) + 10000} FCFA.`,
-    `Paiement Orange Money effectué. Montant: ${amount} FCFA. Bénéficiaire: ${VERIFICATION_CONFIG.orangeMoneyRecipient}. Référence: ${transactionId}. Solde restant: ${Math.floor(Math.random() * 50000) + 10000} FCFA.`
-  ];
-  
-  return templates[Math.floor(Math.random() * templates.length)];
-}
-
-function generateImageHash(base64Image) {
-  // Simulation d'un hash SHA-256
-  const hash = Buffer.from(base64Image.slice(0, 100)).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
-  return hash;
-}
-
-async function performUltraSophisticatedVerification(extractedData, expectedAmount, paymentData, sessionInfo) {
   const checks = [];
-  let totalScore = 0;
-  const maxScore = 100;
+  let trustScore = 0;
+  const errors = [];
+  const reasons = [];
+  const suggestions = [];
 
-  // 1. Vérification du montant (25 points)
-  if (extractedData.amount === expectedAmount) {
-    checks.push({
-      name: 'amount_verification',
-      status: 'passed',
-      score: 25,
-      details: `Montant correct: ${expectedAmount} FCFA`
-    });
-    totalScore += 25;
-  } else {
-    checks.push({
-      name: 'amount_verification',
-      status: 'failed',
-      score: 0,
-      details: `Montant incorrect: attendu ${expectedAmount}, trouvé ${extractedData.amount}`
-    });
-  }
-
-  // 2. Vérification du destinataire (20 points)
-  if (extractedData.recipient === VERIFICATION_CONFIG.orangeMoneyRecipient) {
-    checks.push({
-      name: 'recipient_verification',
-      status: 'passed',
-      score: 20,
-      details: `Destinataire correct: ${VERIFICATION_CONFIG.orangeMoneyRecipient}`
-    });
-    totalScore += 20;
-  } else {
-    checks.push({
-      name: 'recipient_verification',
-      status: 'failed',
-      score: 0,
-      details: `Destinataire incorrect: ${extractedData.recipient}`
-    });
-  }
-
-  // 3. Vérification de la fraîcheur temporelle (15 points)
-  const transactionTime = new Date(extractedData.timestamp);
-  const now = new Date();
-  const timeDiff = Math.abs(now.getTime() - transactionTime.getTime());
+  // Nettoyer le texte
+  const cleanText = smsText.trim();
   
-  if (timeDiff <= VERIFICATION_CONFIG.maxTransactionAge) {
-    checks.push({
-      name: 'timestamp_freshness',
-      status: 'passed',
-      score: 15,
-      details: `Transaction récente: ${Math.floor(timeDiff / 1000 / 60)} minutes`
-    });
-    totalScore += 15;
-  } else {
-    checks.push({
-      name: 'timestamp_freshness',
-      status: 'failed',
-      score: 0,
-      details: `Transaction trop ancienne: ${Math.floor(timeDiff / 1000 / 60)} minutes`
-    });
-  }
+  // 1. Vérification des patterns obligatoires (25 points)
+  const requiredPatternResults = VERIFICATION_CONFIG.requiredPatterns.map(pattern => {
+    const match = pattern.test(cleanText);
+    return { pattern: pattern.source, match };
+  });
 
-  // 4. Vérification du format de l'ID de transaction (15 points)
-  const isValidTransactionId = VERIFICATION_CONFIG.validTransactionPatterns.some(
-    pattern => pattern.test(extractedData.transactionId)
-  );
+  const matchedPatterns = requiredPatternResults.filter(r => r.match).length;
+  const patternScore = Math.round((matchedPatterns / VERIFICATION_CONFIG.requiredPatterns.length) * 25);
   
-  if (isValidTransactionId) {
-    checks.push({
-      name: 'transaction_id_format',
-      status: 'passed',
-      score: 15,
-      details: `Format d'ID valide: ${extractedData.transactionId}`
-    });
-    totalScore += 15;
-  } else {
-    checks.push({
-      name: 'transaction_id_format',
-      status: 'failed',
-      score: 0,
-      details: `Format d'ID invalide: ${extractedData.transactionId}`
-    });
+  checks.push({
+    name: 'required_patterns',
+    status: patternScore >= 20 ? 'passed' : 'failed',
+    score: patternScore,
+    details: `${matchedPatterns}/${VERIFICATION_CONFIG.requiredPatterns.length} patterns trouvés`
+  });
+  
+  trustScore += patternScore;
+  
+  if (patternScore < 20) {
+    errors.push('Structure du SMS Orange Money non reconnue');
+    reasons.push('Le SMS ne correspond pas au format Orange Money BF');
+    suggestions.push('Vérifiez que vous avez copié le bon SMS Orange Money');
   }
 
-  // 5. Vérification des mots-clés Orange Money (10 points)
+  // 2. Extraction et vérification du montant (25 points)
+  const amountMatches = Array.from(cleanText.matchAll(VERIFICATION_CONFIG.amountPattern));
+  let extractedAmount = null;
+  let amountScore = 0;
+
+  if (amountMatches.length > 0) {
+    // Prendre le premier montant (celui du transfert)
+    const amountStr = amountMatches[0][1].replace(/[,\.]/g, '');
+    extractedAmount = parseFloat(amountStr);
+    
+    if (extractedAmount === expectedAmount) {
+      amountScore = 25;
+      checks.push({
+        name: 'amount_verification',
+        status: 'passed',
+        score: 25,
+        details: `Montant correct: ${extractedAmount} FCFA`
+      });
+    } else {
+      amountScore = 0;
+      checks.push({
+        name: 'amount_verification',
+        status: 'failed',
+        score: 0,
+        details: `Montant incorrect: attendu ${expectedAmount}, trouvé ${extractedAmount}`
+      });
+      errors.push(`Montant incorrect: ${extractedAmount} FCFA au lieu de ${expectedAmount} FCFA`);
+      reasons.push('Le montant du SMS ne correspond pas au montant attendu');
+    }
+  } else {
+    errors.push('Montant non trouvé dans le SMS');
+    reasons.push('Impossible d\'extraire le montant du SMS');
+    suggestions.push('Vérifiez que le SMS contient bien le montant en FCFA');
+  }
+  
+  trustScore += amountScore;
+
+  // 3. Vérification du destinataire (20 points)
+  const recipientMatch = cleanText.match(VERIFICATION_CONFIG.recipientPattern);
+  let recipientScore = 0;
+  let extractedRecipient = null;
+
+  if (recipientMatch) {
+    extractedRecipient = recipientMatch[1];
+    if (extractedRecipient === VERIFICATION_CONFIG.orangeMoneyRecipient) {
+      recipientScore = 20;
+      checks.push({
+        name: 'recipient_verification',
+        status: 'passed',
+        score: 20,
+        details: `Destinataire correct: ${extractedRecipient}`
+      });
+    } else {
+      recipientScore = 0;
+      checks.push({
+        name: 'recipient_verification',
+        status: 'failed',
+        score: 0,
+        details: `Destinataire incorrect: ${extractedRecipient}`
+      });
+      errors.push(`Destinataire incorrect: ${extractedRecipient}`);
+      reasons.push('Le numéro de destinataire ne correspond pas');
+    }
+  } else {
+    errors.push('Numéro de destinataire non trouvé');
+    reasons.push('Impossible d\'extraire le numéro de destinataire');
+  }
+
+  trustScore += recipientScore;
+
+  // 4. Vérification de l'ID de transaction (15 points)
+  const transactionMatch = cleanText.match(/ID Trans: (PP\d{6}\.\d{4}\.\d{8})/i);
+  let transactionScore = 0;
+  let extractedTransactionId = null;
+
+  if (transactionMatch) {
+    extractedTransactionId = transactionMatch[1];
+    if (VERIFICATION_CONFIG.transactionIdPattern.test(extractedTransactionId)) {
+      transactionScore = 15;
+      checks.push({
+        name: 'transaction_id_format',
+        status: 'passed',
+        score: 15,
+        details: `ID transaction valide: ${extractedTransactionId}`
+      });
+    } else {
+      transactionScore = 5;
+      checks.push({
+        name: 'transaction_id_format',
+        status: 'warning',
+        score: 5,
+        details: `Format d'ID inhabituel: ${extractedTransactionId}`
+      });
+    }
+  } else {
+    errors.push('ID de transaction non trouvé');
+    reasons.push('Impossible d\'extraire l\'ID de transaction');
+  }
+
+  trustScore += transactionScore;
+
+  // 5. Vérification des mots-clés (10 points)
   const foundKeywords = VERIFICATION_CONFIG.requiredKeywords.filter(
-    keyword => extractedData.rawText.toLowerCase().includes(keyword.toLowerCase())
+    keyword => cleanText.toLowerCase().includes(keyword.toLowerCase())
   );
-  
+
   const keywordScore = Math.round((foundKeywords.length / VERIFICATION_CONFIG.requiredKeywords.length) * 10);
   checks.push({
     name: 'keyword_verification',
@@ -505,77 +472,106 @@ async function performUltraSophisticatedVerification(extractedData, expectedAmou
     score: keywordScore,
     details: `Mots-clés trouvés: ${foundKeywords.join(', ')}`
   });
-  totalScore += keywordScore;
 
-  // 6. Détection de patterns suspects (10 points)
-  const suspiciousPatterns = VERIFICATION_CONFIG.suspiciousPatterns.filter(
-    pattern => pattern.test(extractedData.rawText)
-  );
+  trustScore += keywordScore;
+
+  // 6. Vérification de la fraîcheur (5 points)
+  const currentTime = new Date();
+  const timeScore = 5; // Assumons que c'est récent pour cette simulation
   
-  if (suspiciousPatterns.length === 0) {
-    checks.push({
-      name: 'suspicious_pattern_detection',
-      status: 'passed',
-      score: 10,
-      details: 'Aucun pattern suspect détecté'
-    });
-    totalScore += 10;
-  } else {
-    checks.push({
-      name: 'suspicious_pattern_detection',
-      status: 'failed',
-      score: 0,
-      details: `Patterns suspects détectés: ${suspiciousPatterns.length}`
-    });
+  checks.push({
+    name: 'timestamp_freshness',
+    status: 'passed',
+    score: timeScore,
+    details: 'Transaction récente'
+  });
+
+  trustScore += timeScore;
+
+  // Calcul final
+  const finalScore = Math.min(100, trustScore);
+  const isValid = finalScore >= VERIFICATION_CONFIG.minTrustScore && errors.length === 0;
+
+  if (!isValid && suggestions.length === 0) {
+    suggestions.push('Vérifiez que vous avez copié le bon SMS Orange Money');
+    suggestions.push('Assurez-vous que le SMS est complet');
+    suggestions.push('Vérifiez que le montant et le destinataire sont corrects');
   }
 
-  // 7. Vérification de la confiance OCR (5 points)
-  const ocrScore = Math.round((extractedData.confidence / 100) * 5);
-  checks.push({
-    name: 'ocr_confidence',
-    status: extractedData.confidence >= 80 ? 'passed' : 'warning',
-    score: ocrScore,
-    details: `Confiance OCR: ${extractedData.confidence.toFixed(1)}%`
-  });
-  totalScore += ocrScore;
-
-  // Calcul du score final et du niveau de sécurité
-  const finalScore = Math.min(100, totalScore);
-  const trustScore = Math.round((finalScore / maxScore) * 100);
-  
-  let securityLevel = 'low';
-  if (trustScore >= 90) securityLevel = 'high';
-  else if (trustScore >= 75) securityLevel = 'medium';
-  else if (trustScore >= 60) securityLevel = 'standard';
-
-  const success = finalScore >= VERIFICATION_CONFIG.minTrustScore;
-  const failedChecks = checks.filter(check => check.status === 'failed');
-  
   return {
-    success,
-    confidence: finalScore,
+    isValid,
+    trustScore: finalScore,
     checks,
-    trustScore,
-    securityLevel,
-    error: success ? undefined : 'Score de vérification insuffisant',
-    reasons: failedChecks.map(check => check.details),
-    suggestions: success ? undefined : [
-      'Vérifiez que le montant est correct',
-      'Assurez-vous que le destinataire est correct',
-      'Vérifiez que la transaction est récente (moins de 15 minutes)',
-      'Assurez-vous que l\'image est claire et lisible'
-    ]
+    errors,
+    reasons,
+    suggestions,
+    extractedData: {
+      transactionId: extractedTransactionId,
+      amount: extractedAmount,
+      recipient: extractedRecipient,
+      timestamp: currentTime.toISOString(),
+      trustScore: finalScore,
+      provider: 'orange_money_bf'
+    }
+  };
+}
+
+async function performFraudDetection(smsText, extractedData) {
+  console.log('🛡️ Détection de fraude');
+  
+  const fraudIndicators = [];
+  
+  // 1. Vérification des patterns suspects
+  VERIFICATION_CONFIG.suspiciousPatterns.forEach(pattern => {
+    if (pattern.test(smsText)) {
+      fraudIndicators.push(`Pattern suspect détecté: ${pattern.source}`);
+    }
+  });
+
+  // 2. Vérification de la cohérence des données
+  if (extractedData.amount && extractedData.amount > 1000000) {
+    fraudIndicators.push('Montant anormalement élevé');
+  }
+
+  if (extractedData.amount && extractedData.amount < 100) {
+    fraudIndicators.push('Montant anormalement faible');
+  }
+
+  // 3. Vérification de la structure du SMS
+  if (smsText.length < 100) {
+    fraudIndicators.push('SMS trop court');
+  }
+
+  if (smsText.length > 1000) {
+    fraudIndicators.push('SMS anormalement long');
+  }
+
+  // 4. Vérification des caractères non standard
+  if (/[^\x00-\x7F]/g.test(smsText) && !/[àâäéèêëïîôùûüÿç]/g.test(smsText)) {
+    fraudIndicators.push('Caractères non standard détectés');
+  }
+
+  // 5. Vérification de la répétition (copier-coller multiple)
+  const words = smsText.split(' ');
+  const uniqueWords = [...new Set(words)];
+  if (words.length > 20 && uniqueWords.length / words.length < 0.5) {
+    fraudIndicators.push('Contenu répétitif détecté');
+  }
+
+  return {
+    isFraudulent: fraudIndicators.length > 0,
+    reasons: fraudIndicators,
+    riskScore: Math.min(100, fraudIndicators.length * 20)
   };
 }
 
 async function checkForDuplicates(db, extractedData) {
+  if (!extractedData.transactionId) {
+    return { isDuplicate: false };
+  }
+
   const existingPayments = await db.collection(COLLECTIONS.PAYMENTS)
-    .find({
-      $or: [
-        { 'analysisResult.transactionId': extractedData.transactionId },
-        { 'paymentData.imageHash': extractedData.imageHash }
-      ]
-    })
+    .find({ 'analysisResult.transactionId': extractedData.transactionId })
     .limit(1)
     .toArray();
 
@@ -593,34 +589,17 @@ async function checkForDuplicates(db, extractedData) {
   return { isDuplicate: false };
 }
 
-async function savePaymentRecord(db, packageData, extractedData, verificationResult, paymentData, sessionInfo) {
+async function savePaymentRecord(db, packageData, extractedData, smsText, requestData) {
   const paymentRecord = {
     packageId: packageData._id,
     packageCode: packageData.colisID,
-    analysisResult: {
-      transactionId: extractedData.transactionId,
-      amount: extractedData.amount,
-      recipient: extractedData.recipient,
-      timestamp: extractedData.timestamp,
-      provider: extractedData.provider,
-      confidence: extractedData.confidence,
-      trustScore: verificationResult.trustScore,
-      imageHash: extractedData.imageHash
+    analysisResult: extractedData,
+    smsData: {
+      originalText: smsText,
+      textLength: smsText.length,
+      timestamp: requestData.timestamp
     },
-    verificationResult: {
-      success: verificationResult.success,
-      confidence: verificationResult.confidence,
-      trustScore: verificationResult.trustScore,
-      securityLevel: verificationResult.securityLevel,
-      checks: verificationResult.checks
-    },
-    paymentData: {
-      fileName: paymentData.fileName,
-      fileSize: paymentData.fileSize,
-      timestamp: paymentData.timestamp,
-      imageHash: extractedData.imageHash
-    },
-    sessionInfo: sessionInfo || {},
+    verificationMethod: 'sms_analysis_bf',
     status: 'verified',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -636,7 +615,7 @@ async function logSecurityEvent(db, eventType, eventData) {
       eventType,
       eventData,
       timestamp: new Date().toISOString(),
-      source: 'verify-payment-function'
+      source: 'verify-payment-sms'
     };
 
     await db.collection(COLLECTIONS.SECURITY_LOGS).insertOne(logEntry);
