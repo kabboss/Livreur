@@ -55,8 +55,11 @@ async function connectToDatabase() {
 const setCorsHeaders = (response) => ({
   ...response,
   headers: {
+
+
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    // Ajoutez vos en-têtes personnalisés ici :
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Security-Level, X-Session-Id',
     'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache',
