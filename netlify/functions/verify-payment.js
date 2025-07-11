@@ -4,7 +4,7 @@ const { MongoClient } = require('mongodb');
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
 const COLLECTIONS = {
-  PACKAGES: 'packages',
+  PACKAGES: 'Colis',
   PAYMENTS: 'payments',
   SECURITY_LOGS: 'security_logs'
 };
@@ -218,7 +218,7 @@ exports.handler = async (event, context) => {
 
     // Mise à jour du colis
     await db.collection(COLLECTIONS.PACKAGES).updateOne(
-      { _id: packageData._id },
+      { colisID: packageData.colisID },
       {
         $set: {
           paymentStatus: 'verified',
@@ -591,7 +591,7 @@ async function checkForDuplicates(db, extractedData) {
 
 async function savePaymentRecord(db, packageData, extractedData, smsText, requestData) {
   const paymentRecord = {
-    packageId: packageData._id,
+    packageId: packageData.colisID,
     packageCode: packageData.colisID,
     analysisResult: extractedData,
     smsData: {
