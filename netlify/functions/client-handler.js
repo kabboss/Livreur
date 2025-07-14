@@ -1,496 +1,665 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
-// 1. Configuration centralisée
-const CONFIG = {
-  mongo: {
-    uri: process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority",
-    dbName: "FarmsConnect",
-    collections: {
-      packages: "Colis",
-      deliveries: "Livraison",
-      refusals: "Refus",
-      tracking: "TrackingCodes",
-      clients: "infoclient",
-      payments: "Payments",
-      searchAttempts: "SearchAttempts"
-    },
-    options: {
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 30000,
-      serverSelectionTimeoutMS: 10000,
-      maxPoolSize: 15,
-      minPoolSize: 2,
-      retryWrites: true,
-      retryReads: true
-    }
-  },
-  delivery: {
-    basePrice: 700, // XOF
-    additionalKmPrice: 100, // XOF
-    freeKm: 5 // km
-  },
-  security: {
-    maxSearchAttempts: 5,
-    trackingCodeLength: 8,
-    allowedChars: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclut les caractères ambigus
+// Configuration MongoDB optimisée
+const mongoConfig = {
+  uri: process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority",
+  dbName: "FarmsConnect",
+  collections: {
+    colis: "Colis",
+    livraison: "Livraison",
+    refus: "Refus",
+    tracking: "TrackingCodes",
+    clients: "infoclient"
   }
 };
 
-// 2. Gestion de connexion MongoDB avec cache
-let mongoClient = null;
+// Cache de connexion pour optimiser les performances
+let cachedDb = null;
 
-async function getMongoConnection() {
-  if (mongoClient && mongoClient.isConnected()) {
-    return {
-      client: mongoClient,
-      db: mongoClient.db(CONFIG.mongo.dbName)
-    };
+/**
+ * Établit une connexion à MongoDB avec gestion du cache
+ */
+async function connectToDatabase() {
+  if (cachedDb && cachedDb.client.topology && cachedDb.client.topology.isConnected()) {
+    return cachedDb;
   }
 
+  const client = new MongoClient(mongoConfig.uri, {
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 30000,
+    serverSelectionTimeoutMS: 10000,
+    maxPoolSize: 10,
+    retryWrites: true,
+    useUnifiedTopology: true
+  });
+
   try {
-    mongoClient = new MongoClient(CONFIG.mongo.uri, CONFIG.mongo.options);
-    await mongoClient.connect();
+    await client.connect();
+    const db = client.db(mongoConfig.dbName);
     
-    // Vérification de la connexion
-    await mongoClient.db(CONFIG.mongo.dbName).command({ ping: 1 });
+    // Test de la connexion
+    await db.command({ ping: 1 });
     
-    return {
-      client: mongoClient,
-      db: mongoClient.db(CONFIG.mongo.dbName)
-    };
+    cachedDb = { db, client };
+    console.log('✅ Connexion MongoDB établie');
+    return cachedDb;
   } catch (error) {
-    mongoClient = null;
-    throw new Error(`MongoDB connection failed: ${error.message}`);
+    console.error("❌ Échec de connexion MongoDB:", error);
+    throw new Error("Impossible de se connecter à la base de données");
   }
 }
 
-// 3. Utilitaires généraux
-const utils = {
-  // Formatage des réponses
-  response: (statusCode, body, headers = {}) => ({
-    statusCode,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS, GET, PUT, DELETE',
-      'Content-Type': 'application/json',
-      ...headers
-    },
-    body: JSON.stringify(body)
-  }),
+/**
+ * Applique les headers CORS à toutes les réponses
+ */
+const setCorsHeaders = (response) => ({
+  ...response,
+  headers: {
 
-  // Validation des données
-  validate: (data, rules) => {
-    const errors = [];
-    
-    for (const [field, validator] of Object.entries(rules)) {
-      const value = data[field];
-      const error = validator(value, data);
-      if (error) errors.push({ field, error });
-    }
-    
-    return errors.length ? errors : null;
-  },
 
-  // Sanitisation des données
-  sanitize: (input) => {
-    if (typeof input !== 'object' || input === null) return input;
-    
-    const output = Array.isArray(input) ? [] : {};
-    
-    for (const [key, value] of Object.entries(input)) {
-      if (typeof value === 'string') {
-        output[key] = value
-          .trim()
-          .replace(/[\x00-\x1f\x7f-\x9f]/g, '')
-          .substring(0, 1000);
-      } else if (typeof value === 'object') {
-        output[key] = utils.sanitize(value);
-      } else {
-        output[key] = value;
-      }
-    }
-    
-    return output;
-  },
-
-  // Génération de codes uniques
-  generateTrackingCode: async (db) => {
-    const { allowedChars, trackingCodeLength } = CONFIG.security;
-    
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      const code = Array.from({ length: trackingCodeLength }, () =>
-        allowedChars.charAt(Math.floor(Math.random() * allowedChars.length))
-      ).join('');
-
-      const exists = await db.collection(CONFIG.mongo.collections.packages)
-        .findOne({ trackingCode: code });
-
-      if (!exists) return code;
-    }
-    
-    throw new Error('Failed to generate unique tracking code');
-  },
-
-  // Calcul de distance et prix
-  calculateDelivery: (origin, destination) => {
-    // Formule Haversine simplifiée
-    const R = 6371;
-    const dLat = (destination.latitude - origin.latitude) * Math.PI / 180;
-    const dLon = (destination.longitude - origin.longitude) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(origin.latitude * Math.PI / 180) * 
-      Math.cos(destination.latitude * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    // Calcul du prix
-    const { basePrice, additionalKmPrice, freeKm } = CONFIG.delivery;
-    const price = distance <= freeKm 
-      ? basePrice 
-      : basePrice + Math.ceil(distance - freeKm) * additionalKmPrice;
-
-    return { distance: parseFloat(distance.toFixed(2)), price };
+    'Access-Control-Allow-Origin': '*',
+    // Ajoutez vos en-têtes personnalisés ici :
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Security-Level, X-Session-Id',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    ...response.headers
   }
-};
+});
 
-// 4. Logging amélioré
-class Logger {
-  static log(level, message, data = {}) {
-    const timestamp = new Date().toISOString();
-    const logEntry = {
-      timestamp,
-      level,
-      message,
-      ...data
-    };
-
-    console.log(JSON.stringify(logEntry));
-    
-    // En production, vous pourriez envoyer les logs à un service externe
-    if (level === 'error' && process.env.NODE_ENV === 'production') {
-      // TODO: Implémenter l'envoi des erreurs critiques
-    }
-  }
-}
-
-// 5. Handlers métier
-const packageHandlers = {
-  create: async (db, data) => {
-    // Validation
-    const errors = utils.validate(data, {
-      sender: v => !v ? 'Sender is required' : null,
-      senderPhone: v => !/^\d{8,15}$/.test(v) ? 'Invalid phone format' : null,
-      recipient: v => !v ? 'Recipient is required' : null,
-      recipientPhone: v => !/^\d{8,15}$/.test(v) ? 'Invalid phone format' : null,
-      address: v => !v ? 'Address is required' : null,
-      packageType: v => !v ? 'Package type is required' : null,
-      location: v => !v || !v.latitude || !v.longitude ? 'Valid location required' : null,
-      photos: v => !Array.isArray(v) || v.length === 0 ? 'At least one photo required' : null
-    });
-
-    if (errors) {
-      throw { 
-        statusCode: 400, 
-        message: 'Validation failed',
-        details: errors 
-      };
-    }
-
-    // Génération du code de suivi
-    const trackingCode = await utils.generateTrackingCode(db);
-    const now = new Date();
-
-    // Construction du package
-    const packageData = {
-      _id: trackingCode,
-      trackingCode,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-      ...utils.sanitize(data),
-      history: [{
-        status: 'created',
-        date: now,
-        action: 'Package created',
-        location: data.location
-      }],
-      security: {
-        attempts: 0,
-        lastActivity: now
-      }
-    };
-
-    // Insertion en base
-    await db.collection(CONFIG.mongo.collections.packages)
-      .insertOne(packageData);
-
-    Logger.log('info', 'Package created', { trackingCode });
-
-    return {
-      trackingCode,
-      createdAt: now,
-      qrCodeUrl: `${process.env.CLIENT_URL || 'https://send20.netlify.app'}/track?code=${trackingCode}`
-    };
-  },
-
-  search: async (db, data) => {
-    const errors = utils.validate(data, {
-      code: v => !v ? 'Tracking code is required' : null,
-      nom: v => !v ? 'Name is required' : null,
-      numero: v => !/^\d{8,15}$/.test(v) ? 'Invalid phone format' : null
-    });
-
-    if (errors) {
-      throw { 
-        statusCode: 400, 
-        message: 'Validation failed',
-        details: errors 
-      };
-    }
-
-    const { code, nom, numero } = data;
-    const normalizedCode = code.toUpperCase().trim();
-    const normalizedPhone = numero.replace(/\D/g, '');
-
-    // Recherche du colis
-    const package = await db.collection(CONFIG.mongo.collections.packages)
-      .findOne({ trackingCode: normalizedCode });
-
-    if (!package) {
-      Logger.log('warn', 'Package not found', { code: normalizedCode });
-      throw { statusCode: 404, message: 'Package not found' };
-    }
-
-    // Vérification des informations
-    const nameMatch = utils.normalizeString(nom) === utils.normalizeString(package.recipient);
-    const phoneMatch = normalizedPhone === package.recipientPhone.replace(/\D/g, '');
-
-    if (!nameMatch || !phoneMatch) {
-      Logger.log('warn', 'Invalid package credentials', {
-        code: normalizedCode,
-        nameMatch,
-        phoneMatch
-      });
-
-      // Enregistrement de la tentative échouée
-      await db.collection(CONFIG.mongo.collections.searchAttempts).insertOne({
-        code: normalizedCode,
-        attemptAt: new Date(),
-        success: false,
-        ip: data.clientIp
-      });
-
-      throw { statusCode: 403, message: 'Invalid credentials' };
-    }
-
-    // Mise à jour de l'activité
-    await db.collection(CONFIG.mongo.collections.packages).updateOne(
-      { trackingCode: normalizedCode },
-      { $set: { 'security.lastActivity': new Date() } }
-    );
-
-    // Retour des données (sans les champs sensibles)
-    const { _id, security, history, ...responseData } = package;
-    
-    return responseData;
-  },
-
-  accept: async (db, client, data) => {
-    const session = client.startSession();
-    
-    try {
-      let deliveryDoc;
-
-      await session.withTransaction(async () => {
-        // Validation
-        const errors = utils.validate(data, {
-          colisID: v => !v ? 'Package ID is required' : null,
-          location: v => !v || !v.latitude || !v.longitude ? 'Valid location required' : null
-        });
-
-        if (errors) throw { statusCode: 400, details: errors };
-
-        // Récupération du colis
-        const package = await db.collection(CONFIG.mongo.collections.packages)
-          .findOne({ colisID: data.colisID }, { session });
-
-        if (!package) throw { statusCode: 404, message: 'Package not found' };
-        if (package.status !== 'pending') {
-          throw { 
-            statusCode: 409, 
-            message: `Package already ${package.status}`
-          };
-        }
-
-        // Calcul de la livraison
-        const now = new Date();
-        const { distance, price } = utils.calculateDelivery(
-          package.location,
-          data.location
-        );
-
-        // Création de la livraison
-        deliveryDoc = {
-          _id: `DLV_${Date.now()}`,
-          packageId: package._id,
-          status: 'in_progress',
-          distance,
-          price,
-          currency: 'XOF',
-          acceptedAt: now,
-          history: [
-            ...(package.history || []),
-            {
-              status: 'accepted',
-              date: now,
-              action: 'Package accepted by recipient'
-            }
-          ]
-        };
-
-        // Mise à jour du statut
-        await db.collection(CONFIG.mongo.collections.packages).updateOne(
-          { _id: package._id },
-          { $set: { status: 'accepted', updatedAt: now } },
-          { session }
-        );
-
-        // Création de la livraison
-        await db.collection(CONFIG.mongo.collections.deliveries)
-          .insertOne(deliveryDoc, { session });
-
-        Logger.log('info', 'Package accepted', { 
-          packageId: package._id,
-          distance,
-          price 
-        });
-      });
-
-      return {
-        deliveryId: deliveryDoc._id,
-        status: deliveryDoc.status,
-        price: deliveryDoc.price,
-        currency: deliveryDoc.currency
-      };
-    } finally {
-      await session.endSession();
-    }
-  },
-
-  decline: async (db, client, data) => {
-    const session = client.startSession();
-    
-    try {
-      let refusalDoc;
-
-      await session.withTransaction(async () => {
-        if (!data.colisID) {
-          throw { statusCode: 400, message: 'Package ID is required' };
-        }
-
-        // Récupération du colis
-        const package = await db.collection(CONFIG.mongo.collections.packages)
-          .findOne({ colisID: data.colisID }, { session });
-
-        if (!package) throw { statusCode: 404, message: 'Package not found' };
-        if (package.status === 'declined') {
-          throw { statusCode: 409, message: 'Package already declined' };
-        }
-
-        // Archivage du refus
-        const now = new Date();
-        refusalDoc = {
-          _id: `REF_${Date.now()}`,
-          packageId: package._id,
-          reason: data.reason || 'No reason provided',
-          declinedAt: now,
-          originalData: package
-        };
-
-        await db.collection(CONFIG.mongo.collections.refusals)
-          .insertOne(refusalDoc, { session });
-
-        // Suppression du colis
-        await db.collection(CONFIG.mongo.collections.packages)
-          .deleteOne({ _id: package._id }, { session });
-
-        Logger.log('info', 'Package declined', { 
-          packageId: package._id,
-          reason: refusalDoc.reason 
-        });
-      });
-
-      return {
-        refusalId: refusalDoc._id,
-        declinedAt: refusalDoc.declinedAt
-      };
-    } finally {
-      await session.endSession();
-    }
-  }
-};
-
-// 6. Handler principal
+/**
+ * Fonction principale du handler Netlify
+ */
 exports.handler = async (event, context) => {
+  // Optimisation Netlify
   context.callbackWaitsForEmptyEventLoop = false;
-  
+
+  console.log(`📥 Requête reçue: ${event.httpMethod} ${event.path}`);
+
+  // Gestion des requêtes OPTIONS (pré-vol CORS)
+  if (event.httpMethod === 'OPTIONS') {
+    return setCorsHeaders({ 
+      statusCode: 204, 
+      body: '' 
+    });
+  }
+
+  // Vérification de la méthode HTTP
+  if (event.httpMethod !== 'POST') {
+    return setCorsHeaders({
+      statusCode: 405,
+      body: JSON.stringify({ 
+        error: 'Méthode non autorisée',
+        allowed: ['POST', 'OPTIONS']
+      })
+    });
+  }
+
   try {
-    // Gestion des OPTIONS CORS
-    if (event.httpMethod === 'OPTIONS') {
-      return utils.response(204, {});
-    }
+    // Connexion à la base de données
+    const dbConnection = await connectToDatabase();
+    const { db, client } = dbConnection;
 
-    // Vérification de la méthode
-    if (event.httpMethod !== 'POST') {
-      return utils.response(405, { error: 'Method not allowed' });
-    }
-
-    // Connexion à MongoDB
-    const { db, client } = await getMongoConnection();
-    
-    // Parsing du body
+    // Parsing du body de la requête
     let data;
     try {
       data = JSON.parse(event.body || '{}');
-      data = utils.sanitize(data);
-    } catch (e) {
-      return utils.response(400, { error: 'Invalid JSON format' });
-    }
-
-    // Vérification de l'action
-    if (!data.action || !packageHandlers[data.action]) {
-      return utils.response(400, { 
-        error: 'Invalid action',
-        validActions: Object.keys(packageHandlers)
+    } catch (parseError) {
+      console.error('❌ Erreur parsing JSON:', parseError);
+      return setCorsHeaders({
+        statusCode: 400,
+        body: JSON.stringify({ 
+          error: 'Format JSON invalide',
+          details: parseError.message
+        })
       });
     }
 
-    // Ajout des métadonnées de la requête
-    data.clientIp = event.headers['client-ip'] || event.headers['x-forwarded-for'];
-    data.userAgent = event.headers['user-agent'];
+    const { action } = data;
 
-    // Exécution du handler
-    const result = await packageHandlers[data.action](db, client, data);
-    
-    return utils.response(200, { success: true, ...result });
-    
+    // Validation de l'action
+    if (!action) {
+      return setCorsHeaders({
+        statusCode: 400,
+        body: JSON.stringify({ 
+          error: 'Paramètre "action" requis',
+          validActions: ['create', 'search', 'accept', 'decline']
+        })
+      });
+    }
+
+    console.log(`🎯 Action demandée: ${action}`);
+
+    // Routage des actions
+    let response;
+    switch (action) {
+      case 'create':
+        response = await handleCreatePackage(db, data);
+        break;
+      case 'search':
+        response = await handleSearchPackage(db, data);
+        break;
+      case 'accept':
+        response = await handleAcceptPackage(db, client, data);
+        break;
+      case 'decline':
+        response = await handleDeclinePackage(db, client, data);
+        break;
+      default:
+        response = {
+          statusCode: 400,
+          body: JSON.stringify({ 
+            error: `Action "${action}" non reconnue`,
+            validActions: ['create', 'search', 'accept', 'decline']
+          })
+        };
+    }
+
+    console.log(`✅ Action ${action} traitée avec succès`);
+    return setCorsHeaders(response);
+
   } catch (error) {
-    Logger.log('error', 'Handler error', { 
-      error: error.message,
-      stack: error.stack 
+    console.error("❌ Erreur globale du handler:", error);
+    return setCorsHeaders({
+      statusCode: 500,
+      body: JSON.stringify({
+        error: 'Erreur serveur interne',
+        message: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      })
     });
-
-    const statusCode = error.statusCode || 500;
-    const response = {
-      success: false,
-      error: error.message || 'Internal server error'
-    };
-
-    if (error.details) response.details = error.details;
-    if (process.env.NODE_ENV === 'development') response.stack = error.stack;
-
-    return utils.response(statusCode, response);
   }
 };
+
+/**
+ * Gère la création d'un nouveau colis
+ */
+async function handleCreatePackage(db, data) {
+  console.log('📦 Création d\'un nouveau colis');
+
+  // Validation des champs obligatoires
+  const requiredFields = [
+    'sender', 'senderPhone', 'recipient', 'recipientPhone', 
+    'address', 'packageType', 'location', 'photos'
+  ];
+  
+  const missingFields = requiredFields.filter(field => {
+    const value = data[field];
+    if (field === 'photos') {
+      return !Array.isArray(value) || value.length === 0;
+    }
+    return !value || (typeof value === 'string' && value.trim() === '');
+  });
+
+  if (missingFields.length > 0) {
+    console.error('❌ Champs manquants:', missingFields);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'Champs obligatoires manquants',
+        missing: missingFields,
+        received: Object.keys(data)
+      })
+    };
+  }
+
+  // Validation de la localisation
+  if (!data.location.latitude || !data.location.longitude) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'Coordonnées GPS invalides',
+        received: data.location
+      })
+    };
+  }
+
+  try {
+    // Génération du code de suivi unique
+    const trackingCode = await generateTrackingCode(db);
+    const now = new Date();
+
+    // Construction de l'objet colis
+    const packageData = {
+      _id: trackingCode,
+      colisID: trackingCode,
+      trackingCode,
+      status: 'pending',
+      
+      // Informations expéditeur
+      sender: data.sender.trim(),
+      senderPhone: data.senderPhone.trim(),
+      
+      // Informations destinataire
+      recipient: data.recipient.trim(),
+      recipientPhone: data.recipientPhone.trim(),
+      address: data.address.trim(),
+      
+      // Détails du colis
+      packageType: data.packageType,
+      description: data.description?.trim() || '',
+      photos: data.photos,
+      
+      // Localisation et métadonnées
+      location: {
+        latitude: parseFloat(data.location.latitude),
+        longitude: parseFloat(data.location.longitude),
+        accuracy: data.location.accuracy || 0
+      },
+      
+      // Timestamps
+      createdAt: now,
+      updatedAt: now,
+      timestamp: data.timestamp || now.toISOString(),
+      
+      // Historique des statuts
+      history: [{
+        status: 'created',
+        date: now,
+        location: data.location,
+        action: 'Colis créé par l\'expéditeur'
+      }],
+      
+      // Métadonnées techniques
+      metadata: {
+        userAgent: data.userAgent,
+        ...data.metadata
+      }
+    };
+
+    // Insertion en base de données
+    await db.collection(mongoConfig.collections.colis).insertOne(packageData);
+
+    console.log(`✅ Colis créé avec succès: ${trackingCode}`);
+    
+    return {
+      statusCode: 201,
+      body: JSON.stringify({
+        success: true,
+        trackingCode,
+        colisID: trackingCode,
+        createdAt: now.toISOString(),
+        message: 'Colis créé avec succès'
+      })
+    };
+
+  } catch (error) {
+    console.error("❌ Erreur lors de la création du colis:", error);
+    
+    // Gestion des erreurs de duplication
+    if (error.code === 11000) {
+      return {
+        statusCode: 409,
+        body: JSON.stringify({ 
+          error: 'Code de suivi déjà existant',
+          message: 'Veuillez réessayer'
+        })
+      };
+    }
+    
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        error: 'Échec de création du colis',
+        details: error.message
+      })
+    };
+  }
+}
+
+/**
+ * Gère la recherche d'un colis
+ */
+async function handleSearchPackage(db, data) {
+  console.log('🔍 Recherche d\'un colis');
+
+  const { code, nom, numero } = data;
+
+  // Validation des paramètres de recherche
+  if (!code || !nom || !numero) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({
+        error: 'Paramètres de recherche incomplets',
+        required: ['code', 'nom', 'numero'],
+        received: { code: !!code, nom: !!nom, numero: !!numero }
+      })
+    };
+  }
+
+  try {
+    // Recherche du colis par code de suivi
+    const colis = await db.collection(mongoConfig.collections.colis)
+      .findOne({ 
+        trackingCode: code.toUpperCase().trim()
+      });
+
+    if (!colis) {
+      console.log(`❌ Colis introuvable: ${code}`);
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ 
+          error: 'Colis introuvable',
+          code: code.toUpperCase()
+        })
+      };
+    }
+
+    // Vérification des informations du destinataire
+    const nomMatch = colis.recipient.toLowerCase().trim() === nom.toLowerCase().trim();
+    const numeroMatch = colis.recipientPhone.trim() === numero.trim();
+
+    if (!nomMatch || !numeroMatch) {
+      console.log(`❌ Informations incorrectes pour le colis: ${code}`);
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ 
+          error: 'Les informations ne correspondent pas au destinataire enregistré',
+          hint: 'Vérifiez l\'orthographe exacte du nom et du numéro de téléphone'
+        })
+      };
+    }
+
+    // Suppression des champs sensibles avant envoi
+    const { _id, ...safeColisData } = colis;
+
+    console.log(`✅ Colis trouvé et validé: ${code}`);
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ 
+        success: true, 
+        colis: safeColisData,
+        message: 'Colis localisé avec succès'
+      })
+    };
+
+  } catch (error) {
+    console.error("❌ Erreur lors de la recherche:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        error: 'Erreur lors de la recherche du colis',
+        details: error.message
+      })
+    };
+  }
+}
+
+/**
+ * Gère l'acceptation d'un colis par le destinataire
+ */
+async function handleAcceptPackage(db, client, data) {
+  console.log('✅ Acceptation d\'un colis');
+
+  const { colisID, location } = data;
+
+  // Validation des paramètres
+  if (!colisID) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'ID du colis requis',
+        received: data
+      })
+    };
+  }
+
+  if (!location || typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'Localisation GPS invalide',
+        required: 'latitude et longitude numériques',
+        received: location
+      })
+    };
+  }
+
+  // Transaction pour garantir la cohérence des données
+  const session = client.startSession();
+  
+  try {
+    let livraisonDoc;
+
+    await session.withTransaction(async () => {
+      // Recherche du colis
+      const colis = await db.collection(mongoConfig.collections.colis)
+        .findOne({ colisID: colisID.toUpperCase() }, { session });
+
+      if (!colis) {
+        throw new Error('Colis introuvable');
+      }
+
+      if (colis.status === 'accepted') {
+        throw new Error('Colis déjà accepté');
+      }
+
+      const now = new Date();
+      
+      // Création du document de livraison
+      livraisonDoc = {
+        colisID: colis.colisID,
+        livraisonID: `LIV_${colis.colisID}_${now.getTime()}`,
+        
+        // Informations des parties
+        expediteur: {
+          nom: colis.sender,
+          telephone: colis.senderPhone,
+          location: colis.location
+        },
+        destinataire: {
+          nom: colis.recipient,
+          telephone: colis.recipientPhone,
+          adresse: colis.address,
+          location: location
+        },
+        
+        // Détails du colis
+        colis: {
+          type: colis.packageType,
+          description: colis.description,
+          photos: colis.photos || []
+        },
+        
+        // Statut et dates
+        statut: "en_cours_de_livraison",
+        dateCreation: colis.createdAt,
+        dateAcceptation: now,
+        
+        // Localisation du destinataire
+        localisation: {
+          latitude: parseFloat(location.latitude),
+          longitude: parseFloat(location.longitude),
+          accuracy: location.accuracy || 0,
+          timestamp: now
+        },
+        
+        // Historique complet
+        historique: [
+          ...(colis.history || []),
+          { 
+            event: "accepté_par_destinataire", 
+            date: now, 
+            location: location,
+            action: "Colis accepté par le destinataire"
+          }
+        ]
+      };
+
+      // Insertion du document de livraison
+      await db.collection(mongoConfig.collections.livraison)
+        .insertOne(livraisonDoc, { session });
+
+      // Mise à jour du statut du colis
+      await db.collection(mongoConfig.collections.colis).updateOne(
+        { colisID: colis.colisID },
+        {
+          $set: { 
+            status: "accepted", 
+            updatedAt: now,
+            acceptedAt: now,
+            destinataireLocation: location
+          },
+          $push: { 
+            history: { 
+              status: 'accepted', 
+              date: now, 
+              location: location,
+              action: "Accepté par le destinataire"
+            } 
+          }
+        },
+        { session }
+      );
+
+      console.log(`✅ Colis accepté avec succès: ${colis.colisID}`);
+    });
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+        livraisonID: livraisonDoc.livraisonID,
+        status: livraisonDoc.statut,
+        dateAcceptation: livraisonDoc.dateAcceptation.toISOString(),
+        message: 'Colis accepté avec succès'
+      })
+    };
+
+  } catch (error) {
+    console.error("❌ Erreur lors de l'acceptation:", error);
+    
+    const statusCode = error.message === 'Colis introuvable' ? 404 : 
+                      error.message === 'Colis déjà accepté' ? 409 : 500;
+    
+    return {
+      statusCode,
+      body: JSON.stringify({ 
+        error: error.message,
+        details: error.message === 'Colis introuvable' ? 
+          'Vérifiez le code de suivi' : 
+          'Contactez le support si le problème persiste'
+      })
+    };
+  } finally {
+    await session.endSession();
+  }
+}
+
+/**
+ * Gère le refus d'un colis par le destinataire
+ */
+async function handleDeclinePackage(db, client, data) {
+  console.log('❌ Refus d\'un colis');
+
+  const { colisID, reason = "Refus par le destinataire" } = data;
+
+  if (!colisID) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'ID du colis requis',
+        received: data
+      })
+    };
+  }
+
+  // Transaction pour garantir la cohérence
+  const session = client.startSession();
+  
+  try {
+    await session.withTransaction(async () => {
+      // Recherche du colis
+      const colis = await db.collection(mongoConfig.collections.colis)
+        .findOne({ colisID: colisID.toUpperCase() }, { session });
+
+      if (!colis) {
+        throw new Error('Colis introuvable');
+      }
+
+      const now = new Date();
+
+      // Archivage dans la collection des refus
+      await db.collection(mongoConfig.collections.refus).insertOne({
+        colisID: colis.colisID,
+        dateRefus: now,
+        raison: reason,
+        donneesOriginales: colis,
+        metadata: {
+          refusePar: 'destinataire',
+          timestamp: now.toISOString()
+        }
+      }, { session });
+
+      // Suppression du colis et des données associées
+      await db.collection(mongoConfig.collections.colis)
+        .deleteOne({ colisID: colis.colisID }, { session });
+      
+      await db.collection(mongoConfig.collections.livraison)
+        .deleteMany({ colisID: colis.colisID }, { session });
+      
+      await db.collection(mongoConfig.collections.tracking)
+        .deleteOne({ code: colis.colisID }, { session });
+
+      console.log(`✅ Colis refusé et supprimé: ${colis.colisID}`);
+    });
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ 
+        success: true, 
+        message: 'Colis refusé et supprimé du système avec succès'
+      })
+    };
+
+  } catch (error) {
+    console.error("❌ Erreur lors du refus:", error);
+    
+    const statusCode = error.message === 'Colis introuvable' ? 404 : 500;
+    
+    return {
+      statusCode,
+      body: JSON.stringify({ 
+        error: error.message,
+        details: error.message === 'Colis introuvable' ? 
+          'Le colis a peut-être déjà été supprimé' : 
+          'Erreur technique lors du refus'
+      })
+    };
+  } finally {
+    await session.endSession();
+  }
+}
+
+
+/**
+ * Génère un code de suivi unique
+ * sans stocker dans une collection séparée
+ */
+async function generateTrackingCode(db) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans O, I, 0, 1
+  const codeLength = 8;
+  let code, exists;
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  do {
+    if (attempts >= maxAttempts) {
+      throw new Error('Impossible de générer un code unique après plusieurs tentatives');
+    }
+
+    // Génération aléatoire du code
+    code = Array.from({ length: codeLength }, () =>
+      chars.charAt(Math.floor(Math.random() * chars.length))
+    ).join('');
+
+    // Vérifie l'unicité dans la collection "Colis"
+    exists = await db.collection(mongoConfig.collections.colis).findOne({ trackingCode: code });
+
+    attempts++;
+  } while (exists);
+
+  console.log(`🎯 Code de suivi généré: ${code} (tentatives: ${attempts})`);
+  return code;
+}
