@@ -19,36 +19,36 @@ let mongoClient = null;
 
 // Cache pour optimiser les performances
 const cache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
-// Configuration des collections
+// Configuration des collections avec nettoyage automatique
 const COLLECTIONS_CONFIG = {
     'Colis': {
         name: 'Colis',
         deleteAfterDays: 2,
         deleteCondition: { status: { $in: ['pending', 'created'] } },
         cleanupField: 'createdAt',
-        searchFields: ['colisID', 'sender', 'recipient', 'address', 'description']
+        searchFields: ['colisID', 'trackingCode', 'sender', 'recipient', 'address', 'description']
     },
     'Livraison': {
         name: 'Livraison',
         deleteAfterDays: 2,
         deleteCondition: { statut: { $in: ['pending', 'en_attente'] } },
         cleanupField: 'dateCreation',
-        searchFields: ['livraisonID', 'expediteur.nom', 'destinataire.nom', 'destinataire.adresse']
+        searchFields: ['livraisonID', 'colisID', 'expediteur.nom', 'destinataire.nom', 'destinataire.adresse']
     },
     'cour_expedition': {
         name: 'cour_expedition',
         deleteAfterDays: null,
         cleanupField: 'assignedAt',
-        searchFields: ['colisID', 'driverName', 'driverId']
+        searchFields: ['colisID', 'livraisonID', 'driverName', 'driverId']
     },
     'LivraisonsEffectuees': {
         name: 'LivraisonsEffectuees',
         deleteAfterDays: 3,
         deleteCondition: {},
         cleanupField: 'deliveredAt',
-        searchFields: ['colisID', 'driverName', 'deliveryNotes']
+        searchFields: ['colisID', 'livraisonID', 'driverName', 'deliveryNotes']
     },
     'Refus': {
         name: 'Refus',
@@ -392,6 +392,7 @@ async function getCollectionData(db, data) {
             });
         }
 
+        const config = COLLECTIONS_CONFIG[collection];
         const offset = (page - 1) * limit;
 
         // Construction de la requête
@@ -400,7 +401,7 @@ async function getCollectionData(db, data) {
         // Recherche textuelle
         if (search && search.trim()) {
             const searchRegex = new RegExp(search.trim(), 'i');
-            query.$or = getSearchFields(collection, searchRegex);
+            query.$or = config.searchFields.map(field => ({ [field]: searchRegex }));
         }
 
         // Filtre par statut
@@ -413,7 +414,7 @@ async function getCollectionData(db, data) {
 
         // Filtre par période
         if (period) {
-            const dateField = getDateField(collection);
+            const dateField = config.cleanupField;
             if (dateField) {
                 const dateFilter = getPeriodFilter(period);
                 if (dateFilter) {
@@ -423,7 +424,7 @@ async function getCollectionData(db, data) {
         }
 
         // Déterminer le tri par défaut
-        let defaultSortField = getDateField(collection) || '_id';
+        let defaultSortField = config.cleanupField || '_id';
         const actualSortBy = sortBy || defaultSortField;
         
         // Tri
@@ -516,15 +517,6 @@ async function getItemDetails(db, data) {
     }
 }
 
-function getSearchFields(collection, searchRegex) {
-    const config = COLLECTIONS_CONFIG[collection];
-    if (!config || !config.searchFields) {
-        return [{ _id: searchRegex }];
-    }
-
-    return config.searchFields.map(field => ({ [field]: searchRegex }));
-}
-
 function getStatusField(collection) {
     const statusFieldMap = {
         'Colis': 'status',
@@ -538,15 +530,11 @@ function getStatusField(collection) {
         'Restau': 'statut',
         'compte_livreur': 'statut',
         'demande_livreur': 'statut',
-        'demande_restau': 'statut'
+        'demande_restau': 'statut',
+        'Refus': null
     };
 
     return statusFieldMap[collection];
-}
-
-function getDateField(collection) {
-    const config = COLLECTIONS_CONFIG[collection];
-    return config ? config.cleanupField : 'createdAt';
 }
 
 function getPeriodFilter(period) {
@@ -1060,7 +1048,7 @@ async function approuverDemande(db, data) {
 
 async function rejeterDemande(db, data) {
     try {
-        const { demandeId, type, motif } = data;
+        const { demandeId, type, motif, recommandations = '' } = data;
 
         console.log(`❌ Rejet demande: ${demandeId} (${type})`);
 
@@ -1095,6 +1083,7 @@ async function rejeterDemande(db, data) {
                     dateTraitement: new Date(),
                     traiteePar: 'admin',
                     motifRejet: motif,
+                    recommandations: recommandations,
                     updatedAt: new Date()
                 }
             }
@@ -1156,6 +1145,18 @@ async function envoyerNotification(db, data) {
             });
         }
 
+        // Marquer la notification comme envoyée
+        await db.collection(collectionName).updateOne(
+            { _id: new ObjectId(demandeId) },
+            {
+                $set: {
+                    dateNotification: new Date(),
+                    notificationEnvoyee: true,
+                    updatedAt: new Date()
+                }
+            }
+        );
+
         // Simuler l'envoi de notification
         // TODO: Intégrer un service réel de WhatsApp/SMS
         
@@ -1204,6 +1205,9 @@ async function runCleanup(db, data = {}) {
 
         // Enregistrer l'historique du nettoyage
         await saveCleanupHistory(db, results);
+
+        // Nettoyer le cache
+        clearCache();
 
         console.log('✅ Nettoyage automatique terminé');
 
@@ -1370,11 +1374,14 @@ async function globalSearch(db, data) {
         const results = {};
 
         // Rechercher dans toutes les collections configurées
-        const searchPromises = Object.keys(COLLECTIONS_CONFIG).map(async (collectionName) => {
+        const searchPromises = Object.entries(COLLECTIONS_CONFIG).map(async ([collectionName, config]) => {
             try {
-                const searchFields = getSearchFields(collectionName, searchRegex);
+                const searchQuery = {
+                    $or: config.searchFields.map(field => ({ [field]: searchRegex }))
+                };
+                
                 const items = await db.collection(collectionName)
-                    .find({ $or: searchFields })
+                    .find(searchQuery)
                     .limit(limit)
                     .toArray();
 
@@ -1858,12 +1865,12 @@ function genererMessageNotification(demande, type) {
     const code = demande.codeAutorisation;
     
     if (demande.statut === 'approuvee') {
-        return `🎉 Félicitations ${nom} ! Votre demande a été approuvée. Votre code d'autorisation est : ${code}. Finalisez votre inscription sur notre site avec ce code.`;
+        return `🎉 Félicitations ${nom} ! Votre demande SEND2.0 a été approuvée. Votre code d'autorisation est : ${code}. Finalisez votre inscription sur notre plateforme avec ce code.`;
     } else if (demande.statut === 'rejetee') {
-        return `❌ Bonjour ${nom}, nous regrettons de vous informer que votre demande a été rejetée. Motif : ${demande.motifRejet}. Vous pouvez soumettre une nouvelle demande après correction.`;
+        return `❌ Bonjour ${nom}, nous regrettons de vous informer que votre demande SEND2.0 a été rejetée. Motif : ${demande.motifRejet}. Vous pouvez soumettre une nouvelle demande après correction.`;
     }
     
-    return `📋 Bonjour ${nom}, votre demande est en cours de traitement. Vous recevrez une notification dès qu'elle sera traitée.`;
+    return `📋 Bonjour ${nom}, votre demande SEND2.0 est en cours de traitement. Vous recevrez une notification dès qu'elle sera traitée.`;
 }
 
 function getTempsEcoule(dateCreation) {
