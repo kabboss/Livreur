@@ -1,24 +1,17 @@
 const { MongoClient, ObjectId } = require('mongodb');
 
-// Configuration MongoDB optimisée
 const mongoConfig = {
   uri: process.env.MONGO_URI || "mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority",
   dbName: "FarmsConnect",
   collections: {
     colis: "Colis",
     livraison: "Livraison",
-    refus: "Refus",
-    tracking: "TrackingCodes",
-    clients: "infoclient"
+    refus: "Refus"
   }
 };
 
-// Cache de connexion pour optimiser les performances
 let cachedDb = null;
 
-/**
- * Établit une connexion à MongoDB avec gestion du cache
- */
 async function connectToDatabase() {
   if (cachedDb && cachedDb.client.topology && cachedDb.client.topology.isConnected()) {
     return cachedDb;
@@ -36,8 +29,6 @@ async function connectToDatabase() {
   try {
     await client.connect();
     const db = client.db(mongoConfig.dbName);
-    
-    // Test de la connexion
     await db.command({ ping: 1 });
     
     cachedDb = { db, client };
@@ -49,17 +40,11 @@ async function connectToDatabase() {
   }
 }
 
-/**
- * Applique les headers CORS à toutes les réponses
- */
 const setCorsHeaders = (response) => ({
   ...response,
   headers: {
-
-
     'Access-Control-Allow-Origin': '*',
-    // Ajoutez vos en-têtes personnalisés ici :
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Security-Level, X-Session-Id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache',
@@ -67,16 +52,11 @@ const setCorsHeaders = (response) => ({
   }
 });
 
-/**
- * Fonction principale du handler Netlify
- */
 exports.handler = async (event, context) => {
-  // Optimisation Netlify
   context.callbackWaitsForEmptyEventLoop = false;
 
   console.log(`📥 Requête reçue: ${event.httpMethod} ${event.path}`);
 
-  // Gestion des requêtes OPTIONS (pré-vol CORS)
   if (event.httpMethod === 'OPTIONS') {
     return setCorsHeaders({ 
       statusCode: 204, 
@@ -84,7 +64,6 @@ exports.handler = async (event, context) => {
     });
   }
 
-  // Vérification de la méthode HTTP
   if (event.httpMethod !== 'POST') {
     return setCorsHeaders({
       statusCode: 405,
@@ -96,11 +75,9 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Connexion à la base de données
     const dbConnection = await connectToDatabase();
     const { db, client } = dbConnection;
 
-    // Parsing du body de la requête
     let data;
     try {
       data = JSON.parse(event.body || '{}');
@@ -117,7 +94,6 @@ exports.handler = async (event, context) => {
 
     const { action } = data;
 
-    // Validation de l'action
     if (!action) {
       return setCorsHeaders({
         statusCode: 400,
@@ -130,7 +106,6 @@ exports.handler = async (event, context) => {
 
     console.log(`🎯 Action demandée: ${action}`);
 
-    // Routage des actions
     let response;
     switch (action) {
       case 'create':
@@ -164,20 +139,15 @@ exports.handler = async (event, context) => {
       statusCode: 500,
       body: JSON.stringify({
         error: 'Erreur serveur interne',
-        message: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        message: error.message
       })
     });
   }
 };
 
-/**
- * Gère la création d'un nouveau colis
- */
 async function handleCreatePackage(db, data) {
   console.log('📦 Création d\'un nouveau colis');
 
-  // Validation des champs obligatoires
   const requiredFields = [
     'sender', 'senderPhone', 'recipient', 'recipientPhone', 
     'address', 'packageType', 'location', 'photos'
@@ -197,13 +167,24 @@ async function handleCreatePackage(db, data) {
       statusCode: 400,
       body: JSON.stringify({ 
         error: 'Champs obligatoires manquants',
-        missing: missingFields,
-        received: Object.keys(data)
+        missing: missingFields
       })
     };
   }
 
-  // Validation de la localisation
+  // Validation du type de colis
+  const validPackageTypes = ['petit', 'moyen', 'gros'];
+  if (!validPackageTypes.includes(data.packageType)) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ 
+        error: 'Type de colis invalide',
+        validTypes: validPackageTypes,
+        received: data.packageType
+      })
+    };
+  }
+
   if (!data.location.latitude || !data.location.longitude) {
     return {
       statusCode: 400,
@@ -215,44 +196,36 @@ async function handleCreatePackage(db, data) {
   }
 
   try {
-    // Génération du code de suivi unique
     const trackingCode = await generateTrackingCode(db);
     const now = new Date();
 
-    // Construction de l'objet colis
     const packageData = {
       _id: trackingCode,
       colisID: trackingCode,
       trackingCode,
       status: 'pending',
       
-      // Informations expéditeur
       sender: data.sender.trim(),
       senderPhone: data.senderPhone.trim(),
       
-      // Informations destinataire
       recipient: data.recipient.trim(),
       recipientPhone: data.recipientPhone.trim(),
       address: data.address.trim(),
       
-      // Détails du colis
       packageType: data.packageType,
       description: data.description?.trim() || '',
       photos: data.photos,
       
-      // Localisation et métadonnées
       location: {
         latitude: parseFloat(data.location.latitude),
         longitude: parseFloat(data.location.longitude),
         accuracy: data.location.accuracy || 0
       },
       
-      // Timestamps
       createdAt: now,
       updatedAt: now,
       timestamp: data.timestamp || now.toISOString(),
       
-      // Historique des statuts
       history: [{
         status: 'created',
         date: now,
@@ -260,14 +233,12 @@ async function handleCreatePackage(db, data) {
         action: 'Colis créé par l\'expéditeur'
       }],
       
-      // Métadonnées techniques
       metadata: {
         userAgent: data.userAgent,
         ...data.metadata
       }
     };
 
-    // Insertion en base de données
     await db.collection(mongoConfig.collections.colis).insertOne(packageData);
 
     console.log(`✅ Colis créé avec succès: ${trackingCode}`);
@@ -278,6 +249,7 @@ async function handleCreatePackage(db, data) {
         success: true,
         trackingCode,
         colisID: trackingCode,
+        packageType: data.packageType,
         createdAt: now.toISOString(),
         message: 'Colis créé avec succès'
       })
@@ -286,7 +258,6 @@ async function handleCreatePackage(db, data) {
   } catch (error) {
     console.error("❌ Erreur lors de la création du colis:", error);
     
-    // Gestion des erreurs de duplication
     if (error.code === 11000) {
       return {
         statusCode: 409,
@@ -307,28 +278,22 @@ async function handleCreatePackage(db, data) {
   }
 }
 
-/**
- * Gère la recherche d'un colis
- */
 async function handleSearchPackage(db, data) {
   console.log('🔍 Recherche d\'un colis');
 
   const { code, nom, numero } = data;
 
-  // Validation des paramètres de recherche
   if (!code || !nom || !numero) {
     return {
       statusCode: 400,
       body: JSON.stringify({
         error: 'Paramètres de recherche incomplets',
-        required: ['code', 'nom', 'numero'],
-        received: { code: !!code, nom: !!nom, numero: !!numero }
+        required: ['code', 'nom', 'numero']
       })
     };
   }
 
   try {
-    // Recherche du colis par code de suivi
     const colis = await db.collection(mongoConfig.collections.colis)
       .findOne({ 
         trackingCode: code.toUpperCase().trim()
@@ -345,7 +310,6 @@ async function handleSearchPackage(db, data) {
       };
     }
 
-    // Vérification des informations du destinataire
     const nomMatch = colis.recipient.toLowerCase().trim() === nom.toLowerCase().trim();
     const numeroMatch = colis.recipientPhone.trim() === numero.trim();
 
@@ -355,12 +319,11 @@ async function handleSearchPackage(db, data) {
         statusCode: 403,
         body: JSON.stringify({ 
           error: 'Les informations ne correspondent pas au destinataire enregistré',
-          hint: 'Vérifiez l\'orthographe exacte du nom et du numéro de téléphone'
+          hint: 'Vérifiez l\'orthographe exacte du nom et du numéro'
         })
       };
     }
 
-    // Suppression des champs sensibles avant envoi
     const { _id, ...safeColisData } = colis;
 
     console.log(`✅ Colis trouvé et validé: ${code}`);
@@ -386,21 +349,16 @@ async function handleSearchPackage(db, data) {
   }
 }
 
-/**
- * Gère l'acceptation d'un colis par le destinataire
- */
 async function handleAcceptPackage(db, client, data) {
   console.log('✅ Acceptation d\'un colis');
 
-  const { colisID, location } = data;
+  const { colisID, location, paymentMethod } = data;
 
-  // Validation des paramètres
   if (!colisID) {
     return {
       statusCode: 400,
       body: JSON.stringify({ 
-        error: 'ID du colis requis',
-        received: data
+        error: 'ID du colis requis'
       })
     };
   }
@@ -409,21 +367,17 @@ async function handleAcceptPackage(db, client, data) {
     return {
       statusCode: 400,
       body: JSON.stringify({ 
-        error: 'Localisation GPS invalide',
-        required: 'latitude et longitude numériques',
-        received: location
+        error: 'Localisation GPS invalide'
       })
     };
   }
 
-  // Transaction pour garantir la cohérence des données
   const session = client.startSession();
   
   try {
     let livraisonDoc;
 
     await session.withTransaction(async () => {
-      // Recherche du colis
       const colis = await db.collection(mongoConfig.collections.colis)
         .findOne({ colisID: colisID.toUpperCase() }, { session });
 
@@ -437,12 +391,13 @@ async function handleAcceptPackage(db, client, data) {
 
       const now = new Date();
       
-      // Création du document de livraison
+      // Calcul du prix de livraison selon le type de colis
+      const deliveryPrice = calculateDeliveryPrice(colis, location);
+      
       livraisonDoc = {
         colisID: colis.colisID,
         livraisonID: `LIV_${colis.colisID}_${now.getTime()}`,
         
-        // Informations des parties
         expediteur: {
           nom: colis.sender,
           telephone: colis.senderPhone,
@@ -455,19 +410,31 @@ async function handleAcceptPackage(db, client, data) {
           location: location
         },
         
-        // Détails du colis
         colis: {
           type: colis.packageType,
           description: colis.description,
           photos: colis.photos || []
         },
         
-        // Statut et dates
+        // Informations de tarification
+        pricing: {
+          packageType: colis.packageType,
+          deliveryPrice: deliveryPrice.price,
+          distance: deliveryPrice.distance,
+          calculation: deliveryPrice.calculation
+        },
+        
+        // Paiement
+        payment: {
+          method: paymentMethod || 'delivery',
+          status: paymentMethod === 'delivery' ? 'pending' : 'verified',
+          amount: deliveryPrice.price
+        },
+        
         statut: "en_cours_de_livraison",
         dateCreation: colis.createdAt,
         dateAcceptation: now,
         
-        // Localisation du destinataire
         localisation: {
           latitude: parseFloat(location.latitude),
           longitude: parseFloat(location.longitude),
@@ -475,23 +442,21 @@ async function handleAcceptPackage(db, client, data) {
           timestamp: now
         },
         
-        // Historique complet
         historique: [
           ...(colis.history || []),
           { 
             event: "accepté_par_destinataire", 
             date: now, 
             location: location,
-            action: "Colis accepté par le destinataire"
+            action: "Colis accepté par le destinataire",
+            paymentMethod: paymentMethod || 'delivery'
           }
         ]
       };
 
-      // Insertion du document de livraison
       await db.collection(mongoConfig.collections.livraison)
         .insertOne(livraisonDoc, { session });
 
-      // Mise à jour du statut du colis
       await db.collection(mongoConfig.collections.colis).updateOne(
         { colisID: colis.colisID },
         {
@@ -499,14 +464,16 @@ async function handleAcceptPackage(db, client, data) {
             status: "accepted", 
             updatedAt: now,
             acceptedAt: now,
-            destinataireLocation: location
+            destinataireLocation: location,
+            paymentMethod: paymentMethod || 'delivery'
           },
           $push: { 
             history: { 
               status: 'accepted', 
               date: now, 
               location: location,
-              action: "Accepté par le destinataire"
+              action: "Accepté par le destinataire",
+              paymentMethod: paymentMethod || 'delivery'
             } 
           }
         },
@@ -523,6 +490,8 @@ async function handleAcceptPackage(db, client, data) {
         livraisonID: livraisonDoc.livraisonID,
         status: livraisonDoc.statut,
         dateAcceptation: livraisonDoc.dateAcceptation.toISOString(),
+        pricing: livraisonDoc.pricing,
+        payment: livraisonDoc.payment,
         message: 'Colis accepté avec succès'
       })
     };
@@ -547,9 +516,6 @@ async function handleAcceptPackage(db, client, data) {
   }
 }
 
-/**
- * Gère le refus d'un colis par le destinataire
- */
 async function handleDeclinePackage(db, client, data) {
   console.log('❌ Refus d\'un colis');
 
@@ -559,18 +525,15 @@ async function handleDeclinePackage(db, client, data) {
     return {
       statusCode: 400,
       body: JSON.stringify({ 
-        error: 'ID du colis requis',
-        received: data
+        error: 'ID du colis requis'
       })
     };
   }
 
-  // Transaction pour garantir la cohérence
   const session = client.startSession();
   
   try {
     await session.withTransaction(async () => {
-      // Recherche du colis
       const colis = await db.collection(mongoConfig.collections.colis)
         .findOne({ colisID: colisID.toUpperCase() }, { session });
 
@@ -580,11 +543,11 @@ async function handleDeclinePackage(db, client, data) {
 
       const now = new Date();
 
-      // Archivage dans la collection des refus
       await db.collection(mongoConfig.collections.refus).insertOne({
         colisID: colis.colisID,
         dateRefus: now,
         raison: reason,
+        packageType: colis.packageType,
         donneesOriginales: colis,
         metadata: {
           refusePar: 'destinataire',
@@ -592,15 +555,11 @@ async function handleDeclinePackage(db, client, data) {
         }
       }, { session });
 
-      // Suppression du colis et des données associées
       await db.collection(mongoConfig.collections.colis)
         .deleteOne({ colisID: colis.colisID }, { session });
       
       await db.collection(mongoConfig.collections.livraison)
         .deleteMany({ colisID: colis.colisID }, { session });
-      
-      await db.collection(mongoConfig.collections.tracking)
-        .deleteOne({ code: colis.colisID }, { session });
 
       console.log(`✅ Colis refusé et supprimé: ${colis.colisID}`);
     });
@@ -632,13 +591,60 @@ async function handleDeclinePackage(db, client, data) {
   }
 }
 
+function calculateDeliveryPrice(colis, destinationLocation) {
+  const packageTypes = {
+    petit: { basePrice: 700, additionalPrice: 100 },
+    moyen: { basePrice: 1000, additionalPrice: 120 },
+    gros: { basePrice: 2000, additionalPrice: 250 }
+  };
 
-/**
- * Génère un code de suivi unique
- * sans stocker dans une collection séparée
- */
+  const packageType = colis.packageType || 'petit';
+  const config = packageTypes[packageType];
+
+  // Calcul de la distance
+  let distance = 0;
+  if (colis.location && destinationLocation) {
+    distance = calculateDistance(
+      colis.location.latitude,
+      colis.location.longitude,
+      destinationLocation.latitude,
+      destinationLocation.longitude
+    );
+  }
+
+  // Calcul du prix
+  let price = config.basePrice;
+  let calculation = `${config.basePrice} FCFA (base ≤5km)`;
+
+  if (distance > 5) {
+    const additionalKm = Math.ceil(distance - 5);
+    const additionalCost = additionalKm * config.additionalPrice;
+    price += additionalCost;
+    calculation = `${config.basePrice} FCFA (base) + ${additionalKm}km × ${config.additionalPrice} FCFA = ${price} FCFA`;
+  }
+
+  return {
+    price,
+    distance: parseFloat(distance.toFixed(1)),
+    calculation,
+    packageType
+  };
+}
+
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Rayon de la Terre en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
 async function generateTrackingCode(db) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans O, I, 0, 1
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const codeLength = 8;
   let code, exists;
   let attempts = 0;
@@ -646,17 +652,14 @@ async function generateTrackingCode(db) {
 
   do {
     if (attempts >= maxAttempts) {
-      throw new Error('Impossible de générer un code unique après plusieurs tentatives');
+      throw new Error('Impossible de générer un code unique');
     }
 
-    // Génération aléatoire du code
     code = Array.from({ length: codeLength }, () =>
       chars.charAt(Math.floor(Math.random() * chars.length))
     ).join('');
 
-    // Vérifie l'unicité dans la collection "Colis"
     exists = await db.collection(mongoConfig.collections.colis).findOne({ trackingCode: code });
-
     attempts++;
   } while (exists);
 
