@@ -94,9 +94,13 @@ function validateAndSanitize(data, requiredFields = []) {
   if (sanitized.senderPhone || sanitized.recipientPhone || sanitized.numero) {
     const phones = [sanitized.senderPhone, sanitized.recipientPhone, sanitized.numero].filter(Boolean);
     for (const phone of phones) {
-      if (!/^(\+226|0)[0-9\s\-]{8,}$/.test(phone.replace(/\s/g, ''))) {
-        errors.push(`Format de téléphone invalide: ${phone}`);
-      }
+// Nouvelle validation qui accepte :
+// - Numéros commençant par +226 ou 0
+// - Numéros à 8 chiffres sans indicatif (comme 56663638)
+if (!/^(\+226|0)?[0-9\s\-]{8,}$/.test(phone.replace(/\s/g, '')) || 
+    phone.replace(/\D/g, '').length < 8) {
+  errors.push(`Format de téléphone invalide: ${phone}`);
+}
     }
   }
 
@@ -203,7 +207,15 @@ function normalizeString(str) {
  */
 function normalizePhone(phone) {
   if (!phone) return '';
-  return phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '+226');
+  const cleaned = phone.replace(/\D/g, ''); // Supprime tout sauf les chiffres
+  
+  // Si le numéro a 8 chiffres et ne commence pas par 0 ou +226, ajoute +226
+  if (cleaned.length === 8 && !cleaned.startsWith('0') && !cleaned.startsWith('226')) {
+    return `+226${cleaned}`;
+  }
+  
+  // Sinon, traitement normal
+  return cleaned.replace(/^0/, '+226');
 }
 
 /**
