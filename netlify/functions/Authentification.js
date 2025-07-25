@@ -766,20 +766,33 @@ async function finalizePartenariat(db, data) {
             });
         }
 
-        // Préparer le menu pour la collection finale
-        const finalMenu = demande.menu.map(item => ({
-            id: item.id || Date.now().toString(),
-            nom: item.nom,
-            prix: parseInt(item.prix) || 0,
-            description: item.description || '',
-            photo: item.photo ? {
-                type: item.photo.type || 'image/jpeg',
-                data: item.photo.base64 || item.photo.dataUrl.split(',')[1]
-            } : null,
-            disponible: true,
-            dateAjout: new Date(),
-            categorie: item.categorie || 'Principaux'
-        }));
+// Préparation du menu pour la collection finale
+const finalMenu = demande.menu.map(item => ({
+    id: item.id || Date.now().toString(),
+    nom: item.nom,
+    prix: parseInt(item.prix) || 0,
+    description: item.description || '',
+    photo: item.photo ? {
+        type: item.photo.type || 'image/jpeg',
+        data: item.photo.base64 || (item.photo.dataUrl ? item.photo.dataUrl.split(',')[1] : null)
+    } : null,
+    disponible: true,
+    dateAjout: new Date(),
+    categorie: item.categorie || 'Principaux'
+    
+}));
+
+
+// Validation des éléments du menu avant traitement
+const platsInvalides = demande.menu.filter(item => 
+    item.photo && !item.photo.base64 && !item.photo.dataUrl
+);
+if (platsInvalides.length > 0) {
+    return createResponse(400, {
+        success: false,
+        message: 'Certains plats ont des photos invalides'
+    });
+}
 
         // Créer le document restaurant final
         const restaurantDocument = {
