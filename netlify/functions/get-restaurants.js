@@ -65,38 +65,54 @@ exports.handler = async (event) => {
         ).toArray();
 
         // Optimisation des données pour le frontend
-        const optimizedRestaurants = restaurants.map(resto => {
-            // Vérification que la localisation existe
-            const hasValidLocation = resto.location && 
-                                  typeof resto.location.latitude === 'number' && 
-                                  typeof resto.location.longitude === 'number';
-            
+const optimizedRestaurants = restaurants.map(resto => {
+    // Vérification que la localisation existe
+    const hasValidLocation = resto.location && 
+                          typeof resto.location.latitude === 'number' && 
+                          typeof resto.location.longitude === 'number';
+    
+    // Transformer le menu pour formater correctement les photos
+    const optimizedMenu = (resto.menu || []).map(item => {
+        if (item.photo) {
             return {
-                _id: resto.restaurantId,
-                nom: resto.nomCommercial || resto.nom,
-                adresse: `${resto.adresse}, ${resto.quartier}`,
-                telephone: resto.telephone,
-                location: hasValidLocation ? {
-                    latitude: resto.location.latitude,
-                    longitude: resto.location.longitude
-                } : null,
-                cuisine: resto.cuisine,
-                specialites: resto.specialites,
-                description: resto.description,
-                menu: resto.menu || [],
-                logo: resto.logo ? {
-                    data: resto.logo.base64,
-                    type: resto.logo.type
-                } : null,
-                photos: resto.photos?.map(photo => ({
-                    data: photo.base64,
-                    type: photo.type
-                })) || [],
-                horaires: resto.horairesDetails,
-                // Ajout d'un champ pour indiquer si la localisation est valide
-                hasValidLocation
+                ...item,
+                photo: {
+                    type: item.photo.type,
+                    data: item.photo.base64, // Ici on renomme base64 en data
+                    name: item.photo.name,
+                    size: item.photo.size
+                }
             };
-        }).filter(resto => resto.menu.length > 0); // Filtre les restaurants avec menu vide
+        }
+        return item;
+    });
+    
+    return {
+        _id: resto._id, // Vous utilisez restaurantId dans le front, mais _id dans la base
+        restaurantId: resto.restaurantId,
+        nom: resto.nomCommercial || resto.nom,
+        adresse: `${resto.adresse}, ${resto.quartier}`,
+        telephone: resto.telephone,
+        location: hasValidLocation ? {
+            latitude: resto.location.latitude,
+            longitude: resto.location.longitude
+        } : null,
+        cuisine: resto.cuisine,
+        specialites: resto.specialites,
+        description: resto.description,
+        menu: optimizedMenu, // Utiliser le menu transformé
+        logo: resto.logo ? {
+            data: resto.logo.base64,
+            type: resto.logo.type
+        } : null,
+        photos: resto.photos?.map(photo => ({
+            data: photo.base64,
+            type: photo.type
+        })) || [],
+        horaires: resto.horairesDetails,
+        hasValidLocation
+    };
+}).filter(resto => resto.menu.length > 0);
 
         return {
             statusCode: 200,
