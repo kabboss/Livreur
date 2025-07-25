@@ -729,16 +729,17 @@ async function finalizePartenariat(db, data) {
             });
         }
 
-        // Vérifier que le code existe et est autorisé
+        // Vérifier que le code existe et est approuvé
         const demande = await db.collection('demande_restau').findOne({
             codeAutorisation: code.toUpperCase(),
-            statut: 'approuvee'
+            statut: 'approuvee' // Correction ici (était 'autorisee')
         });
 
         if (!demande) {
+            console.log('Demande non trouvée ou non approuvée pour le code:', code);
             return createResponse(404, {
                 success: false,
-                message: 'Code non trouvé ou demande non autorisée'
+                message: 'Code non trouvé ou demande non approuvée'
             });
         }
 
@@ -754,42 +755,51 @@ async function finalizePartenariat(db, data) {
             });
         }
 
-        // Générer un identifiant unique pour le restaurant
-        const restaurantId = generateUniqueCode('restaurant', 8);
+        // Validation des champs obligatoires
+        const requiredFields = ['nom', 'telephone', 'adresse', 'location'];
+        const missingFields = requiredFields.filter(field => !demande[field]);
 
-        // Préparer le menu avec photos pour la collection finale
+        if (missingFields.length > 0) {
+            return createResponse(400, {
+                success: false,
+                message: `Champs obligatoires manquants dans la demande: ${missingFields.join(', ')}`
+            });
+        }
+
+        // Préparer le menu pour la collection finale
         const finalMenu = demande.menu.map(item => ({
-            id: item.id,
+            id: item.id || Date.now().toString(),
             nom: item.nom,
-            prix: item.prix,
-            description: item.description,
+            prix: parseInt(item.prix) || 0,
+            description: item.description || '',
             photo: item.photo ? {
-                type: item.photo.type,
-                data: item.photo.data // Données de l'image directement stockées
+                type: item.photo.type || 'image/jpeg',
+                data: item.photo.base64 || item.photo.dataUrl.split(',')[1]
             } : null,
             disponible: true,
-            dateAjout: new Date()
+            dateAjout: new Date(),
+            categorie: item.categorie || 'Principaux'
         }));
 
         // Créer le document restaurant final
         const restaurantDocument = {
-            restaurantId: restaurantId,
+            restaurantId: generateUniqueCode('restaurant', 8),
             nom: demande.nom,
-            nomCommercial: demande.nomCommercial,
+            nomCommercial: demande.nomCommercial || '',
             telephone: demande.telephone,
-            email: demande.email,
+            email: demande.email || '',
             adresse: demande.adresse,
-            quartier: demande.quartier,
+            quartier: demande.quartier || '',
             location: demande.location,
-            hasValidLocation: true,
-            cuisine: demande.cuisine,
-            specialites: demande.specialites,
-            horairesDetails: demande.horairesDetails,
-            responsableNom: demande.responsableNom,
-            responsableTel: demande.responsableTel,
-            description: demande.description,
-            signature: demande.signature,
-            menu: finalMenu, // Menu avec photos des plats
+            hasValidLocation: !!demande.location,
+            cuisine: demande.cuisine || '',
+            specialites: demande.specialites || '',
+            horairesDetails: demande.horairesDetails || '',
+            responsableNom: demande.responsableNom || '',
+            responsableTel: demande.responsableTel || '',
+            description: demande.description || '',
+            signature: demande.signature || null,
+            menu: finalMenu,
             codeAutorisation: code.toUpperCase(),
             statut: 'actif',
             dateCreation: new Date(),
@@ -798,27 +808,27 @@ async function finalizePartenariat(db, data) {
             note: 0,
             nombreCommandes: 0,
             metadata: {
-                hasLogo: demande.metadata.hasLogo,
-                hasPhotos: demande.metadata.hasPhotos,
-                photosCount: demande.metadata.photosCount,
+                hasLogo: !!demande.logo,
+                hasPhotos: !!demande.photos && demande.photos.length > 0,
+                photosCount: demande.photos ? demande.photos.length : 0,
                 menuItemsCount: finalMenu.length,
                 menuItemsWithPhotos: finalMenu.filter(item => item.photo).length
             }
         };
 
-        // Si logo existe
+        // Ajouter le logo s'il existe
         if (demande.logo) {
             restaurantDocument.logo = {
-                type: demande.logo.type,
-                data: demande.logo.data
+                type: demande.logo.type || 'image/jpeg',
+                data: demande.logo.base64 || demande.logo.dataUrl.split(',')[1]
             };
         }
 
-        // Si photos du restaurant existent
+        // Ajouter les photos du restaurant si elles existent
         if (demande.photos && demande.photos.length > 0) {
             restaurantDocument.photos = demande.photos.map(photo => ({
-                type: photo.type,
-                data: photo.data
+                type: photo.type || 'image/jpeg',
+                data: photo.base64 || photo.dataUrl.split(',')[1]
             }));
         }
 
@@ -837,15 +847,15 @@ async function finalizePartenariat(db, data) {
             }
         );
 
-        console.log(`✅ Restaurant ${restaurantId} créé avec ${finalMenu.length} plats (${finalMenu.filter(item => item.photo).length} avec photos)`);
+        console.log(`✅ Restaurant ${restaurantDocument.restaurantId} créé avec ${finalMenu.length} plats`);
 
         return createResponse(201, {
             success: true,
             message: 'Partenariat finalisé avec succès',
             restaurant: {
-                restaurantId: restaurantId,
-                nom: demande.nom,
-                telephone: demande.telephone,
+                restaurantId: restaurantDocument.restaurantId,
+                nom: restaurantDocument.nom,
+                telephone: restaurantDocument.telephone,
                 menuItemsCount: finalMenu.length,
                 menuItemsWithPhotos: finalMenu.filter(item => item.photo).length
             }
@@ -855,7 +865,8 @@ async function finalizePartenariat(db, data) {
         console.error('❌ Erreur finalizePartenariat:', error);
         return createResponse(500, {
             success: false,
-            message: 'Erreur lors de la finalisation du partenariat'
+            message: 'Erreur lors de la finalisation du partenariat',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 }
