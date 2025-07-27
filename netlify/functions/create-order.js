@@ -56,17 +56,16 @@ exports.handler = async (event) => {
 
         
 
-        const orderDocument = {
-            type: orderData.type || "food",
+const orderDocument = {
+    type: orderData.type || "food",
 
-            restaurant: {
-                name: orderData.restaurant.name,
-                position: {
-                    lat: orderData.restaurant.position?.lat ?? null,
-                    lng: orderData.restaurant.position?.lng ?? null
-                }
-            },
-
+    restaurant: {
+        name: orderData.restaurant.name,
+        position: {
+            latitude: orderData.restaurant.position?.lat ?? null,
+            longitude: orderData.restaurant.position?.lng ?? null
+        }
+    },
             client: {
                 name: orderData.client.name,
                 phone: orderData.client.phone,
