@@ -32,25 +32,25 @@ exports.handler = async (event) => {
     try {
         client = await MongoClient.connect(MONGODB_URI);
         const db = client.db(DB_NAME);
+        
 
-        const orders = await db.collection('Commandes')
-            .find({ 
-                type: 'food', // Filtre pour ne récupérer que les commandes de type "food"
-                $or: [
-                    { statut: 'en attente' },
-                    { status: 'en attente' }
-                ]
-            })
-            .sort({ _id: -1 })
-            .toArray();
+const orders = await db.collection('Commandes')
+    .find({ 
+        type: 'food',
+        status: { $in: ['pending', 'en attente'] }
+    })
+    .sort({ _id: -1 })
+    .toArray();
 
-        return {
-            statusCode: 200,
-            headers: COMMON_HEADERS,
-            body: JSON.stringify(orders)
-        };
+return {
+    statusCode: 200,
+    headers: COMMON_HEADERS,
+    body: JSON.stringify(orders)
+};
 
-    } catch (error) {
+
+
+} catch (error) {
         console.error('Erreur récupération commandes nourriture:', error);
         return {
             statusCode: 500,
