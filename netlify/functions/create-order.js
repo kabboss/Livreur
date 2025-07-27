@@ -36,8 +36,8 @@ exports.handler = async (event) => {
 
     try {
         const orderData = JSON.parse(event.body);
-        
-        // Validation des données
+
+        // Validation de base
         if (!orderData.restaurant || !orderData.items || !orderData.client) {
             return {
                 statusCode: 400,
@@ -49,38 +49,55 @@ exports.handler = async (event) => {
         await client.connect();
         const db = client.db(DB_NAME);
         const collection = db.collection(COLLECTION_NAME);
-        
-        // Construction du document de commande
+
+        // Préparation des champs
+        const now = new Date();
+        const orderDate = orderData.orderDate ? new Date(orderData.orderDate) : now;
+
         const orderDocument = {
-            type: orderData.type || "food", // Type par défaut
+            type: orderData.type || "food",
+
             restaurant: {
                 name: orderData.restaurant.name,
                 position: {
-                    lat: orderData.restaurant.position.lat,
-                    lng: orderData.restaurant.position.lng
+                    lat: orderData.restaurant.position?.lat ?? null,
+                    lng: orderData.restaurant.position?.lng ?? null
                 }
             },
+
             client: {
                 name: orderData.client.name,
                 phone: orderData.client.phone,
-                position: orderData.client.position
+                address: orderData.client.address || null,
+                position: orderData.client.position || {}
             },
-            items: orderData.items,
+
+            items: orderData.items || [],
+
+            subtotal: orderData.subtotal || calculateSubtotal(orderData.items),
             deliveryFee: orderData.deliveryFee || 0,
-            status: orderData.status || 'en attente',
-            orderDate: new Date(orderData.orderDate) || new Date(),
-            dateCreation: new Date(),
-            lastUpdate: new Date(),
+            total: orderData.total || (orderData.subtotal + orderData.deliveryFee),
+
+            notes: orderData.notes || '',
+            payment_method: orderData.payment_method || 'cash',
+            payment_status: orderData.payment_status || 'pending',
+            payment_reference: orderData.payment_reference || null,
+
+            status: orderData.status || 'pending',
+            orderDate: orderDate,
+            dateCreation: now,
+            lastUpdate: now,
+
             codeCommande: generateOrderCode(),
+
             metadata: orderData.metadata || {
                 appVersion: '1.0',
                 source: 'web'
             }
         };
 
-        // Insertion avec vérification
         const result = await collection.insertOne(orderDocument);
-        
+
         if (!result.insertedId) {
             throw new Error('Échec de la création de la commande');
         }
@@ -116,4 +133,9 @@ function generateOrderCode() {
     const prefix = 'CMD';
     const random = Math.floor(1000 + Math.random() * 9000);
     return `${prefix}${date.getFullYear().toString().slice(-2)}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}${random}`;
+}
+
+function calculateSubtotal(items) {
+    if (!Array.isArray(items)) return 0;
+    return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 }
