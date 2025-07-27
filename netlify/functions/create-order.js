@@ -38,13 +38,13 @@ exports.handler = async (event) => {
         const orderData = JSON.parse(event.body);
 
         // Validation de base
-if (!orderData.restaurantId || !orderData.items || !orderData.client) {
-    return {
-        statusCode: 400,
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ error: 'Données de commande incomplètes' })
-    };
-}
+        if (!orderData.restaurant || !orderData.items || !orderData.client) {
+            return {
+                statusCode: 400,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ error: 'Données de commande incomplètes' })
+            };
+        }
 
         await client.connect();
         const db = client.db(DB_NAME);
@@ -54,76 +54,49 @@ if (!orderData.restaurantId || !orderData.items || !orderData.client) {
         const now = new Date();
         const orderDate = orderData.orderDate ? new Date(orderData.orderDate) : now;
 
+        
 
-if (!orderData.restaurantId) {
-    return {
-        statusCode: 400,
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ error: 'restaurantId manquant' })
-    };
-}
+        const orderDocument = {
+            type: orderData.type || "food",
 
-const restaurantCollection = db.collection('Restau');
-const restaurant = await restaurantCollection.findOne({ restaurantId: orderData.restaurantId });
+            restaurant: {
+                name: orderData.restaurant.name,
+                position: {
+                    lat: orderData.restaurant.position?.lat ?? null,
+                    lng: orderData.restaurant.position?.lng ?? null
+                }
+            },
 
-if (!restaurant) {
-    return {
-        statusCode: 404,
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ error: 'Restaurant introuvable' })
-    };
-}
+            client: {
+                name: orderData.client.name,
+                phone: orderData.client.phone,
+                address: orderData.client.address || null,
+                position: orderData.client.position || {}
+            },
 
+            items: orderData.items || [],
 
+            subtotal: orderData.subtotal || calculateSubtotal(orderData.items),
+            deliveryFee: orderData.deliveryFee || 0,
+            total: orderData.total || (orderData.subtotal + orderData.deliveryFee),
 
-const orderDocument = {
-    type: orderData.type || "food",
+            notes: orderData.notes || '',
+            payment_method: orderData.payment_method || 'cash',
+            payment_status: orderData.payment_status || 'pending',
+            payment_reference: orderData.payment_reference || null,
 
-    restaurant: {
-        id: restaurant.restaurantId,
-        name: restaurant.nomCommercial || restaurant.nom,
-        adresse: restaurant.adresse || '',
-        quartier: restaurant.quartier || '',
-        phone: restaurant.telephone || '',
-        email: restaurant.email || '',
-        cuisine: restaurant.cuisine || '',
-        specialites: restaurant.specialites || '',
-        position: {
-            lat: restaurant.location?.latitude ?? null,
-            lng: restaurant.location?.longitude ?? null,
-            accuracy: restaurant.location?.accuracy ?? null
-        }
-    },
+            status: orderData.status || 'pending',
+            orderDate: orderDate,
+            dateCreation: now,
+            lastUpdate: now,
 
-    client: {
-        name: orderData.client.name,
-        phone: orderData.client.phone,
-        address: orderData.client.address || null,
-        position: orderData.client.position || {}
-    },
+            codeCommande: generateOrderCode(),
 
-    items: orderData.items || [],
-    subtotal: orderData.subtotal || calculateSubtotal(orderData.items),
-    deliveryFee: orderData.deliveryFee || 0,
-    total: orderData.total || (orderData.subtotal + orderData.deliveryFee),
-
-    notes: orderData.notes || '',
-    payment_method: orderData.payment_method || 'cash',
-    payment_status: orderData.payment_status || 'pending',
-    payment_reference: orderData.payment_reference || null,
-
-    status: orderData.status || 'pending',
-    orderDate: orderDate,
-    dateCreation: now,
-    lastUpdate: now,
-
-    codeCommande: generateOrderCode(),
-
-    metadata: orderData.metadata || {
-        appVersion: '1.0',
-        source: 'web'
-    }
-};
+            metadata: orderData.metadata || {
+                appVersion: '1.0',
+                source: 'web'
+            }
+        };
 
         const result = await collection.insertOne(orderDocument);
 
