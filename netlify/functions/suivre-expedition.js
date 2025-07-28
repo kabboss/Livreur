@@ -82,14 +82,12 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
                             whatsapp: 1,
                             telephone: 1,
                             quartier: 1,
-                            contact_urgence: 1,
+                            contactUrgence: 1,
                             date_inscription: 1,
-                            'photo.data': 1,
-                            'photo.content_type': 1,
-                            'photo.size': 1,
-                            'photo.width': 1,
-                            'photo.height': 1,
-                            'photo.uploaded_at': 1
+                            'documents.photoIdentite.data': 1,
+                            'documents.photoIdentite.type': 1,
+                            'documents.photoIdentite.name': 1,
+                            'documents.photoIdentite.size': 1
                         }
                     }
                 );
@@ -97,9 +95,12 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
                 if (livreurInfo) {
                     logger.info('Informations du livreur trouvées', { 
                         livreurId, 
-                        hasPhoto: !!livreurInfo.photo?.data 
+                        hasPhoto: !!livreurInfo.documents?.photoIdentite?.data
                     });
                     
+                    const photoData = livreurInfo.documents?.photoIdentite?.data;
+                    const photoType = livreurInfo.documents?.photoIdentite?.type;
+
                     enrichedData.livreurInfo = {
                         id: livreurInfo.id_livreur,
                         nom: `${livreurInfo.prenom || ''} ${livreurInfo.nom || ''}`.trim(),
@@ -108,20 +109,23 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
                         whatsapp: livreurInfo.whatsapp,
                         telephone: livreurInfo.telephone,
                         quartier: livreurInfo.quartier,
-                        contactUrgence: livreurInfo.contact_urgence,
+                        contactUrgence: livreurInfo.contactUrgence,
                         dateInscription: livreurInfo.date_inscription,
                         
                         // Gestion sophistiquée de la photo
-photoBase64: livreurInfo.documents?.photoIdentite?.data || null,
-photoContentType: livreurInfo.documents?.photoIdentite?.type || null,
-photoSize: livreurInfo.documents?.photoIdentite?.size || null,
-photoUploadedAt: livreurInfo.documents?.photoIdentite?.uploaded_at || null,
-
+                        photoBase64: photoData 
+                            ? (photoData.startsWith('data:image/') 
+                                ? photoData 
+                                : `data:${photoType || 'image/jpeg'};base64,${photoData}`)
+                            : null,
+                        photoContentType: photoType || 'image/jpeg',
+                        photoSize: livreurInfo.documents?.photoIdentite?.size || null,
+                        photoUploadedAt: livreurInfo.documents?.photoIdentite?.uploaded_at || null,
                         
                         telephones: [
                             livreurInfo.telephone,
                             livreurInfo.whatsapp,
-                            livreurInfo.contact_urgence,
+                            livreurInfo.contactUrgence,
                             enrichedData.telephoneLivreur1,
                             enrichedData.driverPhone1,
                             enrichedData.driverPhone,
