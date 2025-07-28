@@ -112,12 +112,11 @@ async function enrichTrackingData(expeditionData, livreurCollection) {
                         dateInscription: livreurInfo.date_inscription,
                         
                         // Gestion sophistiquée de la photo
-                        photoBase64: livreurInfo.photo?.data || null,
-                        photoContentType: livreurInfo.photo?.content_type || null,
-                        photoSize: livreurInfo.photo?.size || null,
-                        photoDimensions: livreurInfo.photo?.width && livreurInfo.photo?.height ? 
-                            `${livreurInfo.photo.width}x${livreurInfo.photo.height}` : null,
-                        photoUploadedAt: livreurInfo.photo?.uploaded_at || null,
+photoBase64: livreurInfo.documents?.photoIdentite?.data || null,
+photoContentType: livreurInfo.documents?.photoIdentite?.type || null,
+photoSize: livreurInfo.documents?.photoIdentite?.size || null,
+photoUploadedAt: livreurInfo.documents?.photoIdentite?.uploaded_at || null,
+
                         
                         telephones: [
                             livreurInfo.telephone,
