@@ -51,7 +51,8 @@ async function checkNewOrdersInCollections(db, lastCheckTime) {
         newOrdersCount: 0,
         orderTypes: [],
         collections: {},
-        totalOrders: 0
+        totalOrders: 0,
+        deliveryModeRequired: true // Indique que ces notifications sont destinées aux livreurs
     };
 
     try {
@@ -154,9 +155,17 @@ async function checkNewOrdersInCollections(db, lastCheckTime) {
         if (results.hasNewOrders) {
             // Obtenir des détails supplémentaires sur les commandes récentes
             results.details = await getOrderDetails(db, checkDate);
+            
+            // Ajouter des métadonnées pour les livreurs
+            results.deliveryInfo = {
+                urgentOrders: results.details.urgentOrders || 0,
+                zones: results.details.locationCoverage?.length || 0,
+                recommendedAction: results.newOrdersCount > 5 ? 'high_priority' : 'normal',
+                estimatedEarnings: calculateEstimatedEarnings(results.newOrdersCount, results.orderTypes)
+            };
         }
 
-        console.log(`🔍 Résultat vérification: ${results.newOrdersCount} nouvelles commandes`);
+        console.log(`🔍 Résultat vérification: ${results.newOrdersCount} nouvelles commandes pour livreurs`);
         return results;
 
     } catch (error) {
@@ -166,13 +175,44 @@ async function checkNewOrdersInCollections(db, lastCheckTime) {
 }
 
 /**
+ * Calculer les gains estimés pour les livreurs
+ */
+function calculateEstimatedEarnings(orderCount, orderTypes) {
+    const baseRates = {
+        'Livraisons': 1500, // CFA
+        'Restauration': 1200,
+        'Pharmacie': 2000, // Plus urgent
+        'Courses': 1800
+    };
+    
+    let totalEstimated = 0;
+    
+    orderTypes.forEach(typeStr => {
+        const match = typeStr.match(/^(.+) \((\d+)\)$/);
+        if (match) {
+            const [, type, count] = match;
+            const rate = baseRates[type] || 1500;
+            totalEstimated += rate * parseInt(count);
+        }
+    });
+    
+    return {
+        min: Math.round(totalEstimated * 0.8),
+        max: Math.round(totalEstimated * 1.2),
+        currency: 'CFA'
+    };
+}
+
+/**
  * Obtenir les détails des commandes récentes
  */
 async function getOrderDetails(db, checkDate) {
     const details = {
         recentOrders: [],
         locationCoverage: [],
-        urgentOrders: 0
+        urgentOrders: 0,
+        peakHours: isCurrentTimePeakHours(),
+        weatherAlert: false // Pourrait être intégré avec une API météo
     };
 
     try {
@@ -196,7 +236,8 @@ async function getOrderDetails(db, checkDate) {
                                 type: { $literal: 'delivery' },
                                 location: '$localisation',
                                 urgency: { $literal: 'normal' },
-                                createdAt: '$dateCreation'
+                                createdAt: '$dateCreation',
+                                distance: '$distance'
                             }
                         },
                         { $limit: 3 }
@@ -290,11 +331,24 @@ async function getOrderDetails(db, checkDate) {
 }
 
 /**
+ * Vérifier si on est en heure de pointe
+ */
+function isCurrentTimePeakHours() {
+    const now = new Date();
+    const hour = now.getHours();
+    
+    // Heures de pointe: 7h-9h, 12h-14h, 18h-21h
+    return (hour >= 7 && hour <= 9) || 
+           (hour >= 12 && hour <= 14) || 
+           (hour >= 18 && hour <= 21);
+}
+
+/**
  * Headers CORS
  */
 const getCorsHeaders = () => ({
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-cache, no-store, must-revalidate'
@@ -310,7 +364,7 @@ exports.handler = async (event, context) => {
     const startTime = Date.now();
     const requestId = Math.random().toString(36).substring(2, 15);
     
-    console.log(`📥 [${requestId}] Requête ${event.httpMethod} - Vérification commandes`);
+    console.log(`📥 [${requestId}] Requête ${event.httpMethod} - Vérification commandes livreurs`);
 
     // Gestion CORS
     if (event.httpMethod === 'OPTIONS') {
@@ -327,7 +381,8 @@ exports.handler = async (event, context) => {
             headers: getCorsHeaders(),
             body: JSON.stringify({
                 error: 'Méthode non autorisée',
-                requestId
+                requestId,
+                note: 'Utilisez POST pour vérifier les nouvelles commandes'
             })
         };
     }
@@ -343,6 +398,7 @@ exports.handler = async (event, context) => {
 
         // Validation des paramètres
         const lastCheckTime = requestData.lastCheckTime || new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h par défaut
+        const clientType = event.headers['x-client-type'] || 'web'; // web, mobile, sw
         
         if (typeof lastCheckTime === 'string') {
             const parsedDate = new Date(lastCheckTime);
@@ -351,7 +407,7 @@ exports.handler = async (event, context) => {
             }
         }
 
-        console.log(`🕐 [${requestId}] Vérification depuis: ${new Date(lastCheckTime).toISOString()}`);
+        console.log(`🕐 [${requestId}] Vérification depuis: ${new Date(lastCheckTime).toISOString()}, Client: ${clientType}`);
 
         // Connexion à la base de données
         const db = await connectToDatabase();
@@ -363,22 +419,32 @@ exports.handler = async (event, context) => {
         
         // Log des résultats
         if (result.hasNewOrders) {
-            console.log(`🔔 [${requestId}] ${result.newOrdersCount} nouvelles commandes trouvées (${processingTime}ms)`);
+            console.log(`🔔 [${requestId}] ${result.newOrdersCount} nouvelles commandes pour livreurs (${processingTime}ms)`);
+            console.log(`💰 [${requestId}] Gains estimés: ${result.deliveryInfo?.estimatedEarnings?.min}-${result.deliveryInfo?.estimatedEarnings?.max} CFA`);
         } else {
             console.log(`✅ [${requestId}] Aucune nouvelle commande (${processingTime}ms)`);
         }
+
+        // Enrichir la réponse avec des informations spécifiques aux livreurs
+        const response = {
+            success: true,
+            ...result,
+            metadata: {
+                timestamp: new Date().toISOString(),
+                requestId,
+                processingTime,
+                clientType,
+                serverTime: new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Ouagadougou' }),
+                peakHours: isCurrentTimePeakHours(),
+                note: 'Notifications destinées aux livreurs uniquement'
+            }
+        };
 
         // Réponse
         return {
             statusCode: 200,
             headers: getCorsHeaders(),
-            body: JSON.stringify({
-                success: true,
-                ...result,
-                timestamp: new Date().toISOString(),
-                requestId,
-                processingTime
-            })
+            body: JSON.stringify(response)
         };
 
     } catch (error) {
@@ -399,8 +465,13 @@ exports.handler = async (event, context) => {
                 hasNewOrders: false,
                 newOrdersCount: 0,
                 orderTypes: [],
-                requestId,
-                processingTime
+                deliveryModeRequired: true,
+                metadata: {
+                    requestId,
+                    processingTime,
+                    timestamp: new Date().toISOString(),
+                    note: 'Erreur lors de la vérification des commandes'
+                }
             })
         };
     }
