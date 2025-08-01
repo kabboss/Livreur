@@ -59,13 +59,13 @@ exports.handler = async (event) => {
 const orderDocument = {
     type: orderData.type || "food",
 
-    restaurant: {
-        name: orderData.restaurant.name,
-        position: {
-            latitude: orderData.restaurant.position?.lat ?? null,
-            longitude: orderData.restaurant.position?.lng ?? null
-        }
-    },
+restaurant: {
+    name: orderData.restaurant.name,
+    position: {
+        latitude: orderData.restaurant.position?.latitude ?? null,
+        longitude: orderData.restaurant.position?.longitude ?? null
+    }
+},
             client: {
                 name: orderData.client.name,
                 phone: orderData.client.phone,
