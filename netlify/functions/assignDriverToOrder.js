@@ -159,26 +159,37 @@ exports.handler = async (event) => {
         // Insérer dans cour_expedition
         await db.collection('cour_expedition').insertOne(expeditionData);
 
-        // Mettre à jour UNIQUEMENT pour les colis
+        // Préparer les données de mise à jour communes
+        const commonUpdateData = {
+            assignedAt: new Date(),
+            driverId: driverId,
+            driverName: driverName,
+            driverPhone: driverPhone1,
+            driverLocation: driverLocation,
+            lastUpdated: new Date()
+        };
+
+        // Ajouter les champs spécifiques selon le type de service
         if (serviceType === 'packages') {
-            const updateData = {
+            Object.assign(commonUpdateData, {
                 status: 'en_cours',
                 statut: 'en_cours_de_livraison',
-                driverId: driverId,
-                driverName: driverName,
                 nomLivreur: driverName,
-                driverPhone: driverPhone1,
-                assignedAt: new Date(),
                 dateAcceptation: new Date(),
-                driverLocation: driverLocation,
                 idLivreurEnCharge: driverId,
                 estExpedie: true,
-                processusDéclenche: true,
-                'mis à jour à': new Date()
-            };
-            
-            await db.collection(collectionName).updateOne(query, { $set: updateData });
+                processusDéclenche: true
+            });
+        } else {
+            // Pour nourriture, pharmacie et courses
+            Object.assign(commonUpdateData, {
+                status: 'assigned',
+                statut: 'assigné'
+            });
         }
+
+        // Mettre à jour la collection originale
+        await db.collection(collectionName).updateOne(query, { $set: commonUpdateData });
 
         return {
             statusCode: 200,
