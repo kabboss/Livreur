@@ -60,30 +60,6 @@ exports.handler = async (event) => {
             };
         }
 
-        // Vérifie d'abord si la commande est déjà assignée dans cour_expedition
-        const existingAssignment = await db.collection('cour_expedition').findOne({
-            $or: [
-                { orderId: orderId },
-                { colisID: orderId },
-                { identifiant: orderId },
-                { id: orderId },
-                { _id: orderId }
-            ],
-            serviceType: serviceType
-        });
-
-        if (existingAssignment) {
-            return {
-                statusCode: 409,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({
-                    error: `Cette commande est déjà prise en charge par un livreur: ${existingAssignment.driverName || existingAssignment.nomLivreur || 'Inconnu'}`,
-                    isAlreadyAssigned: true
-                })
-            };
-        }
-
-        // Recherche intelligente de la commande originale
         const collection = db.collection(collectionName);
         let originalOrder = null;
         let query;
@@ -96,6 +72,7 @@ exports.handler = async (event) => {
             }
         };
 
+        // Recherche intelligente de la commande originale
         if (serviceType === 'packages') {
             query = { colisID: orderId };
         } else if (serviceType === 'food') {
@@ -132,28 +109,26 @@ exports.handler = async (event) => {
             };
         }
 
-        // Crée une copie dans cour_expedition
-        const expeditionData = {
-            ...originalOrder,
-            orderId: orderId,
-            serviceType: serviceType,
-            driverId,
-            driverName,
-            driverPhone1,
-            driverPhone2,
-            driverLocation,
-            assignedAt: new Date(),
-            status: 'en_cours',
-            statut: 'en_cours_de_livraison',
-            originalCollection: collectionName,
-            lastPositionUpdate: new Date(),
-            positionHistory: [{
-                location: driverLocation,
-                timestamp: new Date()
-            }]
-        };
+        // Vérifier si la commande est déjà assignée
+        const isAlreadyAssigned = originalOrder.driverId || 
+                                 originalOrder.idLivreurEnCharge || 
+                                 originalOrder.driverName ||
+                                 originalOrder.nomLivreur ||
+                                 (originalOrder.status && ['assigned', 'assigné'].includes(originalOrder.status.toLowerCase())) ||
+                                 (originalOrder.statut && ['assigned', 'assigné', 'en_cours_de_livraison'].includes(originalOrder.statut.toLowerCase()));
 
-        await db.collection('cour_expedition').insertOne(expeditionData);
+        if (isAlreadyAssigned) {
+            const existingDriverName = originalOrder.driverName || originalOrder.nomLivreur || 'Livreur inconnu';
+            return {
+                statusCode: 409,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({
+                    error: `Cette commande est déjà prise en charge par: ${existingDriverName}`,
+                    isAlreadyAssigned: true,
+                    currentDriver: existingDriverName
+                })
+            };
+        }
 
         // Prépare les données de mise à jour dans la collection d'origine
         const updateData = {
@@ -183,7 +158,39 @@ exports.handler = async (event) => {
             });
         }
 
-        await collection.updateOne(query, { $set: updateData });
+        // Mise à jour de la collection d'origine
+        const updateResult = await collection.updateOne(query, { $set: updateData });
+
+        if (updateResult.matchedCount === 0) {
+            return {
+                statusCode: 404,
+                headers: COMMON_HEADERS,
+                body: JSON.stringify({ error: 'Impossible de mettre à jour la commande' })
+            };
+        }
+
+        // Créer une copie dans cour_expedition pour le suivi
+        const expeditionData = {
+            ...originalOrder,
+            orderId: orderId,
+            serviceType: serviceType,
+            driverId,
+            driverName,
+            driverPhone1,
+            driverPhone2,
+            driverLocation,
+            assignedAt: new Date(),
+            status: 'en_cours',
+            statut: 'en_cours_de_livraison',
+            originalCollection: collectionName,
+            lastPositionUpdate: new Date(),
+            positionHistory: [{
+                location: driverLocation,
+                timestamp: new Date()
+            }]
+        };
+
+        await db.collection('cour_expedition').insertOne(expeditionData);
 
         return {
             statusCode: 200,
@@ -194,7 +201,11 @@ exports.handler = async (event) => {
                 orderId,
                 driverName,
                 serviceType,
-                assignedAt: new Date().toISOString()
+                assignedAt: new Date().toISOString(),
+                updateResult: {
+                    matchedCount: updateResult.matchedCount,
+                    modifiedCount: updateResult.modifiedCount
+                }
             })
         };
 
@@ -203,7 +214,10 @@ exports.handler = async (event) => {
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: error.message })
+            body: JSON.stringify({ 
+                error: 'Erreur serveur lors de l\'assignation',
+                details: error.message 
+            })
         };
     } finally {
         if (client) await client.close();
