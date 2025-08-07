@@ -172,7 +172,8 @@ exports.handler = async (event) => {
                 driverName,
                 driverId,
                 assignedAt: new Date().toISOString(),
-                status: 'assigned'
+                status: 'assigned',
+                requiresSMS: true // Indique que l'envoi de SMS est requis
             })
         };
 

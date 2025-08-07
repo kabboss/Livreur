@@ -26,7 +26,7 @@ exports.handler = async (event) => {
 
     let client;
     try {
-        const { serviceType, driverId, showAssigned = 'true' } = event.queryStringParameters || {};
+        const { serviceType, driverId } = event.queryStringParameters || {};
         
         client = await MongoClient.connect(MONGODB_URI, {
             useUnifiedTopology: true,
@@ -41,12 +41,12 @@ exports.handler = async (event) => {
             pharmacy: 'pharmacyOrders'
         };
 
-        // Si driverId est fourni, récupérer les commandes assignées à ce livreur
+        // Si driverId est fourni, récupérer les commandes assignées à ce livreur UNIQUEMENT
         if (driverId) {
             return await getDriverAssignedOrders(db, driverId);
         }
 
-        // Sinon récupérer selon le serviceType
+        // Sinon récupérer selon le serviceType (EXCLURE les commandes terminées/archivées)
         if (!serviceType || !collectionMap[serviceType]) {
             return {
                 statusCode: 400,
@@ -57,35 +57,57 @@ exports.handler = async (event) => {
 
         const collection = db.collection(collectionMap[serviceType]);
         
-        // Construction de la requête pour inclure TOUTES les commandes pertinentes
+        // Construction de la requête pour EXCLURE les commandes terminées/archivées
         let query = {};
         
-        // Pour packages, on inclut plusieurs statuts
         if (serviceType === 'packages') {
             query = {
-                $or: [
-                    { statut: { $in: ['en_attente_assignation', 'en_cours_de_livraison', 'assigné'] } },
-                    { status: { $in: ['pending', 'assigned', 'en_cours'] } },
-                    { driverId: { $exists: true } },
-                    { idLivreurEnCharge: { $exists: true } }
+                $and: [
+                    {
+                        $or: [
+                            { statut: { $in: ['en_attente_assignation', 'assigned', 'assigné'] } },
+                            { status: { $in: ['pending', 'assigned', 'en_cours'] } },
+                            { driverId: { $exists: true } },
+                            { idLivreurEnCharge: { $exists: true } }
+                        ]
+                    },
+                    // EXCLURE les statuts de completion
+                    {
+                        status: { $nin: ['completed', 'delivered'] },
+                        statut: { $nin: ['livré', 'terminé', 'completed'] },
+                        isCompleted: { $ne: true }
+                    }
                 ]
             };
         } else {
             // Pour les autres services
             query = {
-                $or: [
-                    { status: { $in: ['pending', 'assigned'] } },
-                    { statut: { $in: ['en attente', 'assigné', 'en_cours'] } },
-                    { driverId: { $exists: true } },
-                    { idLivreurEnCharge: { $exists: true } }
+                $and: [
+                    {
+                        $or: [
+                            { status: { $in: ['pending', 'assigned'] } },
+                            { statut: { $in: ['en attente', 'assigné', 'en_cours'] } },
+                            { driverId: { $exists: true } },
+                            { idLivreurEnCharge: { $exists: true } }
+                        ]
+                    },
+                    // EXCLURE les statuts de completion
+                    {
+                        status: { $nin: ['completed', 'delivered'] },
+                        statut: { $nin: ['livré', 'terminé', 'completed'] },
+                        isCompleted: { $ne: true }
+                    }
                 ]
             };
         }
 
-        // Récupérer toutes les commandes sans filtrage côté base
-        const orders = await collection.find(query).sort({ createdAt: -1 }).limit(100).toArray();
+        // Récupérer uniquement les commandes NON terminées
+        const orders = await collection.find(query)
+            .sort({ createdAt: -1 })
+            .limit(200)
+            .toArray();
         
-        console.log(`Service ${serviceType}: ${orders.length} commandes récupérées`);
+        console.log(`Service ${serviceType}: ${orders.length} commandes actives récupérées (archivées exclues)`);
 
         // Enrichir les données avec des informations d'assignation
         const enrichedOrders = orders.map(order => {
@@ -110,7 +132,8 @@ exports.handler = async (event) => {
                 serviceType,
                 count: enrichedOrders.length,
                 assignedCount: enrichedOrders.filter(o => o.isAssigned).length,
-                availableCount: enrichedOrders.filter(o => !o.isAssigned).length
+                availableCount: enrichedOrders.filter(o => !o.isAssigned).length,
+                excludedCompleted: true // Indique que les commandes terminées sont exclues
             })
         };
 
@@ -149,10 +172,22 @@ async function getDriverAssignedOrders(db, driverId) {
         for (const { name, serviceType } of collectionsToSearch) {
             try {
                 const collection = db.collection(name);
+                
+                // RECHERCHER uniquement les commandes assignées ET NON terminées
                 const orders = await collection.find({
-                    $or: [
-                        { driverId },
-                        { idLivreurEnCharge: driverId }
+                    $and: [
+                        {
+                            $or: [
+                                { driverId },
+                                { idLivreurEnCharge: driverId }
+                            ]
+                        },
+                        // EXCLURE les commandes terminées
+                        {
+                            status: { $nin: ['completed', 'delivered'] },
+                            statut: { $nin: ['livré', 'terminé', 'completed'] },
+                            isCompleted: { $ne: true }
+                        }
                     ]
                 }).toArray();
                 
@@ -182,7 +217,9 @@ async function getDriverAssignedOrders(db, driverId) {
             body: JSON.stringify({ 
                 orders: assignedOrders,
                 driverId,
-                count: assignedOrders.length
+                count: assignedOrders.length,
+                excludedCompleted: true, // Indique que les commandes terminées sont exclues
+                message: `${assignedOrders.length} commande(s) active(s) assignée(s) à ${driverId}`
             })
         };
     } catch (error) {

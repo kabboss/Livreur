@@ -104,30 +104,42 @@ exports.handler = async (event) => {
             };
         }
 
-        // Finalisation avec transaction
+        // Finalisation avec transaction et archivage
         const session = client.startSession();
         
         try {
             await session.withTransaction(async () => {
-                // Mise à jour de la commande avec statut completed
-                const updateResult = await updateOrderAsCompleted(
-                    collection,
+                // 1. Archiver la commande dans la collection d'historique
+                const archivedOrder = await archiveCompletedOrder(
+                    db,
                     order,
+                    orderId,
+                    serviceType,
                     {
                         driverName,
                         driverId,
                         notes,
                         completionLocation
                     },
-                    serviceType,
+                    collectionName,
                     session
                 );
 
-                if (updateResult.matchedCount === 0) {
-                    throw new Error('CONCURRENT_MODIFICATION');
+                if (!archivedOrder) {
+                    throw new Error('ARCHIVING_FAILED');
                 }
 
-                // Mise à jour de l'enregistrement d'assignation
+                // 2. Supprimer complètement de la collection originale
+                const deleteResult = await collection.deleteOne(
+                    { _id: order._id },
+                    { session }
+                );
+
+                if (deleteResult.deletedCount === 0) {
+                    throw new Error('DELETION_FAILED');
+                }
+
+                // 3. Mise à jour de l'enregistrement d'assignation
                 await updateAssignmentRecord(
                     db,
                     order._id,
@@ -140,31 +152,26 @@ exports.handler = async (event) => {
                     },
                     session
                 );
-
-                // Création d'un historique de livraison
-                await createDeliveryHistory(
-                    db,
-                    order,
-                    orderId,
-                    serviceType,
-                    {
-                        driverName,
-                        driverId,
-                        notes,
-                        completionLocation
-                    },
-                    session
-                );
             });
 
         } catch (transactionError) {
-            if (transactionError.message === 'CONCURRENT_MODIFICATION') {
+            if (transactionError.message === 'ARCHIVING_FAILED') {
                 return {
-                    statusCode: 409,
+                    statusCode: 500,
                     headers: COMMON_HEADERS,
                     body: JSON.stringify({
-                        error: 'Cette commande a été modifiée par un autre processus',
-                        message: 'Veuillez recharger et réessayer'
+                        error: 'Erreur lors de l\'archivage de la commande',
+                        message: 'Veuillez réessayer'
+                    })
+                };
+            }
+            if (transactionError.message === 'DELETION_FAILED') {
+                return {
+                    statusCode: 500,
+                    headers: COMMON_HEADERS,
+                    body: JSON.stringify({
+                        error: 'Erreur lors de la suppression de la commande',
+                        message: 'Veuillez contacter le support'
                     })
                 };
             }
@@ -178,13 +185,14 @@ exports.handler = async (event) => {
             headers: COMMON_HEADERS,
             body: JSON.stringify({
                 success: true,
-                message: 'Livraison finalisée avec succès !',
+                message: 'Livraison finalisée et archivée avec succès !',
                 orderId,
                 serviceType,
                 driverName,
                 driverId,
                 completedAt: new Date().toISOString(),
-                status: 'completed'
+                status: 'completed_and_archived',
+                archived: true
             })
         };
 
@@ -265,50 +273,75 @@ function isOrderCompleted(order) {
            order.dateLivraison;
 }
 
-async function updateOrderAsCompleted(collection, originalOrder, completionInfo, serviceType, session) {
-    const now = new Date();
-    
-    const updateData = {
-        // Statuts de completion
-        status: 'completed',
-        statut: 'livré',
-        isCompleted: true,
+async function archiveCompletedOrder(db, originalOrder, orderId, serviceType, completionInfo, originalCollection, session) {
+    try {
+        const now = new Date();
         
-        // Informations de finalisation
-        completedAt: now,
-        dateLivraison: now,
-        completedBy: completionInfo.driverName,
-        completedById: completionInfo.driverId,
-        completionNotes: completionInfo.notes,
-        completionLocation: completionInfo.completionLocation,
-        
-        // Timestamps
-        lastUpdated: now,
-        
-        // Version pour gestion des conflits
-        version: (originalOrder.version || 0) + 1
-    };
+        // Créer l'enregistrement archivé complet
+        const archivedOrder = {
+            // Données originales de la commande
+            ...originalOrder,
+            
+            // Métadonnées d'archivage
+            archiveMetadata: {
+                originalOrderId: originalOrder._id,
+                originalCollection: originalCollection,
+                serviceType: serviceType,
+                archivedAt: now,
+                archivedBy: 'delivery_completion_system'
+            },
+            
+            // Informations de completion
+            completionData: {
+                completedBy: completionInfo.driverName,
+                completedById: completionInfo.driverId,
+                completedAt: now,
+                completionNotes: completionInfo.notes,
+                completionLocation: completionInfo.completionLocation,
+                
+                // Statuts finaux
+                status: 'completed',
+                statut: 'livré',
+                isCompleted: true,
+                isArchived: true
+            },
+            
+            // Historique de la livraison
+            deliveryHistory: {
+                assignedAt: originalOrder.assignedAt,
+                completedAt: now,
+                driverName: completionInfo.driverName,
+                driverId: completionInfo.driverId,
+                totalDeliveryTime: originalOrder.assignedAt ? 
+                    now.getTime() - new Date(originalOrder.assignedAt).getTime() : null
+            },
+            
+            // Index pour les recherches
+            searchableFields: {
+                orderId: orderId,
+                serviceType: serviceType,
+                driverId: completionInfo.driverId,
+                driverName: completionInfo.driverName,
+                completedAt: now,
+                year: now.getFullYear(),
+                month: now.getMonth() + 1,
+                day: now.getDate()
+            }
+        };
 
-    // Ajouts spécifiques par service
-    if (serviceType === 'packages') {
-        updateData.dateLivraisonEffective = now;
-        updateData.livraisonConfirmee = true;
-        updateData.processusTermine = true;
-    } else if (serviceType === 'food') {
-        updateData.deliveredAt = now;
-        updateData.deliveryConfirmed = true;
+        // Insérer dans la collection d'archives
+        const result = await db.collection('completed_orders_archive').insertOne(
+            archivedOrder, 
+            { session }
+        );
+
+        console.log(`Commande ${orderId} archivée avec l'ID: ${result.insertedId}`);
+        return result.acknowledged;
+
+    } catch (error) {
+        console.error('Erreur lors de l\'archivage:', error);
+        return false;
     }
-
-    const query = { 
-        _id: originalOrder._id,
-        // S'assurer que la commande est toujours assignée au bon livreur
-        $or: [
-            { driverId: completionInfo.driverId },
-            { idLivreurEnCharge: completionInfo.driverId }
-        ]
-    };
-
-    return await collection.updateOne(query, { $set: updateData }, { session });
 }
 
 async function updateAssignmentRecord(db, originalOrderId, orderId, completionInfo, session) {
@@ -327,44 +360,16 @@ async function updateAssignmentRecord(db, originalOrderId, orderId, completionIn
                     completedAt: new Date(),
                     completionNotes: completionInfo.notes,
                     completionLocation: completionInfo.completionLocation,
-                    lastUpdated: new Date()
+                    lastUpdated: new Date(),
+                    // Marquer comme archivé
+                    isArchived: true,
+                    archivedAt: new Date()
                 }
             },
             { session }
         );
     } catch (error) {
         console.warn('Erreur mise à jour assignment record:', error);
-        // Non bloquant, on continue
-    }
-}
-
-async function createDeliveryHistory(db, originalOrder, orderId, serviceType, completionInfo, session) {
-    try {
-        const historyRecord = {
-            // Identification
-            originalOrderId: originalOrder._id,
-            orderId,
-            serviceType,
-            
-            // Informations de livraison
-            driverId: completionInfo.driverId,
-            driverName: completionInfo.driverName,
-            completedAt: new Date(),
-            completionNotes: completionInfo.notes,
-            completionLocation: completionInfo.completionLocation,
-            
-            // Données de la commande au moment de la completion
-            orderSnapshot: { ...originalOrder },
-            
-            // Métadonnées
-            createdAt: new Date(),
-            deliveryDuration: originalOrder.assignedAt ? 
-                new Date() - new Date(originalOrder.assignedAt) : null
-        };
-
-        await db.collection('delivery_history').insertOne(historyRecord, { session });
-    } catch (error) {
-        console.warn('Erreur création historique:', error);
         // Non bloquant, on continue
     }
 }
