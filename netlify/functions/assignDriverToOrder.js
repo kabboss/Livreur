@@ -5,12 +5,13 @@ const DB_NAME = 'FarmsConnect';
 
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json'
 };
 
 exports.handler = async (event) => {
+    // Gestion des pré-vols OPTIONS
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 200, headers: COMMON_HEADERS, body: JSON.stringify({}) };
     }
@@ -24,24 +25,26 @@ exports.handler = async (event) => {
     }
 
     let client;
-
     try {
         const data = JSON.parse(event.body);
         const { orderId, serviceType, driverId, driverName, driverPhone1, driverPhone2, driverLocation } = data;
 
-        const requiredFields = [orderId, serviceType, driverId, driverName, driverPhone1, driverLocation];
-        if (requiredFields.some(v => !v)) {
+        // Validation des données requises
+        if (!orderId || !serviceType || !driverId || !driverName || !driverPhone1) {
             return {
                 statusCode: 400,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({
                     error: 'Données requises manquantes',
-                    required: ['orderId', 'serviceType', 'driverId', 'driverName', 'driverPhone1', 'driverLocation']
+                    required: ['orderId', 'serviceType', 'driverId', 'driverName', 'driverPhone1']
                 })
             };
         }
 
-        client = await MongoClient.connect(MONGODB_URI);
+        client = await MongoClient.connect(MONGODB_URI, {
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 10000
+        });
         const db = client.db(DB_NAME);
 
         const collectionMap = {
@@ -61,165 +64,279 @@ exports.handler = async (event) => {
         }
 
         const collection = db.collection(collectionName);
-        let originalOrder = null;
-        let query;
-
-        const tryObjectId = (id) => {
-            try {
-                return new ObjectId(id);
-            } catch {
-                return id;
-            }
-        };
-
-        // Recherche intelligente de la commande originale
-        if (serviceType === 'packages') {
-            query = { colisID: orderId };
-        } else if (serviceType === 'food') {
-            query = { identifiant: orderId };
-        } else {
-            query = { _id: tryObjectId(orderId) };
-        }
-
-        originalOrder = await collection.findOne(query);
-
-        // Fallback recherche par d'autres champs
-        if (!originalOrder) {
-            const fallbackQueries = [
-                { _id: tryObjectId(orderId) },
-                { id: orderId },
-                { identifiant: orderId },
-                { colisID: orderId }
-            ];
-
-            for (const q of fallbackQueries) {
-                originalOrder = await collection.findOne(q);
-                if (originalOrder) {
-                    query = q;
-                    break;
-                }
-            }
-        }
+        
+        // Recherche de la commande
+        let originalOrder = await findOrder(collection, orderId, serviceType);
 
         if (!originalOrder) {
             return {
                 statusCode: 404,
                 headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Commande non trouvée', collection: collectionName, orderId })
+                body: JSON.stringify({ 
+                    error: 'Commande non trouvée',
+                    details: { collection: collectionName, orderId, serviceType }
+                })
             };
         }
 
-        // Vérifier si la commande est déjà assignée
-        const isAlreadyAssigned = originalOrder.driverId || 
-                                 originalOrder.idLivreurEnCharge || 
-                                 originalOrder.driverName ||
-                                 originalOrder.nomLivreur ||
-                                 (originalOrder.status && ['assigned', 'assigné'].includes(originalOrder.status.toLowerCase())) ||
-                                 (originalOrder.statut && ['assigned', 'assigné', 'en_cours_de_livraison'].includes(originalOrder.statut.toLowerCase()));
-
-        if (isAlreadyAssigned) {
-            const existingDriverName = originalOrder.driverName || originalOrder.nomLivreur || 'Livreur inconnu';
+        // Vérification si déjà assignée avec vérouillage optimiste
+        const currentAssignmentCheck = await collection.findOne({ _id: originalOrder._id });
+        if (isOrderAlreadyAssigned(currentAssignmentCheck)) {
+            const existingDriverName = currentAssignmentCheck.driverName || 
+                                     currentAssignmentCheck.nomLivreur || 
+                                     'Livreur inconnu';
             return {
                 statusCode: 409,
                 headers: COMMON_HEADERS,
                 body: JSON.stringify({
                     error: `Cette commande est déjà prise en charge par: ${existingDriverName}`,
                     isAlreadyAssigned: true,
-                    currentDriver: existingDriverName
+                    currentDriver: existingDriverName,
+                    currentDriverId: currentAssignmentCheck.driverId || currentAssignmentCheck.idLivreurEnCharge
                 })
             };
         }
 
-        // Prépare les données de mise à jour dans la collection d'origine
-        const updateData = {
-            assignedAt: new Date(),
-            driverId,
-            driverName,
-            driverPhone: driverPhone1,
-            driverPhone2,
-            driverLocation,
-            lastUpdated: new Date()
-        };
+        // Assignation atomique avec transaction
+        const session = client.startSession();
+        
+        try {
+            await session.withTransaction(async () => {
+                // Double vérification dans la transaction
+                const finalCheck = await collection.findOne({ _id: originalOrder._id }, { session });
+                if (isOrderAlreadyAssigned(finalCheck)) {
+                    throw new Error('ALREADY_ASSIGNED');
+                }
 
-        if (serviceType === 'packages') {
-            Object.assign(updateData, {
-                status: 'en_cours',
-                statut: 'en_cours_de_livraison',
-                nomLivreur: driverName,
-                idLivreurEnCharge: driverId,
-                dateAcceptation: new Date(),
-                estExpedie: true,
-                processusDéclenche: true
+                // Mise à jour de la commande avec statut assigned permanent
+                const updateResult = await updateOrderWithAssignment(
+                    collection,
+                    originalOrder,
+                    {
+                        driverId,
+                        driverName,
+                        driverPhone1,
+                        driverPhone2: driverPhone2 || null,
+                        driverLocation
+                    },
+                    serviceType,
+                    session
+                );
+
+                if (updateResult.matchedCount === 0) {
+                    throw new Error('CONCURRENT_MODIFICATION');
+                }
+
+                // Création d'un enregistrement de suivi dans une collection dédiée
+                await createAssignmentRecord(
+                    db,
+                    originalOrder,
+                    orderId,
+                    serviceType,
+                    {
+                        driverId,
+                        driverName,
+                        driverPhone1,
+                        driverPhone2,
+                        driverLocation
+                    },
+                    collectionName,
+                    session
+                );
             });
-        } else {
-            Object.assign(updateData, {
-                status: 'assigned',
-                statut: 'assigné'
-            });
+
+        } catch (transactionError) {
+            if (transactionError.message === 'ALREADY_ASSIGNED') {
+                return {
+                    statusCode: 409,
+                    headers: COMMON_HEADERS,
+                    body: JSON.stringify({
+                        error: 'Cette commande vient d\'être assignée à un autre livreur',
+                        isAlreadyAssigned: true
+                    })
+                };
+            }
+            throw transactionError;
+        } finally {
+            await session.endSession();
         }
-
-        // Mise à jour de la collection d'origine
-        const updateResult = await collection.updateOne(query, { $set: updateData });
-
-        if (updateResult.matchedCount === 0) {
-            return {
-                statusCode: 404,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Impossible de mettre à jour la commande' })
-            };
-        }
-
-        // Créer une copie dans cour_expedition pour le suivi
-        const expeditionData = {
-            ...originalOrder,
-            orderId: orderId,
-            serviceType: serviceType,
-            driverId,
-            driverName,
-            driverPhone1,
-            driverPhone2,
-            driverLocation,
-            assignedAt: new Date(),
-            status: 'en_cours',
-            statut: 'en_cours_de_livraison',
-            originalCollection: collectionName,
-            lastPositionUpdate: new Date(),
-            positionHistory: [{
-                location: driverLocation,
-                timestamp: new Date()
-            }]
-        };
-
-        await db.collection('cour_expedition').insertOne(expeditionData);
 
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
             body: JSON.stringify({
                 success: true,
-                message: 'Commande acceptée avec succès !',
+                message: 'Commande assignée avec succès !',
                 orderId,
-                driverName,
                 serviceType,
+                driverName,
+                driverId,
                 assignedAt: new Date().toISOString(),
-                updateResult: {
-                    matchedCount: updateResult.matchedCount,
-                    modifiedCount: updateResult.modifiedCount
-                }
+                status: 'assigned'
             })
         };
 
     } catch (error) {
-        console.error('Erreur assignation livreur:', error);
+        console.error('Erreur assignDriverToOrder:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
             body: JSON.stringify({ 
                 error: 'Erreur serveur lors de l\'assignation',
-                details: error.message 
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
             })
         };
     } finally {
-        if (client) await client.close();
+        if (client) {
+            try {
+                await client.close();
+            } catch (closeError) {
+                console.error('Erreur fermeture connexion:', closeError);
+            }
+        }
     }
 };
+
+async function findOrder(collection, orderId, serviceType) {
+    const tryObjectId = (id) => {
+        try {
+            return ObjectId.isValid(id) ? new ObjectId(id) : id;
+        } catch {
+            return id;
+        }
+    };
+
+    // Stratégie de recherche selon le serviceType
+    const searchStrategies = {
+        packages: [
+            { colisID: orderId },
+            { _id: tryObjectId(orderId) }
+        ],
+        food: [
+            { identifiant: orderId },
+            { _id: tryObjectId(orderId) }
+        ],
+        default: [
+            { _id: tryObjectId(orderId) },
+            { id: orderId }
+        ]
+    };
+
+    const strategies = searchStrategies[serviceType] || searchStrategies.default;
+    
+    for (const query of strategies) {
+        try {
+            const order = await collection.findOne(query);
+            if (order) return order;
+        } catch (error) {
+            console.error('Erreur recherche avec query:', query, error);
+        }
+    }
+
+    return null;
+}
+
+function isOrderAlreadyAssigned(order) {
+    if (!order) return false;
+    
+    return !!(
+        order.driverId || 
+        order.idLivreurEnCharge || 
+        order.driverName ||
+        order.nomLivreur ||
+        (order.status && ['assigned', 'assigné', 'en_cours'].includes(order.status.toLowerCase())) ||
+        (order.statut && ['assigned', 'assigné', 'en_cours_de_livraison'].includes(order.statut.toLowerCase()))
+    );
+}
+
+async function updateOrderWithAssignment(collection, originalOrder, driverInfo, serviceType, session) {
+    const now = new Date();
+    
+    const updateData = {
+        // Informations du livreur
+        driverId: driverInfo.driverId,
+        driverName: driverInfo.driverName,
+        nomLivreur: driverInfo.driverName, // Alias pour compatibilité
+        idLivreurEnCharge: driverInfo.driverId, // Alias pour compatibilité
+        driverPhone: driverInfo.driverPhone1,
+        driverPhone1: driverInfo.driverPhone1,
+        driverPhone2: driverInfo.driverPhone2,
+        driverLocation: driverInfo.driverLocation,
+        
+        // Statuts uniformisés - TOUJOURS "assigned"
+        status: 'assigned',
+        statut: 'assigned',
+        
+        // Timestamps
+        assignedAt: now,
+        lastUpdated: now,
+        
+        // Flags de suivi
+        isAssigned: true,
+        assignmentConfirmed: true,
+        
+        // Version pour gestion des conflits
+        version: (originalOrder.version || 0) + 1
+    };
+
+    // Ajouts spécifiques par service
+    if (serviceType === 'packages') {
+        updateData.dateAcceptation = now;
+        updateData.processusDéclenche = true;
+        updateData.estExpedie = true;
+    } else if (serviceType === 'food') {
+        updateData.assignedToDriver = true;
+        updateData.preparationStatus = 'assigned_to_driver';
+    }
+
+    const query = { 
+        _id: originalOrder._id,
+        // Protection contre les modifications concurrentes
+        $or: [
+            { driverId: { $exists: false } },
+            { driverId: null },
+            { idLivreurEnCharge: { $exists: false } },
+            { idLivreurEnCharge: null }
+        ]
+    };
+
+    return await collection.updateOne(query, { $set: updateData }, { session });
+}
+
+async function createAssignmentRecord(db, originalOrder, orderId, serviceType, driverInfo, collectionName, session) {
+    const assignmentRecord = {
+        // Identification
+        originalOrderId: originalOrder._id,
+        orderId,
+        serviceType,
+        originalCollection: collectionName,
+        
+        // Copie des données de commande
+        orderData: { ...originalOrder },
+        
+        // Informations d'assignation
+        driverId: driverInfo.driverId,
+        driverName: driverInfo.driverName,
+        driverPhone1: driverInfo.driverPhone1,
+        driverPhone2: driverInfo.driverPhone2,
+        driverLocation: driverInfo.driverLocation,
+        
+        // Statut et timestamps
+        status: 'assigned',
+        assignedAt: new Date(),
+        createdAt: new Date(),
+        
+        // Historique des positions (pour suivi futur)
+        positionHistory: [{
+            location: driverInfo.driverLocation,
+            timestamp: new Date(),
+            type: 'assignment'
+        }],
+        
+        // Flags
+        isActive: true,
+        isCompleted: false
+    };
+
+    await db.collection('delivery_assignments').insertOne(assignmentRecord, { session });
+}
