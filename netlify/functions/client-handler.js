@@ -489,7 +489,7 @@ async function handleAcceptPackage(db, client, data, sessionId) {
         },
         
         // Statut et dates
-        statut: "en_cours_de_livraison",
+        statut: "en_attente_assignation",
         dateCreation: colis.createdAt,
         dateAcceptation: now,
         
