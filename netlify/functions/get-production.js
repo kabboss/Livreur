@@ -15,10 +15,13 @@ const mongoClient = new MongoClient(MONGODB_URI, {
     useUnifiedTopology: true
 });
 
+// Headers CORS complets pour autoriser toutes les origines
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
     'Content-Type': 'application/json'
 };
 
@@ -26,7 +29,7 @@ exports.handler = async (event, context) => {
     // Optimisation AWS Lambda
     context.callbackWaitsForEmptyEventLoop = false;
 
-    // Gérer les requêtes OPTIONS (CORS preflight)
+    // Gérer les requêtes OPTIONS (CORS preflight) de manière plus complète
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 200,
