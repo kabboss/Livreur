@@ -10,7 +10,6 @@ const mongoClient = new MongoClient(MONGODB_URI, {
     serverSelectionTimeoutMS: 5000,
     connectTimeoutMS: 10000,
     maxIdleTimeMS: 30000,
-    bufferMaxEntries: 0,
     useNewUrlParser: true,
     useUnifiedTopology: true
 });
