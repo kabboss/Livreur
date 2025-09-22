@@ -1,14 +1,12 @@
-const { MongoClient, ObjectId } = require('mongodb');
+// Nom du fichier : create-order.js
 
-const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const { MongoClient } = require('mongodb');
+const admin = require('firebase-admin');
+
+// --- CONFIGURATION ---
+const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'FarmsConnect';
 const COLLECTION_NAME = 'Commandes';
-
-const client = new MongoClient(MONGODB_URI, {
-    connectTimeoutMS: 5000,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 30000
-});
 
 const COMMON_HEADERS = {
     'Access-Control-Allow-Origin': '*',
@@ -17,32 +15,37 @@ const COMMON_HEADERS = {
     'Content-Type': 'application/json'
 };
 
+// --- INITIALISATION SÉCURISÉE DE FIREBASE ADMIN ---
+// On initialise Firebase Admin une seule fois pour éviter les erreurs et optimiser les performances.
+if (!admin.apps.length) {
+    try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        console.log('Firebase Admin SDK initialisé avec succès.');
+    } catch (e) {
+        console.error('Erreur critique : Impossible d\'initialiser Firebase Admin SDK. Vérifiez la variable d\'environnement FIREBASE_SERVICE_ACCOUNT.', e);
+    }
+}
+
+// --- FONCTION PRINCIPALE (HANDLER) ---
 exports.handler = async (event) => {
-    if (event.httpMethod === 'OPTIONS'  ) {
-        return {
-            statusCode: 200,
-            headers: COMMON_HEADERS,
-            body: JSON.stringify({})
-        };
+    if (event.httpMethod === 'OPTIONS' ) {
+        return { statusCode: 200, headers: COMMON_HEADERS, body: '' };
+    }
+    if (event.httpMethod !== 'POST' ) {
+        return { statusCode: 405, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Method Not Allowed' }) };
     }
 
-    if (event.httpMethod !== 'POST'  ) {
-        return {
-            statusCode: 405,
-            headers: COMMON_HEADERS,
-            body: JSON.stringify({ error: 'Method Not Allowed' })
-        };
-    }
+    const client = new MongoClient(MONGODB_URI);
 
     try {
         const orderData = JSON.parse(event.body);
 
-        if (!orderData.restaurant || !orderData.items || !orderData.client) {
-            return {
-                statusCode: 400,
-                headers: COMMON_HEADERS,
-                body: JSON.stringify({ error: 'Données de commande incomplètes' })
-            };
+        // Validation des données reçues
+        if (!orderData.currentRestaurant?._id || !orderData.items || !orderData.client) {
+            return { statusCode: 400, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Données de commande incomplètes ou ID du restaurant manquant.' }) };
         }
 
         await client.connect();
@@ -50,21 +53,16 @@ exports.handler = async (event) => {
         const collection = db.collection(COLLECTION_NAME);
 
         const now = new Date();
-        const orderDate = orderData.orderDate ? new Date(orderData.orderDate) : now;
-
-        // --- MODIFICATION CLÉ ---
-        // Si le type est 'food', le statut est en attente de confirmation du restaurant.
-        // Sinon, le statut est 'pending' (disponible pour les livreurs).
         const initialStatus = orderData.type === 'food' ? 'pending_restaurant_confirmation' : 'pending';
 
         const orderDocument = {
-            type: orderData.type || "food",
+            type: "food",
             restaurant: {
-                id: orderData.currentRestaurant?._id, // Assurez-vous que l'ID est bien passé
-                name: orderData.restaurant.name,
+                id: orderData.currentRestaurant._id,
+                name: orderData.currentRestaurant.nomCommercial || orderData.currentRestaurant.nom,
                 position: {
-                    latitude: orderData.restaurant.position?.latitude ?? null,
-                    longitude: orderData.restaurant.position?.longitude ?? null
+                    latitude: orderData.currentRestaurant.location?.latitude ?? null,
+                    longitude: orderData.currentRestaurant.location?.longitude ?? null
                 }
             },
             client: {
@@ -81,22 +79,28 @@ exports.handler = async (event) => {
             payment_method: orderData.payment_method || 'cash',
             payment_status: orderData.payment_status || 'pending',
             payment_reference: orderData.payment_reference || null,
-            status: initialStatus, // Utilisation du statut conditionnel
-            orderDate: orderDate,
+            status: initialStatus,
+            orderDate: new Date(orderData.orderDate || now),
             dateCreation: now,
             lastUpdate: now,
             codeCommande: generateOrderCode(),
-            metadata: orderData.metadata || {
-                appVersion: '1.0',
-                source: 'web'
-            }
+            isCompleted: false, // Important pour le filtrage futur
+            metadata: orderData.metadata || {}
         };
 
         const result = await collection.insertOne(orderDocument);
 
         if (!result.insertedId) {
-            throw new Error('Échec de la création de la commande');
+            throw new Error('Échec de la création de la commande en base de données.');
         }
+
+        // === DÉCLENCHEMENT DE LA NOTIFICATION PUSH ===
+        if (orderDocument.status === 'pending_restaurant_confirmation') {
+            // On n'attend pas la fin de l'envoi pour répondre au client,
+            // cela rend l'application plus rapide.
+            sendPushNotification(db, orderDocument).catch(console.error);
+        }
+        // ============================================
 
         return {
             statusCode: 201,
@@ -104,26 +108,68 @@ exports.handler = async (event) => {
             body: JSON.stringify({
                 success: true,
                 orderId: result.insertedId,
-                codeCommande: orderDocument.codeCommande,
-                timestamp: orderDocument.dateCreation
+                codeCommande: orderDocument.codeCommande
             })
         };
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Erreur dans la fonction create-order:', error);
         return {
             statusCode: 500,
             headers: COMMON_HEADERS,
-            body: JSON.stringify({
-                success: false,
-                error: 'Internal Server Error',
-                message: error.message
-            })
+            body: JSON.stringify({ success: false, error: 'Internal Server Error', message: error.message })
         };
     } finally {
         await client.close();
     }
 };
 
+// --- FONCTION D'ENVOI DE NOTIFICATION ---
+async function sendPushNotification(db, order) {
+    if (!admin.apps.length) {
+        console.error('Firebase Admin n\'est pas initialisé. Impossible d\'envoyer la notification.');
+        return;
+    }
+
+    try {
+        const restaurantId = order.restaurant.id;
+        const tokensCollection = db.collection('NotificationTokens');
+        
+        const subscriptions = await tokensCollection.find({ restaurantId: restaurantId }).toArray();
+        const tokens = subscriptions.map(sub => sub.token).filter(Boolean); // Filtre les jetons vides ou nuls
+
+        if (tokens.length === 0) {
+            console.log(`Aucun jeton de notification trouvé pour le restaurant ${restaurantId}`);
+            return;
+        }
+
+        const message = {
+            notification: {
+                title: 'Nouvelle Commande Reçue !',
+                body: `Commande de ${order.client.name} pour un total de ${order.subtotal.toLocaleString('fr-FR')} FCFA.`,
+            },
+            webpush: {
+                notification: {
+                    icon: 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png', // IMPORTANT: URL publique complète de votre logo
+                    tag: `new-order-${restaurantId}` // Regroupe les notifications pour un même restaurant
+                }
+            },
+            tokens: tokens,
+        };
+
+        const response = await admin.messaging( ).sendMulticast(message);
+        console.log(`${response.successCount} notifications envoyées avec succès pour la commande ${order.codeCommande}.`);
+
+        if (response.failureCount > 0) {
+            console.warn(`${response.failureCount} jetons de notification ont échoué.`);
+            // Logique optionnelle pour nettoyer les jetons invalides de la base de données
+        }
+
+    } catch (error) {
+        console.error('Erreur détaillée lors de l\'envoi de la notification push:', error);
+    }
+}
+
+// --- FONCTION UTILITAIRE ---
 function generateOrderCode() {
     const date = new Date();
     const prefix = 'CMD';
