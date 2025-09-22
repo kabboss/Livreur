@@ -18,7 +18,7 @@ const COMMON_HEADERS = {
 };
 
 exports.handler = async (event) => {
-    if (event.httpMethod === 'OPTIONS') {
+    if (event.httpMethod === 'OPTIONS'  ) {
         return {
             statusCode: 200,
             headers: COMMON_HEADERS,
@@ -26,7 +26,7 @@ exports.handler = async (event) => {
         };
     }
 
-    if (event.httpMethod !== 'POST') {
+    if (event.httpMethod !== 'POST'  ) {
         return {
             statusCode: 405,
             headers: COMMON_HEADERS,
@@ -37,7 +37,6 @@ exports.handler = async (event) => {
     try {
         const orderData = JSON.parse(event.body);
 
-        // Validation de base
         if (!orderData.restaurant || !orderData.items || !orderData.client) {
             return {
                 statusCode: 400,
@@ -50,47 +49,43 @@ exports.handler = async (event) => {
         const db = client.db(DB_NAME);
         const collection = db.collection(COLLECTION_NAME);
 
-        // Préparation des champs
         const now = new Date();
         const orderDate = orderData.orderDate ? new Date(orderData.orderDate) : now;
 
-        
+        // --- MODIFICATION CLÉ ---
+        // Si le type est 'food', le statut est en attente de confirmation du restaurant.
+        // Sinon, le statut est 'pending' (disponible pour les livreurs).
+        const initialStatus = orderData.type === 'food' ? 'pending_restaurant_confirmation' : 'pending';
 
-const orderDocument = {
-    type: orderData.type || "food",
-
-restaurant: {
-    name: orderData.restaurant.name,
-    position: {
-        latitude: orderData.restaurant.position?.latitude ?? null,
-        longitude: orderData.restaurant.position?.longitude ?? null
-    }
-},
+        const orderDocument = {
+            type: orderData.type || "food",
+            restaurant: {
+                id: orderData.currentRestaurant?._id, // Assurez-vous que l'ID est bien passé
+                name: orderData.restaurant.name,
+                position: {
+                    latitude: orderData.restaurant.position?.latitude ?? null,
+                    longitude: orderData.restaurant.position?.longitude ?? null
+                }
+            },
             client: {
                 name: orderData.client.name,
                 phone: orderData.client.phone,
                 address: orderData.client.address || null,
                 position: orderData.client.position || {}
             },
-
             items: orderData.items || [],
-
-            subtotal: orderData.subtotal || calculateSubtotal(orderData.items),
+            subtotal: orderData.subtotal || 0,
             deliveryFee: orderData.deliveryFee || 0,
-            total: orderData.total || (orderData.subtotal + orderData.deliveryFee),
-
+            total: orderData.total || 0,
             notes: orderData.notes || '',
             payment_method: orderData.payment_method || 'cash',
             payment_status: orderData.payment_status || 'pending',
             payment_reference: orderData.payment_reference || null,
-
-            status: orderData.status || 'pending',
+            status: initialStatus, // Utilisation du statut conditionnel
             orderDate: orderDate,
             dateCreation: now,
             lastUpdate: now,
-
             codeCommande: generateOrderCode(),
-
             metadata: orderData.metadata || {
                 appVersion: '1.0',
                 source: 'web'
@@ -134,9 +129,4 @@ function generateOrderCode() {
     const prefix = 'CMD';
     const random = Math.floor(1000 + Math.random() * 9000);
     return `${prefix}${date.getFullYear().toString().slice(-2)}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}${random}`;
-}
-
-function calculateSubtotal(items) {
-    if (!Array.isArray(items)) return 0;
-    return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 }
