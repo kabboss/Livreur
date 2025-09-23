@@ -3,17 +3,18 @@
 const { MongoClient } = require('mongodb');
 const admin = require('firebase-admin');
 
-// --- CONFIGURATION ---
+// --- CONFIGURATION CORS PERMISSIVE ---
+const PERMISSIVE_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Methods': '*',
+    'Access-Control-Max-Age': '86400',
+    'Content-Type': 'application/json'
+};
+
 const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = 'FarmsConnect';
 const COLLECTION_NAME = 'Commandes';
-
-const COMMON_HEADERS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json'
-};
 
 // --- INITIALISATION SÉCURISÉE DE FIREBASE ADMIN ---
 if (!admin.apps.length) {
@@ -29,36 +30,82 @@ if (!admin.apps.length) {
 
 // --- FONCTION PRINCIPALE (HANDLER) ---
 exports.handler = async (event) => {
-    // Gérer la requête pre-flight OPTIONS
-    if (event.httpMethod === 'OPTIONS' ) {
-        return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
+    // Gérer la requête pre-flight OPTIONS de manière très permissive
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: PERMISSIVE_HEADERS,
+            body: ''
+        };
     }
 
-    // CORRECTION CORS : On prépare une réponse de base avec les en-têtes.
-    // Toutes les réponses, y compris les erreurs, utiliseront ces en-têtes.
+    // Préparer la réponse avec les en-têtes CORS permissifs
     let response = {
-        statusCode: 500,
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ error: 'Erreur interne du serveur.' })
+        statusCode: 200,
+        headers: PERMISSIVE_HEADERS,
+        body: JSON.stringify({ success: true })
     };
-
-    if (event.httpMethod !== 'POST' ) {
-        response.statusCode = 405;
-        response.body = JSON.stringify({ error: 'Method Not Allowed' });
-        return response;
-    }
 
     const client = new MongoClient(MONGODB_URI);
 
     try {
-        const orderData = JSON.parse(event.body);
-
-        if (!orderData.currentRestaurant?._id || !orderData.items || !orderData.client) {
-            response.statusCode = 400;
-            response.body = JSON.stringify({ error: 'Données de commande incomplètes ou ID du restaurant manquant.' });
+        // Vérifier que c'est une méthode POST
+        if (event.httpMethod !== 'POST') {
+            response.statusCode = 405;
+            response.body = JSON.stringify({ 
+                success: false, 
+                error: 'Method Not Allowed',
+                message: 'Seules les requêtes POST sont autorisées'
+            });
             return response;
         }
 
+        // Parser le corps de la requête
+        let orderData;
+        try {
+            orderData = JSON.parse(event.body || '{}');
+        } catch (parseError) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+                success: false, 
+                error: 'Invalid JSON',
+                message: 'Le corps de la requête contient du JSON invalide'
+            });
+            return response;
+        }
+
+        // Validation des données requises
+        if (!orderData.currentRestaurant?._id) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+                success: false, 
+                error: 'Missing Restaurant ID',
+                message: 'L\'ID du restaurant est requis'
+            });
+            return response;
+        }
+
+        if (!orderData.items || !Array.isArray(orderData.items) || orderData.items.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+                success: false, 
+                error: 'Missing Items',
+                message: 'La commande doit contenir au moins un article'
+            });
+            return response;
+        }
+
+        if (!orderData.client || !orderData.client.name || !orderData.client.phone) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ 
+                success: false, 
+                error: 'Missing Client Information',
+                message: 'Les informations du client (nom et téléphone) sont requises'
+            });
+            return response;
+        }
+
+        // Connexion à la base de données
         await client.connect();
         const db = client.db(DB_NAME);
         const collection = db.collection(COLLECTION_NAME);
@@ -66,11 +113,12 @@ exports.handler = async (event) => {
         const now = new Date();
         const initialStatus = orderData.type === 'food' ? 'pending_restaurant_confirmation' : 'pending';
 
+        // Construction du document de commande
         const orderDocument = {
             type: "food",
             restaurant: {
                 id: orderData.currentRestaurant._id,
-                name: orderData.currentRestaurant.nomCommercial || orderData.currentRestaurant.nom,
+                name: orderData.currentRestaurant.nomCommercial || orderData.currentRestaurant.nom || 'Restaurant Inconnu',
                 position: {
                     latitude: orderData.currentRestaurant.location?.latitude ?? null,
                     longitude: orderData.currentRestaurant.location?.longitude ?? null
@@ -82,8 +130,13 @@ exports.handler = async (event) => {
                 address: orderData.client.address || null,
                 position: orderData.client.position || {}
             },
-            items: orderData.items || [],
-            subtotal: orderData.subtotal || 0,
+            items: orderData.items.map(item => ({
+                name: item.name || 'Article sans nom',
+                quantity: item.quantity || 1,
+                price: item.price || 0,
+                total: (item.quantity || 1) * (item.price || 0)
+            })),
+            subtotal: orderData.subtotal || orderData.items.reduce((sum, item) => sum + ((item.quantity || 1) * (item.price || 0)), 0),
             deliveryFee: orderData.deliveryFee || 0,
             total: orderData.total || 0,
             notes: orderData.notes || '',
@@ -99,27 +152,46 @@ exports.handler = async (event) => {
             metadata: orderData.metadata || {}
         };
 
+        // Calcul du total si non fourni
+        if (!orderData.total) {
+            orderDocument.total = orderDocument.subtotal + orderDocument.deliveryFee;
+        }
+
+        // Insertion dans la base de données
         const result = await collection.insertOne(orderDocument);
 
         if (!result.insertedId) {
             throw new Error('Échec de la création de la commande en base de données.');
         }
 
+        // Envoi de notification si nécessaire
         if (orderDocument.status === 'pending_restaurant_confirmation') {
-            sendPushNotification(db, orderDocument).catch(console.error);
+            try {
+                await sendPushNotification(db, orderDocument);
+            } catch (notifError) {
+                console.error('Erreur lors de l\'envoi de la notification:', notifError);
+                // Ne pas bloquer la commande si la notification échoue
+            }
         }
 
+        // Réponse de succès
         response.statusCode = 201;
         response.body = JSON.stringify({
             success: true,
             orderId: result.insertedId,
-            codeCommande: orderDocument.codeCommande
+            codeCommande: orderDocument.codeCommande,
+            message: 'Commande créée avec succès'
         });
 
     } catch (error) {
         console.error('Erreur dans la fonction create-order:', error);
-        // La réponse d'erreur utilisera les en-têtes CORS définis au début.
-        response.body = JSON.stringify({ success: false, error: 'Internal Server Error', message: error.message });
+        
+        response.statusCode = 500;
+        response.body = JSON.stringify({ 
+            success: false, 
+            error: 'Internal Server Error', 
+            message: error.message 
+        });
     } finally {
         await client.close();
     }
@@ -133,6 +205,7 @@ async function sendPushNotification(db, order) {
         console.error('Firebase Admin n\'est pas initialisé.');
         return;
     }
+    
     try {
         const restaurantId = order.restaurant.id;
         const tokensCollection = db.collection('NotificationTokens');
@@ -147,7 +220,7 @@ async function sendPushNotification(db, order) {
         const message = {
             notification: {
                 title: 'Nouvelle Commande Reçue !',
-                body: `Commande de ${order.client.name} pour un total de ${order.subtotal.toLocaleString('fr-FR')} FCFA.`,
+                body: `Commande de ${order.client.name} pour un total de ${order.total.toLocaleString('fr-FR')} FCFA.`,
             },
             webpush: {
                 notification: {
@@ -158,12 +231,20 @@ async function sendPushNotification(db, order) {
             tokens: tokens,
         };
 
-        // CORRECTION : Suppression de l'espace superflue
-        const response = await admin.messaging( ).sendMulticast(message);
-        console.log(`${response.successCount} notifications envoyées avec succès.`);
+        const response = await admin.messaging().sendMulticast(message);
+        console.log(`${response.successCount} notifications envoyées avec succès sur ${tokens.length} tentatives.`);
+
+        if (response.failureCount > 0) {
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    console.error(`Échec de l'envoi au token ${tokens[idx]}:`, resp.error);
+                }
+            });
+        }
 
     } catch (error) {
         console.error('Erreur lors de l\'envoi de la notification push:', error);
+        throw error; // Propager l'erreur pour la gestion en amont
     }
 }
 
