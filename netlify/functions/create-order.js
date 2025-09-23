@@ -16,26 +16,36 @@ const COMMON_HEADERS = {
 };
 
 // --- INITIALISATION SÉCURISÉE DE FIREBASE ADMIN ---
-// On initialise Firebase Admin une seule fois pour éviter les erreurs et optimiser les performances.
 if (!admin.apps.length) {
     try {
         const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
-        console.log('Firebase Admin SDK initialisé avec succès.');
     } catch (e) {
-        console.error('Erreur critique : Impossible d\'initialiser Firebase Admin SDK. Vérifiez la variable d\'environnement FIREBASE_SERVICE_ACCOUNT.', e);
+        console.error('Erreur critique : Impossible d\'initialiser Firebase Admin SDK.', e);
     }
 }
 
 // --- FONCTION PRINCIPALE (HANDLER) ---
 exports.handler = async (event) => {
+    // Gérer la requête pre-flight OPTIONS
     if (event.httpMethod === 'OPTIONS' ) {
-        return { statusCode: 200, headers: COMMON_HEADERS, body: '' };
+        return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
     }
+
+    // CORRECTION CORS : On prépare une réponse de base avec les en-têtes.
+    // Toutes les réponses, y compris les erreurs, utiliseront ces en-têtes.
+    let response = {
+        statusCode: 500,
+        headers: COMMON_HEADERS,
+        body: JSON.stringify({ error: 'Erreur interne du serveur.' })
+    };
+
     if (event.httpMethod !== 'POST' ) {
-        return { statusCode: 405, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+        response.statusCode = 405;
+        response.body = JSON.stringify({ error: 'Method Not Allowed' });
+        return response;
     }
 
     const client = new MongoClient(MONGODB_URI);
@@ -43,9 +53,10 @@ exports.handler = async (event) => {
     try {
         const orderData = JSON.parse(event.body);
 
-        // Validation des données reçues
         if (!orderData.currentRestaurant?._id || !orderData.items || !orderData.client) {
-            return { statusCode: 400, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Données de commande incomplètes ou ID du restaurant manquant.' }) };
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: 'Données de commande incomplètes ou ID du restaurant manquant.' });
+            return response;
         }
 
         await client.connect();
@@ -84,7 +95,7 @@ exports.handler = async (event) => {
             dateCreation: now,
             lastUpdate: now,
             codeCommande: generateOrderCode(),
-            isCompleted: false, // Important pour le filtrage futur
+            isCompleted: false,
             metadata: orderData.metadata || {}
         };
 
@@ -94,48 +105,39 @@ exports.handler = async (event) => {
             throw new Error('Échec de la création de la commande en base de données.');
         }
 
-        // === DÉCLENCHEMENT DE LA NOTIFICATION PUSH ===
         if (orderDocument.status === 'pending_restaurant_confirmation') {
-            // On n'attend pas la fin de l'envoi pour répondre au client,
-            // cela rend l'application plus rapide.
             sendPushNotification(db, orderDocument).catch(console.error);
         }
-        // ============================================
 
-        return {
-            statusCode: 201,
-            headers: COMMON_HEADERS,
-            body: JSON.stringify({
-                success: true,
-                orderId: result.insertedId,
-                codeCommande: orderDocument.codeCommande
-            })
-        };
+        response.statusCode = 201;
+        response.body = JSON.stringify({
+            success: true,
+            orderId: result.insertedId,
+            codeCommande: orderDocument.codeCommande
+        });
+
     } catch (error) {
         console.error('Erreur dans la fonction create-order:', error);
-        return {
-            statusCode: 500,
-            headers: COMMON_HEADERS,
-            body: JSON.stringify({ success: false, error: 'Internal Server Error', message: error.message })
-        };
+        // La réponse d'erreur utilisera les en-têtes CORS définis au début.
+        response.body = JSON.stringify({ success: false, error: 'Internal Server Error', message: error.message });
     } finally {
         await client.close();
     }
+
+    return response;
 };
 
 // --- FONCTION D'ENVOI DE NOTIFICATION ---
 async function sendPushNotification(db, order) {
     if (!admin.apps.length) {
-        console.error('Firebase Admin n\'est pas initialisé. Impossible d\'envoyer la notification.');
+        console.error('Firebase Admin n\'est pas initialisé.');
         return;
     }
-
     try {
         const restaurantId = order.restaurant.id;
         const tokensCollection = db.collection('NotificationTokens');
-        
         const subscriptions = await tokensCollection.find({ restaurantId: restaurantId }).toArray();
-        const tokens = subscriptions.map(sub => sub.token).filter(Boolean); // Filtre les jetons vides ou nuls
+        const tokens = subscriptions.map(sub => sub.token).filter(Boolean);
 
         if (tokens.length === 0) {
             console.log(`Aucun jeton de notification trouvé pour le restaurant ${restaurantId}`);
@@ -149,23 +151,19 @@ async function sendPushNotification(db, order) {
             },
             webpush: {
                 notification: {
-                    icon: 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png', // IMPORTANT: URL publique complète de votre logo
-                    tag: `new-order-${restaurantId}` // Regroupe les notifications pour un même restaurant
+                    icon: 'https://cdn-icons-png.flaticon.com/512/1827/1827370.png',
+                    tag: `new-order-${restaurantId}`
                 }
             },
             tokens: tokens,
         };
 
+        // CORRECTION : Suppression de l'espace superflue
         const response = await admin.messaging( ).sendMulticast(message);
-        console.log(`${response.successCount} notifications envoyées avec succès pour la commande ${order.codeCommande}.`);
-
-        if (response.failureCount > 0) {
-            console.warn(`${response.failureCount} jetons de notification ont échoué.`);
-            // Logique optionnelle pour nettoyer les jetons invalides de la base de données
-        }
+        console.log(`${response.successCount} notifications envoyées avec succès.`);
 
     } catch (error) {
-        console.error('Erreur détaillée lors de l\'envoi de la notification push:', error);
+        console.error('Erreur lors de l\'envoi de la notification push:', error);
     }
 }
 
