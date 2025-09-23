@@ -1,6 +1,7 @@
 // Nom du fichier : create-order.js
 
 const { MongoClient } = require('mongodb');
+
 const admin = require('firebase-admin');
 
 // --- CONFIGURATION CORS PERMISSIVE ---
@@ -12,7 +13,7 @@ const PERMISSIVE_HEADERS = {
     'Content-Type': 'application/json'
 };
 
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
 const DB_NAME = 'FarmsConnect';
 const COLLECTION_NAME = 'Commandes';
 
