@@ -5,30 +5,33 @@ const MONGODB_URI = 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.n
 const DB_NAME = 'FarmsConnect';
 const COLLECTION_NAME = 'Commandes';
 
-// --- En-têtes CORS communs à toutes les réponses ---
-const COMMON_HEADERS = {
-  "Access-Control-Allow-Origin": "*", // Autorise toutes les origines
-  "Access-Control-Allow-Methods": "POST, OPTIONS", // Méthodes autorisées pour cette fonction
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With"
+// --- En-têtes CORS complets ---
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept",
+  "Access-Control-Max-Age": "86400" // Cache preflight pendant 24 heures
 };
 
 // --- Handler de la fonction Netlify ---
 exports.handler = async (event) => {
-  // 1. Réponse immédiate pour les requêtes "preflight" OPTIONS
-  if (event.httpMethod === "OPTIONS" ) {
+  // 1. Gestion complète des requêtes OPTIONS (preflight)
+  if (event.httpMethod === "OPTIONS") {
     return {
-      statusCode: 204, // "No Content" est la réponse standard
-      headers: COMMON_HEADERS,
+      statusCode: 200,
+      headers: CORS_HEADERS,
       body: ""
     };
   }
 
   // 2. Restriction de la méthode à POST uniquement
-  if (event.httpMethod !== "POST" ) {
+  if (event.httpMethod !== "POST") {
     return {
-      statusCode: 405, // "Method Not Allowed"
-      headers: COMMON_HEADERS,
-      body: JSON.stringify({ error: "Méthode non autorisée. Seules les requêtes POST sont acceptées." })
+      statusCode: 405,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ 
+        error: "Méthode non autorisée. Seules les requêtes POST sont acceptées." 
+      })
     };
   }
 
@@ -36,14 +39,41 @@ exports.handler = async (event) => {
   const client = new MongoClient(MONGODB_URI);
 
   try {
-    // 3. Analyse et validation du corps de la requête
-    const { orderId, newStatus } = JSON.parse(event.body || "{}");
+    // 3. Validation du corps de la requête
+    let requestBody;
+    try {
+      requestBody = JSON.parse(event.body || "{}");
+    } catch (parseError) {
+      return {
+        statusCode: 400,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ 
+          error: "Corps de requête JSON invalide." 
+        })
+      };
+    }
 
+    const { orderId, newStatus } = requestBody;
+
+    // Validation des champs requis
     if (!orderId || !newStatus) {
       return {
-        statusCode: 400, // "Bad Request"
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ error: "Les champs 'orderId' et 'newStatus' sont requis." })
+        statusCode: 400,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ 
+          error: "Les champs 'orderId' et 'newStatus' sont requis." 
+        })
+      };
+    }
+
+    // Validation du format de l'ID
+    if (!ObjectId.isValid(orderId)) {
+      return {
+        statusCode: 400,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ 
+          error: "Format d'ID de commande invalide." 
+        })
       };
     }
 
@@ -54,32 +84,59 @@ exports.handler = async (event) => {
 
     const result = await collection.updateOne(
       { _id: new ObjectId(orderId) },
-      { $set: { status: newStatus, lastUpdate: new Date() } }
+      { 
+        $set: { 
+          status: newStatus, 
+          lastUpdate: new Date() 
+        } 
+      }
     );
 
     // 5. Vérification si la mise à jour a bien eu lieu
+    if (result.matchedCount === 0) {
+      return {
+        statusCode: 404,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ 
+          error: "Commande non trouvée." 
+        })
+      };
+    }
+
     if (result.modifiedCount === 0) {
       return {
-        statusCode: 404, // "Not Found"
-        headers: COMMON_HEADERS,
-        body: JSON.stringify({ error: "Commande non trouvée ou le statut est déjà à jour." })
+        statusCode: 200,
+        headers: CORS_HEADERS,
+        body: JSON.stringify({ 
+          success: true, 
+          message: "Le statut était déjà à jour." 
+        })
       };
     }
 
     // 6. Réponse de succès
     return {
-      statusCode: 200, // "OK"
-      headers: COMMON_HEADERS,
-      body: JSON.stringify({ success: true, message: "Le statut de la commande a été mis à jour." })
+      statusCode: 200,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ 
+        success: true, 
+        message: "Le statut de la commande a été mis à jour.",
+        orderId: orderId,
+        newStatus: newStatus
+      })
     };
 
   } catch (error) {
-    // 7. Gestion globale des erreurs (ex: JSON invalide, erreur DB)
+    // 7. Gestion globale des erreurs
     console.error("Erreur dans la fonction updateOrderStatus:", error);
+    
     return {
-      statusCode: 500, // "Internal Server Error"
-      headers: COMMON_HEADERS,
-      body: JSON.stringify({ error: "Une erreur interne est survenue.", details: error.message })
+      statusCode: 500,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ 
+        error: "Une erreur interne est survenue.",
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      })
     };
 
   } finally {
