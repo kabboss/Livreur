@@ -1,7 +1,0 @@
-
-[build]
-  base = "."
-  functions = "."
-
-[[plugins]]
-  package = "@netlify/plugin-functions-install-core"
