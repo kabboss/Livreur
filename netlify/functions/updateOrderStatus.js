@@ -1,19 +1,23 @@
 const { MongoClient, ObjectId } = require('mongodb');
-const uri = process.env.MONGODB_URI || 'mongodb+srv://kabboss:ka23bo23re23@cluster0.uy2xz.mongodb.net/FarmsConnect?retryWrites=true&w=majority';
+const uri = process.env.MONGODB_URI;
+
+const COMMON_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type'
+};
 
 exports.handler = async (event) => {
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Content-Type': 'application/json'
-    };
-
     if (event.httpMethod === 'OPTIONS' ) {
-        return { statusCode: 204, headers, body: '' };
+        return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
     }
+
     if (event.httpMethod !== 'POST' ) {
-        return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+        return { statusCode: 405, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    }
+
+    if (!uri) {
+        return { statusCode: 500, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Configuration serveur incorrecte.' }) };
     }
 
     const client = new MongoClient(uri);
@@ -21,7 +25,7 @@ exports.handler = async (event) => {
     try {
         const { orderId, newStatus } = JSON.parse(event.body);
         if (!orderId || !newStatus) {
-            return { statusCode: 400, headers, body: JSON.stringify({ error: 'orderId et newStatus sont requis.' }) };
+            return { statusCode: 400, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'orderId et newStatus sont requis.' }) };
         }
 
         await client.connect();
@@ -34,18 +38,19 @@ exports.handler = async (event) => {
         );
 
         if (result.modifiedCount === 0) {
-            throw new Error('Commande non trouvée ou statut déjà à jour.');
+            return { statusCode: 404, headers: COMMON_HEADERS, body: JSON.stringify({ error: 'Commande non trouvée ou statut déjà à jour.' }) };
         }
 
         return {
             statusCode: 200,
-            headers,
+            headers: COMMON_HEADERS,
             body: JSON.stringify({ success: true, message: 'Statut mis à jour.' })
         };
     } catch (error) {
+        console.error("Erreur dans updateOrderStatus:", error);
         return {
             statusCode: 500,
-            headers,
+            headers: COMMON_HEADERS,
             body: JSON.stringify({ error: error.message })
         };
     } finally {
